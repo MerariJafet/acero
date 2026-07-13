@@ -133,20 +133,36 @@ def params_for_seed(seed: int) -> dict:
 
 
 def flatten_metrics(raw: dict) -> dict:
-    """Reduce the rich per-model output into the flat metric set the skeptic reads."""
+    """Reduce the rich per-model output into the flat metric set the skeptic reads.
+
+    Includes the FULL per-model RMSE table across all splits so a reviewer can
+    independently check the "exponential is best" claim, plus validation RMSE
+    (addresses methodological critiques about incomplete reporting).
+    """
     best = raw["best_model_by_test_rmse"]
     bm = raw["models"][best]
+    full_table = {
+        name: {
+            "train_rmse": m["train_rmse"],
+            "val_rmse": m["val_rmse"],
+            "test_rmse": m["test_rmse"],
+            "extrapolation_rmse": m["extrapolation_rmse"],
+        }
+        for name, m in raw["models"].items()
+    }
     return {
         "best_model": best,
         "recovered_k": raw["recovered_k"],
         "true_k": raw["true_params"]["k"],
         "train_rmse": bm["train_rmse"],
+        "val_rmse": bm["val_rmse"],
         "test_rmse": bm["test_rmse"],
         "extrapolation_rmse": bm["extrapolation_rmse"],
         "baseline_rmse": raw["baseline_rmse"],
         "train_test_disjoint": raw["train_test_disjoint"],
         "overfit_extrapolation_rmse": raw["models"]["overfit_poly9"]["extrapolation_rmse"],
         "overfit_train_rmse": raw["models"]["overfit_poly9"]["train_rmse"],
+        "full_model_table": full_table,
     }
 
 

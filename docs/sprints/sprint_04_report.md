@@ -44,6 +44,18 @@ datos sintéticos con ruido.** La ecuación generadora se oculta al ajustador.
 (3 semillas ✓), y la objeción de fondo: **ajustar una forma funcional ≠ explicación
 causal**. Con el set de semillas completo: 0 checks fallidos.
 
+## Escéptico asistido por LLM (Codex, advisory)
+Además del escéptico basado en reglas (autoritativo), un escéptico opcional usa
+Codex vía `complete_json` (salida estructurada por esquema) para proponer
+objeciones adicionales — marcadas como **advisory**, nunca evidencia. Se activa con
+`acero pilot --llm codex`. En pruebas reales detectó críticas legítimas que
+**mejoraron el piloto**: (a) reportar la **tabla completa de RMSE por modelo** en
+todas las particiones, (b) incluir **val_rmse**, (c) desambiguar el conteo de
+corridas (`main_runs` + `reproducibility_reruns` = `total_runs`), y (d) explicitar
+que el exponencial está **estructuralmente privilegiado** (recuperación de modelo
+sobre datos sintéticos, no comparación imparcial de formas funcionales) — añadido a
+`cannot_conclude`. El uso de tokens de Codex se registra para trazabilidad/costo.
+
 ## Resultado negativo (preservado)
 `poly9` sobreajusta: bajo error en train, catastrófico en extrapolación. Se
 registra como `NEGATIVE_RESULT` y **no puede borrarse**.

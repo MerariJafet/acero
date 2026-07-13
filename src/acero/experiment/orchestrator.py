@@ -47,6 +47,7 @@ def run_pilot(
     artifacts_root: str | Path,
     seeds: list[int] | None = None,
     runner: SubprocessRunner | None = None,
+    llm_provider: Any | None = None,
 ) -> dict[str, Any]:
     seeds = seeds or [1, 2, 3]
     runner = runner or SubprocessRunner()
@@ -128,7 +129,13 @@ def run_pilot(
         baseline="Predicción de la media de entrenamiento",
         controls=["train/test disjuntos", "baseline ingenuo", "múltiples semillas"],
         stopping_criterion="Ejecutar todas las semillas una vez; sin búsqueda adaptativa.",
-        compute_budget={"cpu_seconds_per_run": 30, "runs": len(seeds) + 1},
+        compute_budget={
+            "cpu_seconds_per_run": 30,
+            "seeds": seeds,
+            "main_runs": len(seeds),
+            "reproducibility_reruns": 1,   # one seed re-executed to verify reproducibility
+            "total_runs": len(seeds) + 1,
+        },
         risks=["Sobreajuste del poly9", "Elección de métrica", "Rango limitado"],
         preregistered=True,
     )
@@ -250,6 +257,16 @@ def run_pilot(
     skeptic = review_experiment(prereg.model_dump(), {**ref_run, "seeds": seeds}, ref_flat)
     skeptic_dict = skeptic.to_dict()
 
+    # Optional LLM-assisted skeptic (advisory only; never authoritative/evidence).
+    llm_skeptic_result: dict[str, Any] | None = None
+    if llm_provider is not None:
+        from .llm_skeptic import LLMSkeptic
+
+        try:
+            llm_skeptic_result = LLMSkeptic(llm_provider).review(prereg.model_dump(), ref_flat)
+        except Exception as exc:  # noqa: BLE001 - advisory step must never break the cycle
+            llm_skeptic_result = {"available": False, "error": str(exc), "objections": []}
+
     # 10. Reproducibility check: re-run seed[0] and compare output hash -------
     wf.advance(WorkflowState.REPRODUCIBILITY_CHECK)
     repro_bundle = ArtifactBundle(artifacts_root / (run_ids[0] + "_repro"))
@@ -298,6 +315,7 @@ def run_pilot(
         "true_k": ref_flat["true_k"],
         "reference_metrics": ref_flat,
         "skeptic": skeptic_dict,
+        "llm_skeptic": llm_skeptic_result,  # advisory, may be None
         "reproduced": reproduced,
         "reproducibility_detail": {
             "compared": "output JSON hash of seed[0] across two independent runs",
@@ -308,5 +326,9 @@ def run_pilot(
             "Que exista una nueva ley (se recuperó una conocida).",
             "Que el ajuste implique causalidad física.",
             "Que el resultado aplique fuera de estos datos sintéticos.",
+            "Que sea una comparación imparcial de formas funcionales: el modelo "
+            "exponencial está estructuralmente privilegiado porque los datos se "
+            "generaron con esa forma. Es recuperación de modelo sobre datos "
+            "sintéticos, no un descubrimiento.",
         ],
     }

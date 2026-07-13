@@ -175,24 +175,39 @@ def domain_benchmark(
 def pilot_run(
     title: str = typer.Option("ACERO cooling-law pilot", help="Project title"),
     seeds: str = typer.Option("1,2,3", help="Comma-separated seeds"),
+    sandbox: str = typer.Option("subprocess", help="Sandbox backend: subprocess | docker"),
+    llm: str = typer.Option("", help="Enable LLM-assisted skeptic: '' | codex | mock"),
 ) -> None:
     """Run the Sprint-4 computational research pilot end to end."""
     from ..experiment.orchestrator import run_pilot
+    from ..sandbox.runner import get_runner
 
     led = _ledger()
     proj = led.create_project(title, domain="physics",
                               description="Symbolic-discovery pilot on synthetic cooling data.")
     seed_list = [int(s) for s in seeds.split(",") if s.strip()]
     art = repo_root() / "research" / "artifacts" / f"{proj.id}_pilot"
-    rep = run_pilot(led, proj.id, artifacts_root=art, seeds=seed_list)
+
+    runner = get_runner(sandbox)
+    provider = None
+    if llm:
+        from ..llm.providers import get_provider
+        provider = get_provider(llm)
+
+    rep = run_pilot(led, proj.id, artifacts_root=art, seeds=seed_list,
+                    runner=runner, llm_provider=provider)
     typer.echo(f"Project {proj.id}")
     typer.echo(f"Best model: {rep['overall_best_model']} {rep['best_counts']}")
     typer.echo(f"Recovered k={rep['mean_recovered_k']:.4f} (true {rep['true_k']})")
     typer.echo(f"Reproduced: {rep['reproduced']}")
-    typer.echo(f"Skeptic: {rep['skeptic']['n_objections']} objections, "
+    typer.echo(f"Skeptic (rule-based): {rep['skeptic']['n_objections']} objections, "
                f"{rep['skeptic']['n_failed_checks']} failed checks")
+    if rep.get("llm_skeptic"):
+        ls = rep["llm_skeptic"]
+        typer.echo(f"Skeptic (LLM, advisory): provider={ls.get('provider')} "
+                   f"available={ls.get('available')} objections={len(ls.get('objections', []))}")
     typer.echo(f"Artifacts: {art}")
-    typer.echo("NOTE: recovering a known law is NOT a discovery.")
+    typer.echo("NOTE: recovering a known law is NOT a discovery. LLM notes are advisory, not evidence.")
 
 
 @app.command()

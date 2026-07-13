@@ -70,6 +70,30 @@ def test_overfitter_fails_extrapolation(pilot):
     assert m["overfit_extrapolation_rmse"] > m["extrapolation_rmse"]
 
 
+def test_full_model_table_reported(pilot):
+    # Reviewer must be able to check the winner claim across ALL models and splits.
+    rep, _, _ = pilot
+    m = rep["reference_metrics"]
+    assert "val_rmse" in m
+    table = m["full_model_table"]
+    assert set(table) == {"linear", "cubic", "exponential_physical", "overfit_poly9"}
+    for row in table.values():
+        assert {"train_rmse", "val_rmse", "test_rmse", "extrapolation_rmse"} <= set(row)
+
+
+def test_llm_skeptic_absent_by_default(pilot):
+    # No LLM provider passed -> advisory field is None; the cycle never depends on it.
+    rep, _, _ = pilot
+    assert rep["llm_skeptic"] is None
+
+
+def test_compute_budget_is_unambiguous(pilot):
+    rep, ledger, project = pilot
+    exps = ledger.list_entities(project.id, EntityType.EXPERIMENT)
+    budget = exps[0]["compute_budget"]
+    assert budget["main_runs"] + budget["reproducibility_reruns"] == budget["total_runs"]
+
+
 def test_no_discovery_claim(pilot):
     rep, ledger, project = pilot
     assert rep["cannot_conclude"]
