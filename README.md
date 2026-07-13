@@ -51,9 +51,29 @@ make verify
 # 4. Ejecutar el piloto computacional del Sprint 4
 ./.venv/bin/python -m acero.cli.main pilot --seeds 1,2,3
 
-# 5. API
-./.venv/bin/python -m acero.cli.main serve      # GET /health /version /policies /projects
+# 5. Plugins de dominio (física, astronomía, genética, química)
+./.venv/bin/python -m acero.cli.main domain list
+./.venv/bin/python -m acero.cli.main domain benchmark
+
+# 6. API
+./.venv/bin/python -m acero.cli.main serve      # /health /version /policies /projects /domains
 ```
+
+### Sandbox Docker endurecido (para código no confiable)
+
+```bash
+infra/sandbox/build.sh                          # construye acero-sandbox:py312 (incluye numpy)
+export ACERO_SANDBOX_BACKEND=docker             # --network=none --read-only --cap-drop=ALL ...
+```
+
+### Proveedor LLM: Codex CLI
+
+```bash
+export ACERO_LLM_PROVIDER=codex                 # usa `codex exec` con tu login de Codex
+# export ACERO_CODEX_MODEL=<modelo>             # opcional; por defecto el de Codex
+```
+El default sigue siendo `mock` (determinista, sin costo). El texto del modelo
+**nunca** se trata como evidencia científica.
 
 ## CLI
 
@@ -63,6 +83,9 @@ acero policy            # valida las políticas
 acero project init      # crea un proyecto de investigación
 acero project list      # lista proyectos
 acero project export ID # dossier JSON + Markdown + manifest + checksums
+acero domain list       # plugins de dominio disponibles
+acero domain info NAME   # unidades, herramientas, simuladores, riesgos
+acero domain benchmark  # benchmarks de respuesta conocida (todos o --name)
 acero pilot             # corre el ciclo de investigación del Sprint 4
 acero serve             # API FastAPI
 acero test              # pytest

@@ -22,6 +22,16 @@ def test_version_and_policies():
     assert "costs" in pol and "research_safety" in pol
 
 
+def test_domains_endpoint():
+    c = _client()
+    doms = c.get("/domains").json()
+    names = {d["name"] for d in doms}
+    assert {"physics", "astronomy", "genetics", "chemistry"} <= names
+    bench = c.get("/domains/physics/benchmark").json()
+    assert bench["all_passed"] is True
+    assert c.get("/domains/nope/benchmark").status_code == 404
+
+
 def test_project_crud_over_api():
     c = _client()
     created = c.post("/projects", json={"title": "API project", "domain": "math"}).json()

@@ -6,6 +6,8 @@ Commands:
   acero project init   create a research project
   acero project list   list projects
   acero project export  export a dossier (JSON + Markdown + hashes)
+  acero domain list    list scientific domain plugins
+  acero domain benchmark  run known-answer domain benchmarks
   acero pilot run      run the Sprint-4 computational pilot end to end
   acero serve          run the API
   acero test           run the test suite
@@ -30,7 +32,9 @@ from ..policies.loader import load_policies
 
 app = typer.Typer(help="ACERO — Adaptive Computational Engine for Research and Epistemic Reasoning", no_args_is_help=True)
 project_app = typer.Typer(help="Manage research projects")
+domain_app = typer.Typer(help="Scientific domain plugins")
 app.add_typer(project_app, name="project")
+app.add_typer(domain_app, name="domain")
 
 
 def _ledger() -> ResearchLedger:
@@ -64,8 +68,19 @@ def doctor() -> None:
         ok = False
         typer.echo("  WARNING: paid services are enabled — unexpected for local-first default.")
 
-    for tool in ("docker", "ollama", "git"):
+    for tool in ("docker", "codex", "ollama", "git"):
         typer.echo(f"{tool}: {'found' if shutil.which(tool) else 'not found'}")
+
+    # Sandbox backend readiness
+    try:
+        from ..sandbox.docker_runner import docker_available, image_present
+        if cfg.sandbox.backend == "docker":
+            ready = docker_available() and image_present()
+            typer.echo(f"docker sandbox image ready: {ready}")
+            if not ready:
+                typer.echo("  build it with: infra/sandbox/build.sh")
+    except Exception:  # noqa: BLE001
+        pass
 
     typer.echo("OK ✓" if ok else "PROBLEMS FOUND ✗")
     raise typer.Exit(code=0 if ok else 1)
@@ -118,6 +133,42 @@ def project_export(
     typer.echo(f"Dossier exported to {paths['dir']}")
     for k in ("json", "markdown", "manifest"):
         typer.echo(f"  {k}: {paths[k]}")
+
+
+@domain_app.command("list")
+def domain_list() -> None:
+    """List available scientific domain plugins."""
+    from ..domains.registry import all_plugins
+
+    for p in all_plugins():
+        typer.echo(f"  {p.name}: tools={', '.join(p.allowed_tools)}")
+
+
+@domain_app.command("info")
+def domain_info(name: str = typer.Argument(...)) -> None:
+    """Show a domain plugin's units, tools, simulators, and risks."""
+    import json as _json
+
+    from ..domains.registry import get_plugin
+
+    typer.echo(_json.dumps(get_plugin(name).info(), indent=2, ensure_ascii=False))
+
+
+@domain_app.command("benchmark")
+def domain_benchmark(
+    name: str = typer.Option("", help="Domain name, or empty for all"),
+) -> None:
+    """Run known-answer benchmarks for one or all domains."""
+    from ..domains.registry import get_plugin, run_all_benchmarks
+
+    results = {name: get_plugin(name).benchmark().to_dict()} if name else run_all_benchmarks()
+    ok = True
+    for dname, r in results.items():
+        mark = "✓" if r["all_passed"] else "✗"
+        typer.echo(f"  {dname}: {r['passed']}/{r['total']} {mark}")
+        ok = ok and r["all_passed"]
+    typer.echo("All domain benchmarks passed ✓" if ok else "SOME BENCHMARKS FAILED ✗")
+    raise typer.Exit(code=0 if ok else 1)
 
 
 @app.command("pilot")

@@ -14,9 +14,16 @@ Sprints 5–12 están **planificados** (ver `docs/backlog/sprints_05_12.md`).
 | 7 | Motor de experimentos y búsqueda | ⏳ Backlog | Ejecución paralela, colas, checkpoints, optimización bayesiana/evolutiva |
 | 8 | Modelo del mundo y grafo científico | ⏳ Backlog | Grafo de afirmaciones, actualización bayesiana, visualización |
 | 9 | Tutor científico y aprendizaje humano | ⏳ Backlog | Perfil, evaluación, explicaciones por niveles, ruta de aprendizaje |
-| 10 | Especialización científica | ⏳ Backlog | Plugins: física, astronomía, genética, química (sin wet-lab) |
+| 10 | Especialización científica | 🟡 Parcial | Plugins iniciales física/astronomía/genética/química (sin wet-lab), 14 benchmarks verdes — `docs/domains/plugins.md` |
 | 11 | Evaluación, auditoría y ciencia adversarial | ⏳ Backlog | Benchmarks, calibración, red-teaming, p-hacking/HARKing/leakage |
 | 12 | Publicación, colaboración y portal | ⏳ Backlog | Dashboard, export Markdown/PDF/LaTeX, DOI/ORCID-ready, revisión humana |
+
+## Extensiones entregadas fuera de la secuencia
+- **Sandbox Docker endurecido** (adelanto de endurecimiento del Sprint 7):
+  `--network=none --read-only --cap-drop=ALL`, imagen `acero-sandbox:py312`.
+- **Proveedor LLM Codex CLI** (`codex exec`) como runtime local seleccionable
+  (`ACERO_LLM_PROVIDER=codex`), reemplazando la vía Ollama por decisión del PI.
+- **Plugins de los 4 dominios** (avance del Sprint 10).
 
 ## Prioridad y dependencias
 - 5 y 6 dependen del ledger (2) y del ciclo (4) — ya presentes.

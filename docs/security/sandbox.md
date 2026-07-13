@@ -31,11 +31,29 @@ Fuente: `src/acero/sandbox/` · Política: `policies/execution.yaml`
 Cada archivo se hashea (SHA-256) en `checksums.txt`; `inputs/`, `code/`, `outputs/`
 se agregan en `input_hash`/`code_hash`/`output_hash` para el registro de la corrida.
 
-## Backend Docker (documentado)
-`get_runner("docker")` está previsto para ejecutar con
-`docker run --network=none --read-only --memory ... --cpus ...` sobre una imagen
-mínima. En esta versión hace fallback al subproceso (ver ADR-0002). Recomendado
-para código no confiable.
+## Backend Docker (implementado)
+`sandbox/docker_runner.py` ejecuta el código en un contenedor endurecido:
+
+```
+docker run --rm --network=none --read-only
+  --tmpfs /tmp:rw,size=64m
+  --cap-drop=ALL --security-opt=no-new-privileges
+  --pids-limit=128 --memory=<mb>m --memory-swap=<mb>m --cpus=<n>
+  --user=<host uid:gid> -v <workspace>:/work:rw -w /work
+  acero-sandbox:py312  python -I code/script.py
+```
+
+Ventajas frente al subproceso: **sin red a nivel de kernel** (no solo un guard),
+raíz de solo lectura, capacidades caídas, sin escalada de privilegios, y sin
+entorno del host (los secretos están ausentes por construcción). La imagen se
+construye una vez con `infra/sandbox/build.sh` (incluye numpy, así el piloto corre
+bajo Docker). `get_runner("docker")` devuelve este backend cuando Docker y la
+imagen están disponibles; si no, hace fallback al subproceso (o lanza con
+`strict=True`). Pruebas en `tests/security/test_docker_sandbox.py` (se saltan
+limpiamente si Docker no está). Ver ADR-0002.
+
+**Recomendado para código no confiable.** El backend subproceso sigue como
+opción portátil por defecto.
 
 ## Cómo probarlo
 `./.venv/bin/python -m pytest tests/security -q`

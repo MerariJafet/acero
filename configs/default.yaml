@@ -10,7 +10,10 @@ storage:
   artifacts_dir: "research/artifacts"
 
 llm:
-  provider: mock          # mock | ollama | claude | openai
+  provider: mock          # mock | codex | ollama | claude | openai
+  codex_command: "codex"  # Codex CLI binary (uses your own Codex login)
+  codex_model: null       # null -> Codex default model
+  codex_sandbox: "read-only"
   ollama_host: "http://127.0.0.1:11434"
   ollama_model: "llama3.1"
   temperature: 0.0

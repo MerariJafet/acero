@@ -165,11 +165,26 @@ class SubprocessRunner:
         )
 
 
-def get_runner(backend: str = "subprocess", bundle: PolicyBundle | None = None):
-    """Factory. Docker backend falls back to subprocess with a documented note."""
+def get_runner(backend: str = "subprocess", bundle: PolicyBundle | None = None,
+               *, strict: bool = False):
+    """Factory for sandbox runners.
+
+    ``docker`` returns the hardened Docker backend when Docker and the sandbox
+    image are available. If they are not: with ``strict=True`` it raises, otherwise
+    it falls back to the subprocess runner (logging the reason via the returned
+    runner's type). ``subprocess`` always returns the portable subprocess runner.
+    """
     if backend == "docker":
-        # Docker is available on this host, but the portable, tested default is
-        # the subprocess runner. A Docker backend would build a minimal image and
-        # run with --network=none --read-only. Documented in docs/security/sandbox.md.
+        from .docker_runner import DockerRunner, docker_available, image_present
+
+        if docker_available() and image_present():
+            return DockerRunner(bundle)
+        if strict:
+            from ..core.errors import SandboxError
+
+            raise SandboxError(
+                "Docker backend requested but Docker or the sandbox image is "
+                "unavailable. Build it with infra/sandbox/build.sh."
+            )
         return SubprocessRunner(bundle)
     return SubprocessRunner(bundle)

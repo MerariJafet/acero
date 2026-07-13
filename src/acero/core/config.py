@@ -37,7 +37,10 @@ class StorageConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    provider: str = "mock"
+    provider: str = "mock"  # mock | codex | ollama | claude | openai
+    codex_command: str = "codex"
+    codex_model: str | None = None       # None -> codex default
+    codex_sandbox: str = "read-only"
     ollama_host: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1"
     temperature: float = 0.0
@@ -124,6 +127,10 @@ def _env_overrides() -> dict[str, Any]:
         setp(["storage", "workspace_dir"], env["ACERO_WORKSPACE"])
     if "ACERO_LLM_PROVIDER" in env:
         setp(["llm", "provider"], env["ACERO_LLM_PROVIDER"])
+    if "ACERO_CODEX_COMMAND" in env:
+        setp(["llm", "codex_command"], env["ACERO_CODEX_COMMAND"])
+    if "ACERO_CODEX_MODEL" in env:
+        setp(["llm", "codex_model"], env["ACERO_CODEX_MODEL"])
     if "ACERO_OLLAMA_HOST" in env:
         setp(["llm", "ollama_host"], env["ACERO_OLLAMA_HOST"])
     if "ACERO_OLLAMA_MODEL" in env:

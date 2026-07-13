@@ -41,6 +41,21 @@ def create_app() -> FastAPI:
     def version() -> dict:
         return {"version": __version__}
 
+    @app.get("/domains")
+    def domains() -> list[dict]:
+        from ..domains.registry import all_plugins
+
+        return [p.info() for p in all_plugins()]
+
+    @app.get("/domains/{name}/benchmark")
+    def domain_benchmark(name: str) -> dict:
+        from ..domains.registry import get_plugin
+
+        try:
+            return get_plugin(name).benchmark().to_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.get("/policies")
     def policies() -> dict:
         bundle = load_policies()

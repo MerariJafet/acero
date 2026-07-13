@@ -10,6 +10,9 @@ sandbox:
   timeout_sec: 30
   memory_mb: 1024
   cpu_seconds: 30
+  cpus: 1                          # docker backend: CPU quota
+  pids_limit: 128                  # docker backend: max processes (anti fork-bomb)
+  docker_image: acero-sandbox:py312
   max_output_bytes: 5000000
 
 forbidden_patterns:
