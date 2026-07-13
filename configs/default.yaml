@@ -1,0 +1,33 @@
+# ACERO default configuration. Overridden by environment-specific files and env vars.
+app:
+  name: ACERO
+  version: "0.4.0"
+  env: development
+
+storage:
+  db_url: "sqlite:///acero_data/acero.sqlite"
+  workspace_dir: "research"
+  artifacts_dir: "research/artifacts"
+
+llm:
+  provider: mock          # mock | ollama | claude | openai
+  ollama_host: "http://127.0.0.1:11434"
+  ollama_model: "llama3.1"
+  temperature: 0.0
+  max_tokens: 1024
+
+sandbox:
+  backend: subprocess     # subprocess | docker
+  timeout_sec: 30
+  memory_mb: 1024
+  network: disabled
+
+retrieval:
+  method: bm25            # bm25 | vector | hybrid
+  top_k: 5
+
+policies_dir: "policies"
+
+logging:
+  level: INFO
+  json: true

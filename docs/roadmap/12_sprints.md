@@ -1,0 +1,32 @@
+# ACERO — Roadmap de 12 Sprints
+
+Los Sprints 1–4 están **implementados y verificados** en esta entrega. Los
+Sprints 5–12 están **planificados** (ver `docs/backlog/sprints_05_12.md`).
+
+| # | Nombre | Estado | Entregable central |
+|---|---|---|---|
+| 1 | Fundación, constitución y control | ✅ Hecho | Config, políticas+guard, logging, CLI, API, sandbox base, `make verify` |
+| 2 | Expediente científico y modelo de conocimiento | ✅ Hecho | Entidades epistémicas, ledger con integridad, historial, procedencia, export |
+| 3 | Biblioteca científica y procedencia | ✅ Hecho | Ingestión local, chunking, BM25, verificación de citas, métricas de recuperación |
+| 4 | Ciclo mínimo de investigación computacional | ✅ Hecho | Workflow, prereg, sandbox run multi-semilla, escéptico, reproducibilidad, piloto |
+| 5 | Motor de hipótesis y torneo de ideas | ⏳ Backlog | Generación diversa, clustering, ranking multiobjetivo, escéptico reforzado |
+| 6 | Diseño experimental avanzado | ⏳ Backlog | Controles, ablations, sensibilidad, factoriales, validación cruzada |
+| 7 | Motor de experimentos y búsqueda | ⏳ Backlog | Ejecución paralela, colas, checkpoints, optimización bayesiana/evolutiva |
+| 8 | Modelo del mundo y grafo científico | ⏳ Backlog | Grafo de afirmaciones, actualización bayesiana, visualización |
+| 9 | Tutor científico y aprendizaje humano | ⏳ Backlog | Perfil, evaluación, explicaciones por niveles, ruta de aprendizaje |
+| 10 | Especialización científica | ⏳ Backlog | Plugins: física, astronomía, genética, química (sin wet-lab) |
+| 11 | Evaluación, auditoría y ciencia adversarial | ⏳ Backlog | Benchmarks, calibración, red-teaming, p-hacking/HARKing/leakage |
+| 12 | Publicación, colaboración y portal | ⏳ Backlog | Dashboard, export Markdown/PDF/LaTeX, DOI/ORCID-ready, revisión humana |
+
+## Prioridad y dependencias
+- 5 y 6 dependen del ledger (2) y del ciclo (4) — ya presentes.
+- 7 depende de 6 (diseños a ejecutar) y del sandbox (4) — endurecer a Docker/nsjail.
+- 8 depende del ledger (2) y de resultados (4/7).
+- 9 extiende `pedagogy` (semilla en 4).
+- 10 depende de 6/7 (herramientas por dominio).
+- 11 es transversal y debe correr continuamente desde 5 en adelante.
+- 12 depende de 2 (export) y de revisión humana obligatoria.
+
+## Alcance de esta entrega
+Profundidad real en 1–4 (código que ejecuta, pruebas que pasan, artefactos
+documentados) por encima de cobertura superficial de los 12.

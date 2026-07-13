@@ -1,0 +1,16 @@
+# ACERO publication policy. Nothing leaves the machine automatically.
+version: 1
+policy: publication
+
+rules:
+  automatic_publication: false
+  auto_send_email: false
+  auto_submit_manuscript: false
+  auto_post_web: false
+  require_human_authorship: true       # ACERO never claims authorship
+  require_human_review_before_export: true
+  discovery_claims_require_review: true
+
+exports:
+  formats: [json, markdown]            # local, human-inspected artifacts only
+  destination: local_only

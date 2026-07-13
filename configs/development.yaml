@@ -1,0 +1,8 @@
+# Development overrides.
+app:
+  env: development
+logging:
+  level: DEBUG
+  json: false           # human-readable logs during development
+sandbox:
+  backend: subprocess    # docker available, but subprocess is the portable default

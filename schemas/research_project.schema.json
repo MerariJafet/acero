@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "EntityState": {
+      "enum": [
+        "DRAFT",
+        "PROPOSED",
+        "APPROVED",
+        "ACTIVE",
+        "TESTED",
+        "SUPPORTED",
+        "WEAKENED",
+        "REFUTED",
+        "INCONCLUSIVE",
+        "ARCHIVED"
+      ],
+      "title": "EntityState",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "domain": {
+      "default": "general",
+      "title": "Domain",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "principal_investigator": {
+      "default": "human",
+      "title": "Principal Investigator",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/EntityState",
+      "default": "ACTIVE"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "title"
+  ],
+  "title": "ResearchProject",
+  "type": "object"
+}

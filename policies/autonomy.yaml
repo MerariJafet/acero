@@ -1,0 +1,34 @@
+# ACERO autonomy matrix — which actions the system may take, and under what authority.
+# Levels: auto (reversible, low-risk) | human_required (explicit approval) | forbidden.
+version: 1
+policy: autonomy
+
+defaults:
+  reversible_low_risk: auto
+
+actions:
+  read_local_files: auto
+  write_workspace_files: auto
+  run_local_tests: auto
+  run_sandboxed_code: auto
+  create_research_entities: auto
+  lexical_retrieval: auto
+  fetch_open_metadata: human_required   # arXiv/Crossref/OpenAlex — off unless approved & rate-limited
+
+  git_commit: human_required
+  git_push: human_required
+  destructive_git: forbidden
+  delete_negative_results: forbidden
+  modify_secrets: forbidden
+
+  activate_paid_llm: forbidden
+  cloud_resource_creation: forbidden
+  automatic_publication: forbidden
+  automatic_account_creation: forbidden
+  send_email: forbidden
+  contact_researchers: forbidden
+  large_downloads: human_required
+
+  physical_experimentation: forbidden
+  biological_chemical_protocols: forbidden
+  claim_scientific_discovery: forbidden

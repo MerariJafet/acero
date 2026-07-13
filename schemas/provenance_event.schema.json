@@ -1,0 +1,82 @@
+{
+  "$defs": {
+    "ProvenanceAction": {
+      "enum": [
+        "CREATE",
+        "UPDATE",
+        "STATE_CHANGE",
+        "LINK",
+        "RUN_START",
+        "RUN_FINISH",
+        "REFUTE_ATTEMPT",
+        "HUMAN_DECISION",
+        "EXPORT"
+      ],
+      "title": "ProvenanceAction",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/ProvenanceAction"
+    },
+    "actor": {
+      "default": "system",
+      "title": "Actor",
+      "type": "string"
+    },
+    "at": {
+      "title": "At",
+      "type": "string"
+    },
+    "details": {
+      "additionalProperties": true,
+      "title": "Details",
+      "type": "object"
+    },
+    "entity_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Entity Id"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "payload_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Payload Hash"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "summary": {
+      "default": "",
+      "title": "Summary",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "project_id",
+    "action"
+  ],
+  "title": "ProvenanceEvent",
+  "type": "object"
+}

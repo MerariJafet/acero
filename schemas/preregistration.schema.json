@@ -1,0 +1,94 @@
+{
+  "properties": {
+    "baseline": {
+      "title": "Baseline",
+      "type": "string"
+    },
+    "compute_budget": {
+      "additionalProperties": true,
+      "title": "Compute Budget",
+      "type": "object"
+    },
+    "controls": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Controls",
+      "type": "array"
+    },
+    "experiment_id": {
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "hypotheses": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 2,
+      "title": "Hypotheses",
+      "type": "array"
+    },
+    "metric": {
+      "title": "Metric",
+      "type": "string"
+    },
+    "predictions": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Predictions",
+      "type": "array"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "question": {
+      "title": "Question",
+      "type": "string"
+    },
+    "registered_at": {
+      "title": "Registered At",
+      "type": "string"
+    },
+    "result_that_would_support": {
+      "title": "Result That Would Support",
+      "type": "string"
+    },
+    "result_that_would_weaken": {
+      "title": "Result That Would Weaken",
+      "type": "string"
+    },
+    "risks": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Risks",
+      "type": "array"
+    },
+    "stopping_criterion": {
+      "title": "Stopping Criterion",
+      "type": "string"
+    },
+    "variables": {
+      "additionalProperties": true,
+      "title": "Variables",
+      "type": "object"
+    }
+  },
+  "required": [
+    "project_id",
+    "experiment_id",
+    "question",
+    "hypotheses",
+    "predictions",
+    "metric",
+    "baseline",
+    "result_that_would_support",
+    "result_that_would_weaken",
+    "stopping_criterion"
+  ],
+  "title": "Preregistration",
+  "type": "object"
+}

@@ -1,0 +1,16 @@
+# ACERO data access policy.
+version: 1
+policy: data_access
+
+sources:
+  local_pdf: { enabled: true, cost: none, license_check: required }
+  local_fixtures: { enabled: true, cost: none }
+  arxiv: { enabled: false, cost: none, rate_limit_per_min: 20, note: "human_required to enable" }
+  crossref: { enabled: false, cost: none, rate_limit_per_min: 30, note: "human_required to enable" }
+  openalex: { enabled: false, cost: none, rate_limit_per_min: 30, note: "human_required to enable" }
+
+rules:
+  require_license_record: true          # every ingested doc must record a license field
+  reject_unknown_provenance: true       # fragments without a source document are rejected
+  max_download_mb: 50
+  block_pii_ingestion: true

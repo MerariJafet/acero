@@ -1,0 +1,220 @@
+{
+  "$defs": {
+    "ConfidenceAssessment": {
+      "description": "A calibrated confidence statement. Confidence is a claim, not a fact.",
+      "properties": {
+        "method": {
+          "default": "human_estimate",
+          "title": "Method",
+          "type": "string"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "uncertainty": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uncertainty"
+        },
+        "value": {
+          "description": "Subjective probability [0,1]",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "ConfidenceAssessment",
+      "type": "object"
+    },
+    "EntityState": {
+      "enum": [
+        "DRAFT",
+        "PROPOSED",
+        "APPROVED",
+        "ACTIVE",
+        "TESTED",
+        "SUPPORTED",
+        "WEAKENED",
+        "REFUTED",
+        "INCONCLUSIVE",
+        "ARCHIVED"
+      ],
+      "title": "EntityState",
+      "type": "string"
+    },
+    "EntityType": {
+      "enum": [
+        "OBSERVATION",
+        "MEASUREMENT",
+        "DATASET",
+        "CLAIM",
+        "EVIDENCE",
+        "COUNTEREVIDENCE",
+        "ASSUMPTION",
+        "QUESTION",
+        "HYPOTHESIS",
+        "PREDICTION",
+        "MODEL",
+        "METHOD",
+        "EXPERIMENT",
+        "RESULT",
+        "NEGATIVE_RESULT",
+        "ANOMALY",
+        "CONTRADICTION",
+        "INFERENCE",
+        "CONCLUSION",
+        "LIMITATION",
+        "OPEN_QUESTION",
+        "RETRACTION",
+        "CORRECTION"
+      ],
+      "title": "EntityType",
+      "type": "string"
+    },
+    "ProvenanceRef": {
+      "description": "A pointer into the provenance chain (source doc, fragment, run, dataset).",
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "ref_id": {
+          "title": "Ref Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "ref_id"
+      ],
+      "title": "ProvenanceRef",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "author": {
+      "default": "human",
+      "title": "Author",
+      "type": "string"
+    },
+    "confidence": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConfidenceAssessment"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "depends_on": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Depends On",
+      "type": "array"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "extra": {
+      "additionalProperties": true,
+      "title": "Extra",
+      "type": "object"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "metrics": {
+      "additionalProperties": true,
+      "title": "Metrics",
+      "type": "object"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/ProvenanceRef"
+      },
+      "title": "Provenance",
+      "type": "array"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/EntityState",
+      "default": "DRAFT"
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/EntityType",
+      "default": "NEGATIVE_RESULT"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "project_id",
+    "title",
+    "run_id"
+  ],
+  "title": "NegativeResult",
+  "type": "object"
+}

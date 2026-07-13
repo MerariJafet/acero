@@ -1,0 +1,23 @@
+# ACERO cost controls. Local-first. All paid switches default OFF.
+version: 1
+policy: costs
+
+flags:
+  external_paid_services: false
+  cloud_resource_creation: false
+  automatic_publication: false
+  automatic_account_creation: false
+  large_downloads: false
+  physical_experimentation: false
+
+limits:
+  max_monetary_cost_usd_per_run: 0.0     # zero by default; any >0 requires human approval
+  max_monetary_cost_usd_per_session: 0.0
+  max_llm_requests_per_run: 0            # mock/local only until explicitly raised
+  max_download_mb: 50                    # per artifact; larger => human_required
+
+circuit_breaker:
+  enabled: true
+  trip_on_estimated_cost_usd: 0.01       # any estimated spend above this trips the breaker
+  trip_on_request_count: 1               # first paid request trips unless approved
+  action: block_and_require_human

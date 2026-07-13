@@ -1,0 +1,35 @@
+# ACERO research-safety policy. Hard scientific and ethical boundaries.
+version: 1
+policy: research_safety
+
+forbidden_domains:
+  - physical_experimentation
+  - human_subjects
+  - animal_subjects
+  - wet_lab_biology
+  - wet_lab_chemistry
+  - pathogen_culture_or_modification
+  - toxin_design
+  - medical_procedures
+  - weaponization
+
+epistemic_rules:
+  no_conclusion_without_evidence: true
+  no_evidence_without_provenance: true
+  no_experiment_without_prediction: true
+  no_hypothesis_accepted_without_refutation_attempt: true
+  no_novelty_claim_without_prior_art_search: true
+  computational_result_is_not_physical_proof: true
+  negative_results_are_preserved: true
+  no_fabricated_sources_or_data: true
+
+allowed_scope_v1:
+  - literature_analysis
+  - public_data_analysis
+  - mathematical_modeling
+  - simulation
+  - statistical_analysis
+  - symbolic_discovery
+  - optimization
+  - hypothesis_generation_and_falsification
+  - reproducibility

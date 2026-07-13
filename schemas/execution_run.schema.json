@@ -1,0 +1,88 @@
+{
+  "properties": {
+    "artifacts_dir": {
+      "default": "",
+      "title": "Artifacts Dir",
+      "type": "string"
+    },
+    "code_hash": {
+      "default": "",
+      "title": "Code Hash",
+      "type": "string"
+    },
+    "environment": {
+      "additionalProperties": true,
+      "title": "Environment",
+      "type": "object"
+    },
+    "exit_code": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Exit Code"
+    },
+    "experiment_id": {
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "finished_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finished At"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "input_hash": {
+      "default": "",
+      "title": "Input Hash",
+      "type": "string"
+    },
+    "output_hash": {
+      "default": "",
+      "title": "Output Hash",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "seeds": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Seeds",
+      "type": "array"
+    },
+    "started_at": {
+      "title": "Started At",
+      "type": "string"
+    },
+    "status": {
+      "default": "created",
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "project_id",
+    "experiment_id"
+  ],
+  "title": "ExecutionRun",
+  "type": "object"
+}

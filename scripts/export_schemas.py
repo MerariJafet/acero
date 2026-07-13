@@ -1,0 +1,78 @@
+#!/usr/bin/env python
+"""Export JSON Schemas for the core epistemic entities.
+
+Usage:
+  python scripts/export_schemas.py           # write schemas/*.json
+  python scripts/export_schemas.py --check    # verify they are up to date (CI gate)
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+from acero.core.config import repo_root
+from acero.epistemology.schemas import (
+    Assumption,
+    ExecutionRun,
+    ExperimentPlan,
+    Hypothesis,
+    NegativeResult,
+    Prediction,
+    ResearchProject,
+    ResearchQuestion,
+    ResearchResult,
+    ScientificClaim,
+)
+from acero.experiment.prereg import Preregistration
+from acero.provenance.events import ProvenanceEvent
+
+MODELS = {
+    "research_project": ResearchProject,
+    "research_question": ResearchQuestion,
+    "assumption": Assumption,
+    "hypothesis": Hypothesis,
+    "prediction": Prediction,
+    "experiment_plan": ExperimentPlan,
+    "execution_run": ExecutionRun,
+    "research_result": ResearchResult,
+    "negative_result": NegativeResult,
+    "scientific_claim": ScientificClaim,
+    "preregistration": Preregistration,
+    "provenance_event": ProvenanceEvent,
+}
+
+
+def render() -> dict[str, str]:
+    return {
+        name: json.dumps(model.model_json_schema(), indent=2, sort_keys=True) + "\n"
+        for name, model in MODELS.items()
+    }
+
+
+def main() -> int:
+    check = "--check" in sys.argv
+    out_dir = repo_root() / "schemas"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rendered = render()
+    stale = []
+    for name, text in rendered.items():
+        path = out_dir / f"{name}.schema.json"
+        if check:
+            if not path.exists() or path.read_text(encoding="utf-8") != text:
+                stale.append(name)
+        else:
+            path.write_text(text, encoding="utf-8")
+    if check:
+        if stale:
+            print(f"Schemas out of date: {', '.join(stale)}. Run scripts/export_schemas.py.")
+            return 1
+        print(f"Schemas up to date ({len(rendered)} models). ✓")
+        return 0
+    print(f"Wrote {len(rendered)} schemas to {out_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
