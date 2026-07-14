@@ -183,6 +183,34 @@ def create_app() -> FastAPI:
         wm = WorldModel(session_factory, ledger, project_id)
         return [a.model_dump() for a in AnalogyEngine(wm).analogies()]
 
+    # --- Governing Structure Inference (read-only + pure computation) ---
+    @app.get("/inference/discover/{system}")
+    def inference_discover(system: str) -> dict:
+        from ..inference.data.observations import generate
+        from ..inference.engine import StructureInferenceEngine
+        from ..inference.models import StructureInferenceProblem
+
+        systems = ["exponential_decay", "logistic", "harmonic", "damped", "predator_prey"]
+        if system not in systems:
+            raise HTTPException(status_code=404, detail=f"unknown system; {systems}")
+        obs = generate(system, seed=1, n=400, t_max=8.0)
+        prob = StructureInferenceProblem(project_id="api", phenomenon=system,
+                                         variables_observed=obs.variables)
+        rep = StructureInferenceEngine().infer(prob, obs, threshold=0.2)
+        return {"system": system, "inference_level": rep["inference_level"],
+                "equations": {k: v["expression"] for k, v in rep["equations"].items()},
+                "invariants": rep["invariants"], "abstention": rep["abstention"],
+                "imposed": rep["imposed"]}
+
+    @app.get("/inference/benchmark")
+    def inference_benchmark_endpoint() -> dict:
+        from ..benchmarks.governing_dynamics import run_governing_dynamics
+
+        r = run_governing_dynamics()
+        return {"level1": {k: v["recovered"] for k, v in r["level1_recovery"].items()},
+                "level5_regime": r["level5_regime"]["regime_change_detected"],
+                "level7_gate": r["level7_adversarial_gate"]["status"]}
+
     return app
 
 

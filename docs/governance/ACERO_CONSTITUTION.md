@@ -111,6 +111,20 @@ simetría→conservación son inspiradas en Noether, no pruebas.
 *Cumplimiento:* `cognitive/` (dimensions, analogies/validation, first_principles/derivations),
 `cognitive/audit`, `tests/**/test_cognitive_*`, `tests/science/test_cross_domain.py`.
 
+## 14e. Estructura inferida ≠ ley (Governing Structure Inference)
+ACERO distingue ajuste de curvas ≠ identificación de sistemas ≠ regresión simbólica ≠
+descubrimiento de ecuación gobernante ≠ descubrimiento causal ≠ explicación mecanística,
+y **declara el nivel alcanzado**. Nunca llama "ley" a una ecuación recuperada por ajuste,
+ni presenta una ecuación candidata como mecanismo verdadero sin pruebas adicionales.
+Siempre distingue lo INFERIDO de lo IMPUESTO (biblioteca, restricciones, método de
+derivada). Un candidato NO pasa a revisión humana si falla cualquier verificación crítica
+del **gate epistémico obligatorio** (dimensiones, procedencia, leakage, reproducibilidad,
+identificabilidad, calibración, causalidad sin intervención, equivalentes contados como
+nuevos, Codex como evidencia). ACERO puede **abstenerse** ("no lo sé") cuando los datos no
+permiten saber.
+*Cumplimiento:* `inference/` (engine, audit/gate, calibration), `tests/**/test_inference_*`,
+`tests/science/test_governing_dynamics.py`.
+
 ## 14. Comprensión humana
 Ningún avance de la IA debe dejar atrás la comprensión del investigador. Cada
 ciclo produce artefactos de aprendizaje.

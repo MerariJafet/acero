@@ -1,0 +1,130 @@
+{
+  "properties": {
+    "allowed_transformations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Transformations",
+      "type": "array"
+    },
+    "boundary_conditions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Boundary Conditions",
+      "type": "array"
+    },
+    "candidate_conservation_rules": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Candidate Conservation Rules",
+      "type": "array"
+    },
+    "candidate_hidden_variables": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Candidate Hidden Variables",
+      "type": "array"
+    },
+    "candidate_symmetries": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Candidate Symmetries",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "dimensions": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Dimensions",
+      "type": "object"
+    },
+    "forbidden_terms": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Forbidden Terms",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "inference_goal": {
+      "default": "recover governing ODE terms",
+      "title": "Inference Goal",
+      "type": "string"
+    },
+    "initial_conditions": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Initial Conditions",
+      "type": "object"
+    },
+    "known_constraints": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Known Constraints",
+      "type": "array"
+    },
+    "noise_model": {
+      "default": "unknown",
+      "title": "Noise Model",
+      "type": "string"
+    },
+    "phenomenon": {
+      "title": "Phenomenon",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "sampling_information": {
+      "additionalProperties": true,
+      "title": "Sampling Information",
+      "type": "object"
+    },
+    "spatial_coordinates": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Spatial Coordinates",
+      "type": "array"
+    },
+    "temporal_coordinate": {
+      "default": "t",
+      "title": "Temporal Coordinate",
+      "type": "string"
+    },
+    "units": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Units",
+      "type": "object"
+    },
+    "variables_observed": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Variables Observed",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "phenomenon"
+  ],
+  "title": "StructureInferenceProblem",
+  "type": "object"
+}

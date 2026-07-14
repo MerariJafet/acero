@@ -39,6 +39,7 @@ discovery_app = typer.Typer(help="Discovery Engine: status / next / report")
 benchmark_app = typer.Typer(help="Validation benchmarks")
 world_app = typer.Typer(help="World Model Engine: living epistemic graph")
 cognitive_app = typer.Typer(help="Cognitive Discovery Engine: concepts, analogies, first principles")
+inference_app = typer.Typer(help="Governing Structure Inference Engine")
 app.add_typer(project_app, name="project")
 app.add_typer(domain_app, name="domain")
 app.add_typer(hypothesis_app, name="hypothesis")
@@ -47,6 +48,7 @@ app.add_typer(discovery_app, name="discovery")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(world_app, name="world")
 app.add_typer(cognitive_app, name="cognitive")
+app.add_typer(inference_app, name="inference")
 
 
 def _ledger() -> ResearchLedger:
@@ -650,6 +652,90 @@ def cognitive_validate_equation(
     res = FirstPrinciplesEngine().validate_equation(lhs, rhs)
     mark = "✓ consistent" if res["consistent"] else "✗ INCONSISTENT"
     typer.echo(f"{lhs} = {rhs}: {mark}  ({res['lhs']} vs {res['rhs']})")
+
+
+_SYSTEMS = ["exponential_decay", "logistic", "harmonic", "damped", "predator_prey"]
+
+
+@inference_app.command("discover")
+def inference_discover(
+    system: str = typer.Argument("damped", help=f"one of {_SYSTEMS}"),
+    noise: float = typer.Option(0.0, help="observation noise"),
+    threshold: float = typer.Option(0.2, help="sparsity threshold"),
+) -> None:
+    """Infer governing structure of a synthetic (hidden-equation) system."""
+    from ..inference.data.observations import generate
+    from ..inference.engine import StructureInferenceEngine
+    from ..inference.models import StructureInferenceProblem
+
+    if system not in _SYSTEMS:
+        typer.echo(f"unknown system; choose from {_SYSTEMS}")
+        raise typer.Exit(1)
+    obs = generate(system, seed=1, n=500, t_max=8.0, noise=noise)
+    prob = StructureInferenceProblem(project_id="cli", phenomenon=system,
+                                     variables_observed=obs.variables)
+    rep = StructureInferenceEngine().infer(prob, obs, threshold=threshold,
+                                           derivative_method="savgol" if noise > 0 else "auto")
+    typer.echo(f"System: {system} · level: {rep['inference_level']} · "
+               f"abstains: {rep['abstention']['abstains']}")
+    for tgt, e in rep["equations"].items():
+        typer.echo(f"  {tgt} = {e['expression']}   (R²={e['r2']}, ident={e['identifiability']})")
+    if rep["invariants"]:
+        i = rep["invariants"][0]
+        typer.echo(f"  invariant: {i['expression']} [{i['classification']}]")
+    typer.echo("NOTE: identified from an IMPOSED library — a fitted equation is NOT a law.")
+
+
+@inference_app.command("benchmark")
+def inference_benchmark() -> None:
+    """Run the Governing Dynamics Inference Benchmark (7 levels)."""
+    from ..benchmarks.governing_dynamics import run_governing_dynamics
+
+    r = run_governing_dynamics()
+    typer.echo("L1 recovery: " + ", ".join(
+        f"{k}={'✓' if v['recovered'] else '✗'}" for k, v in r["level1_recovery"].items()))
+    typer.echo("L2 noise (R² dv/dt): " + ", ".join(
+        f"{k}={v['r2_dv']:.2f}" for k, v in r["level2_noise"].items()))
+    typer.echo(f"L3 omitted variable flagged: {r['level3_omitted_variable']['missing_variable_flagged']}")
+    typer.echo(f"L4 discriminating experiment: divergence="
+               f"{r['level4_equivalence']['discriminating_experiment']['predicted_divergence']}")
+    typer.echo(f"L5 regime change detected: {r['level5_regime']['regime_change_detected']}")
+    typer.echo(f"L6 invariant: {r['level6_conservation']['invariant']} "
+               f"[{r['level6_conservation']['classification']}]")
+    typer.echo(f"L7 adversarial gate: {r['level7_adversarial_gate']['status']} "
+               f"({r['level7_adversarial_gate']['n_blockers']} blockers)")
+    typer.echo("NOTE: synthetic data, hidden equations — validates the METHOD, not a discovery.")
+
+
+@inference_app.command("sunspots")
+def inference_sunspots() -> None:
+    """Download and analyse the real SILSO sunspot series (authorized public dataset)."""
+    from ..benchmarks.real_astronomy_inference import analyze_sunspots, download_sunspots
+
+    path = repo_root() / "research" / "datasets" / "sunspots.csv"
+    meta = download_sunspots(path, authorized=True)
+    r = analyze_sunspots(path, manifest=meta)
+    typer.echo(f"SILSO sunspots: n={r['n']} span={r['time_span_years']} "
+               f"(sha {meta['sha256'][:16]})")
+    typer.echo(f"  dominant period: {r['dominant_period_years']} yr → {r['classification']}")
+    typer.echo(f"  low-activity decades: {r['low_activity_decades'][:6]}")
+    typer.echo(f"  {r['cannot_conclude'][0]}")
+
+
+@inference_app.command("gate")
+def inference_gate(bad: bool = typer.Option(False, "--bad", help="submit a flawed candidate")) -> None:
+    """Run the mandatory epistemic gate on a demo candidate."""
+    from ..inference.audit.gate import GateInput, evaluate
+    from ..inference.models import IdentifiabilityStatus
+
+    gi = GateInput() if not bad else GateInput(
+        dimensions_valid=False, reproduced=False, makes_causal_claim=True,
+        n_equivalent_models=3, counts_equivalent_as_new=True, codex_treated_as_evidence=True,
+        identifiability=IdentifiabilityStatus.NON_IDENTIFIABLE, presented_as_unique=True)
+    rep = evaluate(gi)
+    typer.echo(f"Gate status: {rep.status.value}")
+    for f in rep.findings:
+        typer.echo(f"  [{f.severity}] {f.rule}: {f.detail}")
 
 
 @app.command("pilot")

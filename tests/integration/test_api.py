@@ -41,6 +41,21 @@ def test_discovery_endpoints():
     assert c.get(f"/projects/{pid}/discovery/candidates/rejected").json() == []
 
 
+def test_inference_endpoints():
+    c = _client()
+    r = c.get("/inference/discover/damped").json()
+    assert r["inference_level"] in {"system_identification", "curve_fitting"}
+    assert "dv/dt" in r["equations"]
+    assert r["imposed"]  # library was imposed
+    assert c.get("/inference/discover/nope").status_code == 404
+
+
+def test_cognitive_validate_equation_endpoint():
+    c = _client()
+    assert c.get("/cognitive/validate-equation", params={"lhs": "force", "rhs": "velocity"}
+                 ).json()["consistent"] is False
+
+
 def test_project_crud_over_api():
     c = _client()
     created = c.post("/projects", json={"title": "API project", "domain": "math"}).json()

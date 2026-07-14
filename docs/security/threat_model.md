@@ -28,6 +28,10 @@ código de experimentos** y la **fuga de secretos/costos**.
 | Derivación de Codex sin verificar | cognitive | SymPy verifica cada paso; pasos no resueltos registrados; confianza <1 | `tests/unit/test_cognitive_first_principles.py` |
 | Razonamiento conceptual circular | cognitive | dependencias acíclicas rechazan ciclos | `test_cognitive_concepts.py::test_circular_dependency_rejected` |
 | Transferencia predictiva ejecuta código | analogía | corre en el sandbox (subprocess/docker), sin red | `cognitive/analogies/validation.py` |
+| Fuga en identificación (derivadas del mismo dato) | inference | declarado en cada reporte; caveat SINDy | `tests/unit/test_inference_active_calibration.py` |
+| Conclusión más fuerte que la evidencia | inference | gate epistémico bloquea; nivel declarado; abstención | `tests/unit/test_inference_gate.py` |
+| Descarga externa no autorizada (manchas solares) | inference | `download_sunspots(authorized=True)` + cap + host fijo | `benchmarks/real_astronomy_inference.py` |
+| Código de simulación fuera del sandbox | inference | transferencias/experimentos corren en el sandbox | `cognitive/analogies/validation.py` |
 
 ## Riesgos abiertos (documentados, no resueltos)
 1. El sandbox de subproceso es más débil que un contenedor/nsjail. Para código

@@ -53,6 +53,14 @@ salida. `reproduced = True` solo si coinciden. Prueba:
 - Las propuestas de Codex (conceptos/analogías/derivaciones) registran provider/model/
   tokens; no son bit-reproducibles (servicio externo) pero sí verificadas por reglas.
 
+## Governing Structure Inference (Sprints 8.8–8.9)
+- La identificación dispersa (STLSQ) es determinista dado los datos y el threshold; la
+  estabilidad usa bootstrap con semilla fija.
+- La estimación de derivadas registra método y regiones no confiables; el gate epistémico
+  exige reproducibilidad.
+- El dato real (SILSO) registra URL, licencia, referencia y **hash SHA-256**; el análisis
+  (FFT/periodo) es determinista dado el CSV.
+
 ## Límites
 - Diferencias de BLAS/versión de numpy entre máquinas pueden alterar los últimos
   dígitos; por eso se comparan resultados **dentro de la misma máquina/entorno**

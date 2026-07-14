@@ -29,3 +29,11 @@
 - Estado posterior competitivo normalizado entre modelos (heredado del Sprint 8).
 - Migraciones Alembic para las tablas de nodos/aristas.
 - Métrica de similitud superficial más rica (la basada en tokens da 0 en átomo↔solar).
+
+## Adición tras Sprints 8.8–8.9 (Governing Structure Inference)
+- Ampliar bibliotecas de términos (no polinómicas: fricción de Coulomb, saturaciones,
+  operadores diferenciales/PDE) — Codex ya propone candidatos válidos.
+- Intervalos de confianza calibrados para coeficientes (bootstrap ya disponible).
+- Convertir el gate epistémico en gate obligatorio del pipeline de Discovery/World Model.
+- Estimación de derivadas que evite la fuga de "mismo dato" (weak-form SINDy / integral).
+- Filtrado dimensional real de la biblioteca cuando se conocen unidades.

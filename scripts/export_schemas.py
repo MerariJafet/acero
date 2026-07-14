@@ -37,6 +37,7 @@ from acero.cognitive.first_principles.models import (
     FirstPrinciplesProblem,
     ScientificDerivation,
 )
+from acero.inference.models import GoverningModelCandidate, StructureInferenceProblem
 from acero.world_model.edges import WorldEdge
 from acero.world_model.nodes import WorldNode
 
@@ -66,6 +67,9 @@ MODELS = {
     "scientific_analogy": ScientificAnalogy,
     "first_principles_problem": FirstPrinciplesProblem,
     "scientific_derivation": ScientificDerivation,
+    # Governing Structure Inference (Sprints 8.8–8.9)
+    "structure_inference_problem": StructureInferenceProblem,
+    "governing_model_candidate": GoverningModelCandidate,
 }
 
 

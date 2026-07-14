@@ -28,6 +28,7 @@ limpios). Sprints 5–12 planificados. Ver `docs/roadmap/12_sprints.md`.
 | 7 | Motor de ejecución, búsqueda y aprendizaje (Discovery Engine) | ✅ |
 | 8 | Modelo del mundo y grafo científico (World Model Engine) | ✅ |
 | 8.5–8.7 | Cognitive Discovery Engine (conceptos, analogías, primeros principios) | ✅ |
+| 8.8–8.9 | Governing Structure Inference Engine (SINDy, invariantes, gate epistémico) | ✅ |
 | 9–12 | Tutor → publicación | ⏳ backlog |
 
 ## Principios no negociables
@@ -115,6 +116,12 @@ acero cognitive benchmark                          # Cross-Domain Structural Dis
 acero cognitive analogy <oscillator_rlc|thermal_particle_diffusion|atom_solar_system>
 acero cognitive dimensions "period=time,length=length,gravity=acceleration,mass=mass"
 acero cognitive validate-equation force velocity   # dimensional consistency check
+
+# Governing Structure Inference Engine (Sprints 8.8–8.9)
+acero inference discover <exponential_decay|logistic|harmonic|damped|predator_prey>
+acero inference benchmark                           # 7-level Governing Dynamics benchmark
+acero inference sunspots                            # real SILSO sunspot analysis (authorized)
+acero inference gate [--bad]                        # mandatory epistemic gate
 ```
 
 ## Arquitectura

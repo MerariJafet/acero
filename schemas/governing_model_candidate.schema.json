@@ -1,0 +1,163 @@
+{
+  "$defs": {
+    "IdentifiabilityStatus": {
+      "enum": [
+        "IDENTIFIABLE",
+        "PARTIALLY_IDENTIFIABLE",
+        "NON_IDENTIFIABLE",
+        "DATA_INSUFFICIENT",
+        "REGIME_DEPENDENT"
+      ],
+      "title": "IdentifiabilityStatus",
+      "type": "string"
+    },
+    "InferenceLevel": {
+      "description": "What level did ACERO actually reach \u2014 never overstate.",
+      "enum": [
+        "curve_fitting",
+        "system_identification",
+        "symbolic_regression",
+        "governing_equation_discovery",
+        "causal_discovery",
+        "mechanistic_explanation"
+      ],
+      "title": "InferenceLevel",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "coefficients": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Coefficients",
+      "type": "object"
+    },
+    "complexity": {
+      "default": 0,
+      "title": "Complexity",
+      "type": "integer"
+    },
+    "conserved_quantities": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Conserved Quantities",
+      "type": "array"
+    },
+    "dimensions_valid": {
+      "default": true,
+      "title": "Dimensions Valid",
+      "type": "boolean"
+    },
+    "equation_type": {
+      "default": "ODE",
+      "title": "Equation Type",
+      "type": "string"
+    },
+    "expression": {
+      "title": "Expression",
+      "type": "string"
+    },
+    "extrapolation_metrics": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Extrapolation Metrics",
+      "type": "object"
+    },
+    "fit_metrics": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Fit Metrics",
+      "type": "object"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "identifiability": {
+      "$ref": "#/$defs/IdentifiabilityStatus",
+      "default": "IDENTIFIABLE"
+    },
+    "imposed": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Imposed",
+      "type": "array"
+    },
+    "inference_level": {
+      "$ref": "#/$defs/InferenceLevel",
+      "default": "system_identification"
+    },
+    "inferred": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Inferred",
+      "type": "array"
+    },
+    "provenance": {
+      "additionalProperties": true,
+      "title": "Provenance",
+      "type": "object"
+    },
+    "stability_metrics": {
+      "additionalProperties": true,
+      "title": "Stability Metrics",
+      "type": "object"
+    },
+    "symmetries": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Symmetries",
+      "type": "array"
+    },
+    "target": {
+      "title": "Target",
+      "type": "string"
+    },
+    "terms": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Terms",
+      "type": "array"
+    },
+    "unresolved_terms": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Unresolved Terms",
+      "type": "array"
+    },
+    "valid_regime": {
+      "default": "",
+      "title": "Valid Regime",
+      "type": "string"
+    },
+    "variables": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Variables",
+      "type": "array"
+    }
+  },
+  "required": [
+    "target",
+    "expression"
+  ],
+  "title": "GoverningModelCandidate",
+  "type": "object"
+}
