@@ -26,7 +26,8 @@ limpios). Sprints 5–12 planificados. Ver `docs/roadmap/12_sprints.md`.
 | 5 | Motor de hipótesis y torneo de ideas | ✅ |
 | 6 | Diseño experimental y ganancia de información | ✅ |
 | 7 | Motor de ejecución, búsqueda y aprendizaje (Discovery Engine) | ✅ |
-| 8–12 | Grafo científico → publicación | ⏳ backlog |
+| 8 | Modelo del mundo y grafo científico (World Model Engine) | ✅ |
+| 9–12 | Tutor → publicación | ⏳ backlog |
 
 ## Principios no negociables
 
@@ -102,6 +103,11 @@ acero experiment rank <project-id>                # ranking por utilidad
 acero experiment run <project-id>                 # ejecuta en sandbox
 acero discovery status|next|report <project-id>   # estado / siguiente / procedencia
 acero benchmark hidden-dynamics [--system ...] [--llm]   # validación integral
+
+# World Model Engine (Sprint 8) — grafo epistémico vivo
+acero world demo [--system ...] [--exoplanets]    # investiga → grafo → narra qué cambió
+acero world stats|narrate|viz <project-id>        # estadísticas / frases / visualización HTML
+acero world query <project-id> <anomalies|contradictions|untested|weak|single|critical>
 ```
 
 ## Arquitectura

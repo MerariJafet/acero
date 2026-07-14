@@ -37,12 +37,14 @@ hypothesis_app = typer.Typer(help="Discovery Engine: hypotheses")
 experiment_app = typer.Typer(help="Discovery Engine: experiments")
 discovery_app = typer.Typer(help="Discovery Engine: status / next / report")
 benchmark_app = typer.Typer(help="Validation benchmarks")
+world_app = typer.Typer(help="World Model Engine: living epistemic graph")
 app.add_typer(project_app, name="project")
 app.add_typer(domain_app, name="domain")
 app.add_typer(hypothesis_app, name="hypothesis")
 app.add_typer(experiment_app, name="experiment")
 app.add_typer(discovery_app, name="discovery")
 app.add_typer(benchmark_app, name="benchmark")
+app.add_typer(world_app, name="world")
 
 
 def _ledger() -> ResearchLedger:
@@ -445,6 +447,128 @@ def benchmark_hidden_dynamics(
                f"(+{len(rep['next_experiment']['alternatives'])} alternatives)")
     typer.echo(f"Artifacts: {art}")
     typer.echo("NOTE: synthetic data; model recovery, NOT scientific discovery.")
+
+
+def _world(project_id: str):
+    from ..world_model.graph import WorldModel
+
+    sf, led, _ = _discovery()
+    return led, WorldModel(sf, led, project_id)
+
+
+@world_app.command("demo")
+def world_demo(
+    system: str = typer.Option("damped_oscillator", help="System to investigate"),
+    exoplanets: bool = typer.Option(False, "--exoplanets",
+                                    help="Also download+ingest REAL NASA exoplanet data (authorized)"),
+) -> None:
+    """Run an investigation, fold it into the World Model, and narrate what changed."""
+
+    from ..benchmarks.hidden_dynamics import run_hidden_dynamics
+    from ..discovery.store import DiscoveryStore
+    from ..world_model.evolution import evolution_report, snapshot
+    from ..world_model.graph import WorldModel
+    from ..world_model.narrate import narrate
+    from ..world_model.programs import create_program
+    from ..world_model.update import integrate_hidden_dynamics
+    from ..world_model.viz import write_html
+
+    sf, led, store = _discovery()
+    store = DiscoveryStore(sf, led)
+    proj = led.create_project(f"World Model: {system}", domain="astronomy")
+    wm = WorldModel(sf, led, proj.id)
+    prog = create_program(wm, "Dynamics research program", domain="astronomy")
+
+    art = repo_root() / "research" / "artifacts" / f"{proj.id}_world"
+    # First investigation creates the belief nodes; snapshot AFTER so the second
+    # investigation's updates show up as 'believe_more' (accumulating replication).
+    rep1 = run_hidden_dynamics(led, store, proj.id, system=system, seeds=[1, 2],
+                               artifacts_root=str(art))
+    integrate_hidden_dynamics(wm, rep1, program_id=prog.id)
+    before = snapshot(wm)
+    rep2 = run_hidden_dynamics(led, store, proj.id, system=system, seeds=[3, 4],
+                               artifacts_root=str(art))
+    integrate_hidden_dynamics(wm, rep2, program_id=prog.id)
+    after = snapshot(wm)
+
+    if exoplanets:
+        from ..world_model.ingest import download_exoplanets, ingest_exoplanets
+        csv_path = repo_root() / "research" / "datasets" / "exoplanets.csv"
+        meta = download_exoplanets(csv_path, authorized=True)
+        king = ingest_exoplanets(wm, csv_path, program_id=prog.id, manifest=meta)
+        law_node = wm.get_node(king["law_id"])
+        conf = law_node.confidence if law_node else 0.0
+        typer.echo(f"Kepler on REAL data: n={king['n_rows']} R²={king['fit']['r2']} "
+                   f"→ belief {conf:.2f}")
+
+    evo = evolution_report(wm, before, after)
+    typer.echo(f"Project {proj.id} · nodes {wm.stats()['n_nodes']} edges {wm.stats()['n_edges']}")
+    typer.echo(f"believe_more: {len(evo['believe_more'])} · new contradictions: "
+               f"{len(evo['new_contradictions'])} · new anomalies: {len(evo['new_anomalies'])}")
+    typer.echo("--- ACERO says ---")
+    for s in narrate(wm):
+        typer.echo(f"  • {s['text']}")
+    html_path = write_html(wm, str(art / "world.html"))
+    typer.echo(f"Visualization: {html_path}")
+
+
+@world_app.command("stats")
+def world_stats(project_id: str = typer.Argument(...)) -> None:
+    """Node/edge counts for a project's World Model."""
+    _, wm = _world(project_id)
+    import json as _json
+    typer.echo(_json.dumps(wm.stats(), indent=2))
+
+
+@world_app.command("narrate")
+def world_narrate(project_id: str = typer.Argument(...)) -> None:
+    """What ACERO can now say about the accumulated knowledge."""
+    from ..world_model.narrate import narrate
+
+    _, wm = _world(project_id)
+    statements = narrate(wm)
+    if not statements:
+        typer.echo("(no statements yet)")
+        return
+    for s in statements:
+        typer.echo(f"• [{s['kind']}] {s['text']}")
+
+
+@world_app.command("viz")
+def world_viz(project_id: str = typer.Argument(...),
+              out: str = typer.Option("", help="Output HTML path")) -> None:
+    """Write an HTML visualization of the World Model."""
+    from ..world_model.viz import write_html
+
+    _, wm = _world(project_id)
+    path = out or str(repo_root() / "research" / "artifacts" / f"{project_id}_world.html")
+    typer.echo(f"Wrote {write_html(wm, path)}")
+
+
+@world_app.command("query")
+def world_query(project_id: str = typer.Argument(...),
+                what: str = typer.Argument(..., help="anomalies|untested|weak|single|contradictions")) -> None:
+    """Query the scientific memory."""
+    import json as _json
+    from collections.abc import Callable
+
+    from ..world_model.queries import ScientificMemory
+
+    _, wm = _world(project_id)
+    mem = ScientificMemory(wm)
+    table: dict[str, Callable[[], object]] = {
+        "anomalies": lambda: [a.label for a in mem.open_anomalies()],
+        "contradictions": lambda: [c.label for c in mem.open_contradictions()],
+        "untested": lambda: [n.label for n in mem.untested_beliefs()],
+        "weak": mem.weak_relations,
+        "single": lambda: [n.label for n in mem.single_source_claims()],
+        "critical": mem.critical_assumptions,
+    }
+    fn = table.get(what)
+    if fn is None:
+        typer.echo(f"unknown query '{what}'; choose from {sorted(table)}")
+        raise typer.Exit(1)
+    typer.echo(_json.dumps(fn(), indent=2, ensure_ascii=False))
 
 
 @app.command("pilot")

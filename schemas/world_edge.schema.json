@@ -1,0 +1,89 @@
+{
+  "$defs": {
+    "EdgeType": {
+      "enum": [
+        "supports",
+        "contradicts",
+        "depends_on",
+        "generated_by",
+        "tests",
+        "explains",
+        "predicts",
+        "derived_from",
+        "refines",
+        "generalizes",
+        "specializes",
+        "invalidates",
+        "requires",
+        "belongs_to",
+        "measured_by",
+        "computed_by",
+        "observed_in",
+        "related_to",
+        "caused_by",
+        "hypothesizes",
+        "extends",
+        "replaces"
+      ],
+      "title": "EdgeType",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "active": {
+      "default": true,
+      "title": "Active",
+      "type": "boolean"
+    },
+    "confidence": {
+      "default": 0.5,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "target": {
+      "title": "Target",
+      "type": "string"
+    },
+    "type": {
+      "$ref": "#/$defs/EdgeType"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    },
+    "weight": {
+      "default": 1.0,
+      "title": "Weight",
+      "type": "number"
+    }
+  },
+  "required": [
+    "project_id",
+    "type",
+    "source",
+    "target"
+  ],
+  "title": "WorldEdge",
+  "type": "object"
+}

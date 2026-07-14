@@ -7,7 +7,7 @@ tables for projects, runs, provenance, and decisions where relational queries ma
 
 from __future__ import annotations
 
-from sqlalchemy import JSON, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -96,6 +96,44 @@ class FragmentRow(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     document_id: Mapped[str] = mapped_column(String(64), index=True)
     project_id: Mapped[str] = mapped_column(String(64), index=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+
+
+class WorldNodeRow(Base):
+    """World Model node (a belief). Versioned; history in WorldNodeHistoryRow."""
+
+    __tablename__ = "world_nodes"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), index=True)
+    program_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    type: Mapped[str] = mapped_column(String(32), index=True)
+    label: Mapped[str] = mapped_column(String(512))
+    domain: Mapped[str] = mapped_column(String(64), index=True, default="general")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    confidence: Mapped[float] = mapped_column(Float, default=0.2, index=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+
+
+class WorldNodeHistoryRow(Base):
+    __tablename__ = "world_node_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    node_id: Mapped[str] = mapped_column(String(64), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    at: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict] = mapped_column(JSON)
+
+
+class WorldEdgeRow(Base):
+    __tablename__ = "world_edges"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), index=True)
+    type: Mapped[str] = mapped_column(String(32), index=True)
+    source: Mapped[str] = mapped_column(String(64), index=True)
+    target: Mapped[str] = mapped_column(String(64), index=True)
+    active: Mapped[bool] = mapped_column(default=True, index=True)
     payload: Mapped[dict] = mapped_column(JSON)
 
 

@@ -31,6 +31,8 @@ from acero.discovery.next_experiment import RecommendedNextExperiment
 from acero.discovery.tree import TreeNode
 from acero.experiment.prereg import Preregistration
 from acero.provenance.events import ProvenanceEvent
+from acero.world_model.edges import WorldEdge
+from acero.world_model.nodes import WorldNode
 
 MODELS = {
     "research_project": ResearchProject,
@@ -50,6 +52,9 @@ MODELS = {
     "experiment_proposal": ExperimentProposal,
     "tree_node": TreeNode,
     "recommended_next_experiment": RecommendedNextExperiment,
+    # World Model (Sprint 8)
+    "world_node": WorldNode,
+    "world_edge": WorldEdge,
 }
 
 

@@ -90,6 +90,16 @@ por plausibilidad; toda decisión de descubrimiento queda en procedencia.
 *Cumplimiento:* `discovery/confidence.py`, `experiment_design.require_discriminating`,
 `experiment_critic` (barrera por reglas), `benchmarks/audit.py`.
 
+## 14c. El conocimiento es un modelo vivo de creencias (World Model)
+Todo conocimiento vive en el World Model como una **creencia** con soporte, nunca
+como verdad absoluta (`max_confidence < 1`). Las creencias se **actualizan y
+versionan** (nunca se sobrescriben); las relaciones se **debilitan** (nunca se
+borran); las contradicciones y anomalías se **registran y permanecen** hasta ser
+explicadas, abriendo nuevas preguntas. Ninguna afirmación depende de una sola
+fuente sin marcarlo; ningún supuesto crítico no probado queda oculto.
+*Cumplimiento:* `world_model/` (belief, graph, contradictions, anomalies, queries),
+`tests/**/test_world_*`.
+
 ## 14. Comprensión humana
 Ningún avance de la IA debe dejar atrás la comprensión del investigador. Cada
 ciclo produce artefactos de aprendizaje.

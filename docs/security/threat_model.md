@@ -21,6 +21,9 @@ código de experimentos** y la **fuga de secretos/costos**.
 | Borrado de hipótesis rechazadas / negativos de descubrimiento | delete | bloqueado en `DiscoveryStore.delete` | `test_rejected_candidates_cannot_be_deleted`, `test_negative_store_delete_blocked` |
 | Sobreconfianza / falsa precisión | confidence update | verosimilitud templada + etiqueta "no calibrada" | `test_confidence_not_overconfident` |
 | Fork bomb / agotamiento en scheduler | tareas | timeout + aislamiento de fallos + cancelación | `tests/unit/test_discovery_scheduler.py` |
+| Descarga externa no autorizada | dataset real | `download_exoplanets(authorized=True)` obligatorio + cap de 5 MB + host fijo HTTPS | `world_model/ingest.py` |
+| Verdades absolutas / sobreconfianza en el World Model | belief update | `max_confidence<1`, suavizado, penalizaciones; auditor de reglas | `tests/unit/test_world_belief.py`, `test_world_audit.py` |
+| Pérdida de conocimiento (overwrite/delete) | grafo | beliefs versionados; relaciones se inactivan, no se borran; anomalías/negativos preservados | `tests/unit/test_world_graph.py`, `test_world_contradictions_anomalies.py` |
 
 ## Riesgos abiertos (documentados, no resueltos)
 1. El sandbox de subproceso es más débil que un contenedor/nsjail. Para código

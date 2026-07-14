@@ -111,6 +111,45 @@ def create_app() -> FastAPI:
         store = DiscoveryStore(session_factory, ledger)
         return store.list_objects(project_id, kind="candidate", status="REJECTED")
 
+    # --- World Model (read-only) ---
+    def _wm(project_id: str):
+        from ..world_model.graph import WorldModel
+
+        return WorldModel(session_factory, ledger, project_id)
+
+    @app.get("/projects/{project_id}/world/stats")
+    def world_stats(project_id: str) -> dict:
+        return _wm(project_id).stats()
+
+    @app.get("/projects/{project_id}/world/nodes")
+    def world_nodes(project_id: str) -> list[dict]:
+        return [n.model_dump() for n in _wm(project_id).nodes()]
+
+    @app.get("/projects/{project_id}/world/narrate")
+    def world_narrate(project_id: str) -> list[dict]:
+        from ..world_model.narrate import narrate
+
+        return narrate(_wm(project_id))
+
+    @app.get("/projects/{project_id}/world/query/{what}")
+    def world_query(project_id: str, what: str) -> dict:
+        from collections.abc import Callable
+
+        from ..world_model.queries import ScientificMemory
+
+        mem = ScientificMemory(_wm(project_id))
+        options: dict[str, Callable[[], object]] = {
+            "anomalies": lambda: [a.label for a in mem.open_anomalies()],
+            "contradictions": lambda: [c.label for c in mem.open_contradictions()],
+            "untested": lambda: [n.label for n in mem.untested_beliefs()],
+            "weak": mem.weak_relations,
+            "single": lambda: [n.label for n in mem.single_source_claims()],
+            "critical": mem.critical_assumptions,
+        }
+        if what not in options:
+            raise HTTPException(status_code=400, detail=f"unknown query '{what}'")
+        return {"query": what, "result": options[what]()}
+
     return app
 
 

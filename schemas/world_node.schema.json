@@ -1,0 +1,122 @@
+{
+  "$defs": {
+    "NodeType": {
+      "enum": [
+        "Concept",
+        "Claim",
+        "Evidence",
+        "CounterEvidence",
+        "Hypothesis",
+        "Prediction",
+        "Model",
+        "Experiment",
+        "Dataset",
+        "Variable",
+        "Parameter",
+        "Equation",
+        "Law",
+        "Theory",
+        "Observation",
+        "Measurement",
+        "Method",
+        "Simulation",
+        "Assumption",
+        "Constraint",
+        "Question",
+        "Contradiction",
+        "NegativeResult",
+        "Anomaly",
+        "OpenProblem",
+        "ResearchProgram",
+        "Tool",
+        "Publication",
+        "Researcher",
+        "Domain",
+        "Phenomenon"
+      ],
+      "title": "NodeType",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "belief": {
+      "additionalProperties": true,
+      "title": "Belief",
+      "type": "object"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "domain": {
+      "default": "general",
+      "title": "Domain",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "program_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Program Id"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "provenance": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Provenance",
+      "type": "array"
+    },
+    "tested": {
+      "default": false,
+      "title": "Tested",
+      "type": "boolean"
+    },
+    "type": {
+      "$ref": "#/$defs/NodeType"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "project_id",
+    "type",
+    "label"
+  ],
+  "title": "WorldNode",
+  "type": "object"
+}

@@ -21,6 +21,8 @@ coverage.xml
 acero_data/
 research/artifacts/*/
 !research/artifacts/.gitkeep
+# Downloaded datasets (reproducible via world_model.ingest.download_exoplanets)
+research/datasets/*.csv
 
 # Environment / secrets — NEVER commit real secrets
 .env

@@ -37,6 +37,14 @@ salida. `reproduced = True` solo si coinciden. Prueba:
 - La **búsqueda random** usa semilla explícita; el **scheduler** permite *resume*
   saltando tareas completadas.
 
+## World Model (Sprint 8)
+- Cada creencia guarda **historial versionado** (confianza antes/después, evento,
+  fuente); su trayectoria es reconstruible.
+- Cada cambio del grafo emite un evento de procedencia (CREATE/LINK/UPDATE/
+  CONFIDENCE_UPDATE/PRUNE).
+- El dato real (exoplanetas) registra URL TAP, licencia, referencia y **hash
+  SHA-256** del CSV; el test de Kepler es determinista dado el CSV.
+
 ## Límites
 - Diferencias de BLAS/versión de numpy entre máquinas pueden alterar los últimos
   dígitos; por eso se comparan resultados **dentro de la misma máquina/entorno**
