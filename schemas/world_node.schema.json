@@ -32,7 +32,13 @@
         "Publication",
         "Researcher",
         "Domain",
-        "Phenomenon"
+        "Phenomenon",
+        "System",
+        "Derivation",
+        "Symmetry",
+        "Invariant",
+        "Relation",
+        "Analogy"
       ],
       "title": "NodeType",
       "type": "string"

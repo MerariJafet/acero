@@ -44,6 +44,13 @@ class NodeType(str, Enum):
     RESEARCHER = "Researcher"
     DOMAIN = "Domain"
     PHENOMENON = "Phenomenon"
+    # Cognitive Discovery Engine (Sprints 8.5–8.7)
+    SYSTEM = "System"
+    DERIVATION = "Derivation"
+    SYMMETRY = "Symmetry"
+    INVARIANT = "Invariant"
+    RELATION = "Relation"
+    ANALOGY = "Analogy"
 
 
 # Node types whose truth-value is a belief we track support for.

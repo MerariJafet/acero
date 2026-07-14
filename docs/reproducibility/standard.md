@@ -45,6 +45,14 @@ salida. `reproduced = True` solo si coinciden. Prueba:
 - El dato real (exoplanetas) registra URL TAP, licencia, referencia y **hash
   SHA-256** del CSV; el test de Kepler es determinista dado el CSV.
 
+## Cognitive Discovery Engine (Sprints 8.5–8.7)
+- El análisis dimensional y Buckingham-Pi son **deterministas y exactos** (racionales
+  vía SymPy). La verificación de derivaciones (SymPy) es determinista.
+- La transferencia predictiva de la analogía se **verifica en el sandbox** (resonancia)
+  y es reproducible dado el script y los coeficientes.
+- Las propuestas de Codex (conceptos/analogías/derivaciones) registran provider/model/
+  tokens; no son bit-reproducibles (servicio externo) pero sí verificadas por reglas.
+
 ## Límites
 - Diferencias de BLAS/versión de numpy entre máquinas pueden alterar los últimos
   dígitos; por eso se comparan resultados **dentro de la misma máquina/entorno**

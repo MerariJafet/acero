@@ -1,0 +1,133 @@
+{
+  "$defs": {
+    "DerivationStep": {
+      "properties": {
+        "check_kind": {
+          "default": "none",
+          "title": "Check Kind",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "expression": {
+          "default": "",
+          "title": "Expression",
+          "type": "string"
+        },
+        "index": {
+          "title": "Index",
+          "type": "integer"
+        },
+        "justification": {
+          "default": "",
+          "title": "Justification",
+          "type": "string"
+        },
+        "proposed_by": {
+          "default": "rules",
+          "title": "Proposed By",
+          "type": "string"
+        },
+        "verified": {
+          "default": false,
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "index",
+        "description"
+      ],
+      "title": "DerivationStep",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "conclusion": {
+      "default": "",
+      "title": "Conclusion",
+      "type": "string"
+    },
+    "confidence": {
+      "default": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "counterexamples": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Counterexamples",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "definitions": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Definitions",
+      "type": "object"
+    },
+    "generator": {
+      "default": "rules",
+      "title": "Generator",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "limiting_cases": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limiting Cases",
+      "type": "array"
+    },
+    "premises": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Premises",
+      "type": "array"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/DerivationStep"
+      },
+      "title": "Steps",
+      "type": "array"
+    },
+    "target": {
+      "title": "Target",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "target"
+  ],
+  "title": "ScientificDerivation",
+  "type": "object"
+}

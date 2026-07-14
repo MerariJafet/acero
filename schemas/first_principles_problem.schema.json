@@ -1,0 +1,99 @@
+{
+  "properties": {
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "boundary_conditions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Boundary Conditions",
+      "type": "array"
+    },
+    "candidate_symmetries": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Candidate Symmetries",
+      "type": "array"
+    },
+    "conservation_rules": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Conservation Rules",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "desired_explanation": {
+      "default": "",
+      "title": "Desired Explanation",
+      "type": "string"
+    },
+    "forbidden_assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Forbidden Assumptions",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "known_constraints": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Known Constraints",
+      "type": "array"
+    },
+    "limiting_cases": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limiting Cases",
+      "type": "array"
+    },
+    "observations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Observations",
+      "type": "array"
+    },
+    "phenomenon": {
+      "title": "Phenomenon",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "target_quantity": {
+      "default": "",
+      "title": "Target Quantity",
+      "type": "string"
+    },
+    "variables": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Variables",
+      "type": "object"
+    }
+  },
+  "required": [
+    "project_id",
+    "phenomenon"
+  ],
+  "title": "FirstPrinciplesProblem",
+  "type": "object"
+}

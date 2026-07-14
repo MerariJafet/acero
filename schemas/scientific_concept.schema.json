@@ -1,0 +1,390 @@
+{
+  "$defs": {
+    "ApplicabilityRegime": {
+      "properties": {
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "domain": {
+          "default": "general",
+          "title": "Domain",
+          "type": "string"
+        },
+        "energy_scale": {
+          "default": "",
+          "title": "Energy Scale",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "invalid_conditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Invalid Conditions",
+          "type": "array"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "parameter_ranges": {
+          "additionalProperties": true,
+          "title": "Parameter Ranges",
+          "type": "object"
+        },
+        "spatial_scale": {
+          "default": "",
+          "title": "Spatial Scale",
+          "type": "string"
+        },
+        "temporal_scale": {
+          "default": "",
+          "title": "Temporal Scale",
+          "type": "string"
+        },
+        "valid_conditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Valid Conditions",
+          "type": "array"
+        }
+      },
+      "title": "ApplicabilityRegime",
+      "type": "object"
+    },
+    "ConceptType": {
+      "enum": [
+        "ENTITY",
+        "PROPERTY",
+        "PROCESS",
+        "MECHANISM",
+        "RELATION",
+        "LAW",
+        "PRINCIPLE",
+        "CONSTRAINT",
+        "SYMMETRY",
+        "INVARIANT",
+        "STATE",
+        "TRANSITION",
+        "FIELD",
+        "FORCE",
+        "INFORMATION",
+        "ENERGY",
+        "SYSTEM",
+        "EMERGENCE",
+        "CAUSAL_STRUCTURE",
+        "MATHEMATICAL_STRUCTURE"
+      ],
+      "title": "ConceptType",
+      "type": "string"
+    },
+    "ConceptualTransformation": {
+      "properties": {
+        "assessed_as_progress": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Assessed As Progress"
+        },
+        "changed_assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Changed Assumptions",
+          "type": "array"
+        },
+        "compatibility": {
+          "default": "partial",
+          "title": "Compatibility",
+          "type": "string"
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "historical_context": {
+          "default": "",
+          "title": "Historical Context",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "new_explanatory_power": {
+          "default": "",
+          "title": "New Explanatory Power",
+          "type": "string"
+        },
+        "new_model": {
+          "title": "New Model",
+          "type": "string"
+        },
+        "preserved_predictions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Preserved Predictions",
+          "type": "array"
+        },
+        "previous_model": {
+          "title": "Previous Model",
+          "type": "string"
+        },
+        "replacement_scope": {
+          "default": "",
+          "title": "Replacement Scope",
+          "type": "string"
+        },
+        "triggering_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Triggering Evidence",
+          "type": "array"
+        },
+        "unresolved_problems": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unresolved Problems",
+          "type": "array"
+        }
+      },
+      "required": [
+        "previous_model",
+        "new_model"
+      ],
+      "title": "ConceptualTransformation",
+      "type": "object"
+    },
+    "DefinitionSet": {
+      "description": "A concept can be defined several ways; a paragraph is not enough.",
+      "properties": {
+        "behavioral": {
+          "default": "",
+          "title": "Behavioral",
+          "type": "string"
+        },
+        "by_constraints": {
+          "default": "",
+          "title": "By Constraints",
+          "type": "string"
+        },
+        "causal": {
+          "default": "",
+          "title": "Causal",
+          "type": "string"
+        },
+        "lexical": {
+          "default": "",
+          "title": "Lexical",
+          "type": "string"
+        },
+        "mathematical": {
+          "default": "",
+          "title": "Mathematical",
+          "type": "string"
+        },
+        "operational": {
+          "default": "",
+          "title": "Operational",
+          "type": "string"
+        }
+      },
+      "title": "DefinitionSet",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "abstraction_level": {
+      "default": 1,
+      "title": "Abstraction Level",
+      "type": "integer"
+    },
+    "aliases": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Aliases",
+      "type": "array"
+    },
+    "applicable_regimes": {
+      "items": {
+        "$ref": "#/$defs/ApplicabilityRegime"
+      },
+      "title": "Applicable Regimes",
+      "type": "array"
+    },
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "boundary_conditions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Boundary Conditions",
+      "type": "array"
+    },
+    "canonical_name": {
+      "title": "Canonical Name",
+      "type": "string"
+    },
+    "concept_type": {
+      "$ref": "#/$defs/ConceptType",
+      "default": "PROPERTY"
+    },
+    "constraints": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Constraints",
+      "type": "array"
+    },
+    "counterexamples": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Counterexamples",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "definitions": {
+      "$ref": "#/$defs/DefinitionSet"
+    },
+    "dimensions": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Dimensions",
+      "type": "object"
+    },
+    "domain": {
+      "default": "general",
+      "title": "Domain",
+      "type": "string"
+    },
+    "examples": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Examples",
+      "type": "array"
+    },
+    "generator": {
+      "default": "human",
+      "title": "Generator",
+      "type": "string"
+    },
+    "historical_versions": {
+      "items": {
+        "$ref": "#/$defs/ConceptualTransformation"
+      },
+      "title": "Historical Versions",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "invalid_regimes": {
+      "items": {
+        "$ref": "#/$defs/ApplicabilityRegime"
+      },
+      "title": "Invalid Regimes",
+      "type": "array"
+    },
+    "invariants": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Invariants",
+      "type": "array"
+    },
+    "mathematical_representation": {
+      "default": "",
+      "title": "Mathematical Representation",
+      "type": "string"
+    },
+    "parameters": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Parameters",
+      "type": "array"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "sources_verified": {
+      "default": false,
+      "title": "Sources Verified",
+      "type": "boolean"
+    },
+    "subdomains": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Subdomains",
+      "type": "array"
+    },
+    "supporting_sources": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Supporting Sources",
+      "type": "array"
+    },
+    "symmetries": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Symmetries",
+      "type": "array"
+    },
+    "units": {
+      "default": "",
+      "title": "Units",
+      "type": "string"
+    },
+    "variables": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Variables",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "canonical_name"
+  ],
+  "title": "ScientificConcept",
+  "type": "object"
+}

@@ -13,6 +13,7 @@ Sprints 5–12 están **planificados** (ver `docs/backlog/sprints_05_12.md`).
 | 6 | Diseño experimental y ganancia de información | ✅ Hecho | Experimentos discriminantes, EIG bayesiano+heurística, utilidad transparente, stopping rules, críticos |
 | 7 | Motor de ejecución, búsqueda y aprendizaje | ✅ Hecho | Árbol de investigación, scheduler, búsqueda, confidence update, tool creation, next experiment |
 | 8 | Modelo del mundo y grafo científico | ✅ Hecho | Grafo epistémico vivo (creencias), contradicciones, anomalías, programas, evolución, narrador, dato real (Kepler), visualización |
+| 8.5–8.7 | Cognitive Discovery Engine | ✅ Hecho | Concept Engine, Analogy Engine (oscilador↔RLC verificado), First Principles Engine (dimensiones/Buckingham-Pi/derivaciones SymPy) |
 | 9 | Tutor científico y aprendizaje humano | ⏳ Backlog | Perfil, evaluación, explicaciones por niveles, ruta de aprendizaje |
 | 10 | Especialización científica | 🟡 Parcial | Plugins iniciales física/astronomía/genética/química (sin wet-lab), 14 benchmarks verdes — `docs/domains/plugins.md` |
 | 11 | Evaluación, auditoría y ciencia adversarial | ⏳ Backlog | Benchmarks, calibración, red-teaming, p-hacking/HARKing/leakage |

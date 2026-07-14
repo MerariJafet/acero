@@ -23,7 +23,16 @@
         "caused_by",
         "hypothesizes",
         "extends",
-        "replaces"
+        "replaces",
+        "presupposes",
+        "emerges_from",
+        "approximates",
+        "breaks_down_when",
+        "is_dual_to",
+        "is_invariant_under",
+        "analogous_to",
+        "maps_to",
+        "transforms_into"
       ],
       "title": "EdgeType",
       "type": "string"

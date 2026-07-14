@@ -100,6 +100,17 @@ fuente sin marcarlo; ningún supuesto crítico no probado queda oculto.
 *Cumplimiento:* `world_model/` (belief, graph, contradictions, anomalies, queries),
 `tests/**/test_world_*`.
 
+## 14d. Estructura antes que lenguaje (Cognitive Discovery Engine)
+ACERO distingue información ≠ conocimiento ≠ comprensión ≠ explicación ≠ analogía ≠
+derivación ≠ descubrimiento. Una analogía propuesta por Codex no es válida hasta pasar
+pruebas estructurales/dimensionales/predictivas; una derivación no es válida hasta
+verificarse (SymPy/unidades/código). La similitud verbal pesa poco; una buena predicción
+no es una explicación causal. Las reorganizaciones conceptuales se versionan, no se
+borran. Los grupos adimensionales dan escalamiento, no constantes; las asociaciones
+simetría→conservación son inspiradas en Noether, no pruebas.
+*Cumplimiento:* `cognitive/` (dimensions, analogies/validation, first_principles/derivations),
+`cognitive/audit`, `tests/**/test_cognitive_*`, `tests/science/test_cross_domain.py`.
+
 ## 14. Comprensión humana
 Ningún avance de la IA debe dejar atrás la comprensión del investigador. Cada
 ciclo produce artefactos de aprendizaje.

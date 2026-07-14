@@ -34,6 +34,16 @@ class EdgeType(str, Enum):
     HYPOTHESIZES = "hypothesizes"
     EXTENDS = "extends"
     REPLACES = "replaces"
+    # Conceptual dependencies (Cognitive Discovery Engine, Sprints 8.5–8.7)
+    PRESUPPOSES = "presupposes"
+    EMERGES_FROM = "emerges_from"
+    APPROXIMATES = "approximates"
+    BREAKS_DOWN_WHEN = "breaks_down_when"
+    IS_DUAL_TO = "is_dual_to"
+    IS_INVARIANT_UNDER = "is_invariant_under"
+    ANALOGOUS_TO = "analogous_to"
+    MAPS_TO = "maps_to"
+    TRANSFORMS_INTO = "transforms_into"
 
 
 # Edges that push support up/down on their target belief.

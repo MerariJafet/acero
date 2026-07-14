@@ -1,0 +1,225 @@
+{
+  "$defs": {
+    "AnalogyScores": {
+      "properties": {
+        "boundary_compatibility": {
+          "default": 0.0,
+          "title": "Boundary Compatibility",
+          "type": "number"
+        },
+        "causal_similarity": {
+          "default": 0.0,
+          "title": "Causal Similarity",
+          "type": "number"
+        },
+        "failure_risk": {
+          "default": 0.0,
+          "title": "Failure Risk",
+          "type": "number"
+        },
+        "invariant_preservation": {
+          "default": 0.0,
+          "title": "Invariant Preservation",
+          "type": "number"
+        },
+        "mathematical_similarity": {
+          "default": 0.0,
+          "title": "Mathematical Similarity",
+          "type": "number"
+        },
+        "predictive_transferability": {
+          "default": 0.0,
+          "title": "Predictive Transferability",
+          "type": "number"
+        },
+        "structural_similarity": {
+          "default": 0.0,
+          "title": "Structural Similarity",
+          "type": "number"
+        },
+        "surface_similarity": {
+          "default": 0.0,
+          "title": "Surface Similarity",
+          "type": "number"
+        }
+      },
+      "title": "AnalogyScores",
+      "type": "object"
+    },
+    "AnalogyStatus": {
+      "enum": [
+        "PROPOSED",
+        "STRUCTURALLY_SUPPORTED",
+        "PARTIALLY_VALID",
+        "VALID_IN_REGIME",
+        "BROKEN",
+        "MISLEADING",
+        "REJECTED"
+      ],
+      "title": "AnalogyStatus",
+      "type": "string"
+    },
+    "AnalogyType": {
+      "enum": [
+        "SURFACE",
+        "FUNCTIONAL",
+        "STRUCTURAL",
+        "MATHEMATICAL",
+        "DYNAMICAL",
+        "CAUSAL",
+        "MECHANISTIC",
+        "SYMMETRY_BASED",
+        "INFORMATIONAL",
+        "LIMITING_CASE"
+      ],
+      "title": "AnalogyType",
+      "type": "string"
+    },
+    "ValidationResult": {
+      "properties": {
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "test": {
+          "title": "Test",
+          "type": "string"
+        }
+      },
+      "required": [
+        "test",
+        "passed"
+      ],
+      "title": "ValidationResult",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "analogy_type": {
+      "$ref": "#/$defs/AnalogyType",
+      "default": "STRUCTURAL"
+    },
+    "broken_structure": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Broken Structure",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "entity_mapping": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Entity Mapping",
+      "type": "object"
+    },
+    "equation_mapping": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Equation Mapping",
+      "type": "object"
+    },
+    "failure_conditions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Failure Conditions",
+      "type": "array"
+    },
+    "generator": {
+      "default": "rules",
+      "title": "Generator",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "invariant_mapping": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Invariant Mapping",
+      "type": "object"
+    },
+    "preserved_structure": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Preserved Structure",
+      "type": "array"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "provenance": {
+      "additionalProperties": true,
+      "title": "Provenance",
+      "type": "object"
+    },
+    "relation_mapping": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Relation Mapping",
+      "type": "object"
+    },
+    "scores": {
+      "$ref": "#/$defs/AnalogyScores"
+    },
+    "source_domain": {
+      "title": "Source Domain",
+      "type": "string"
+    },
+    "source_system": {
+      "title": "Source System",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AnalogyStatus",
+      "default": "PROPOSED"
+    },
+    "target_domain": {
+      "title": "Target Domain",
+      "type": "string"
+    },
+    "target_system": {
+      "title": "Target System",
+      "type": "string"
+    },
+    "transfer_predictions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Transfer Predictions",
+      "type": "array"
+    },
+    "validations": {
+      "items": {
+        "$ref": "#/$defs/ValidationResult"
+      },
+      "title": "Validations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "source_system",
+    "target_system",
+    "source_domain",
+    "target_domain"
+  ],
+  "title": "ScientificAnalogy",
+  "type": "object"
+}

@@ -24,6 +24,10 @@ código de experimentos** y la **fuga de secretos/costos**.
 | Descarga externa no autorizada | dataset real | `download_exoplanets(authorized=True)` obligatorio + cap de 5 MB + host fijo HTTPS | `world_model/ingest.py` |
 | Verdades absolutas / sobreconfianza en el World Model | belief update | `max_confidence<1`, suavizado, penalizaciones; auditor de reglas | `tests/unit/test_world_belief.py`, `test_world_audit.py` |
 | Pérdida de conocimiento (overwrite/delete) | grafo | beliefs versionados; relaciones se inactivan, no se borran; anomalías/negativos preservados | `tests/unit/test_world_graph.py`, `test_world_contradictions_anomalies.py` |
+| Analogía superficial aceptada como profunda | cognitive | similitud verbal peso 0.05; pruebas estructural/dimensional/predictiva; caso engañoso marcado | `tests/unit/test_cognitive_analogies.py` |
+| Derivación de Codex sin verificar | cognitive | SymPy verifica cada paso; pasos no resueltos registrados; confianza <1 | `tests/unit/test_cognitive_first_principles.py` |
+| Razonamiento conceptual circular | cognitive | dependencias acíclicas rechazan ciclos | `test_cognitive_concepts.py::test_circular_dependency_rejected` |
+| Transferencia predictiva ejecuta código | analogía | corre en el sandbox (subprocess/docker), sin red | `cognitive/analogies/validation.py` |
 
 ## Riesgos abiertos (documentados, no resueltos)
 1. El sandbox de subproceso es más débil que un contenedor/nsjail. Para código

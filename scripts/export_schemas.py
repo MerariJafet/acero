@@ -31,6 +31,12 @@ from acero.discovery.next_experiment import RecommendedNextExperiment
 from acero.discovery.tree import TreeNode
 from acero.experiment.prereg import Preregistration
 from acero.provenance.events import ProvenanceEvent
+from acero.cognitive.analogies.models import ScientificAnalogy
+from acero.cognitive.concepts.models import ScientificConcept
+from acero.cognitive.first_principles.models import (
+    FirstPrinciplesProblem,
+    ScientificDerivation,
+)
 from acero.world_model.edges import WorldEdge
 from acero.world_model.nodes import WorldNode
 
@@ -55,6 +61,11 @@ MODELS = {
     # World Model (Sprint 8)
     "world_node": WorldNode,
     "world_edge": WorldEdge,
+    # Cognitive Discovery Engine (Sprints 8.5–8.7)
+    "scientific_concept": ScientificConcept,
+    "scientific_analogy": ScientificAnalogy,
+    "first_principles_problem": FirstPrinciplesProblem,
+    "scientific_derivation": ScientificDerivation,
 }
 
 

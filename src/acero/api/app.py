@@ -150,6 +150,39 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail=f"unknown query '{what}'")
         return {"query": what, "result": options[what]()}
 
+    # --- Cognitive Discovery Engine (read-only + pure math) ---
+    @app.get("/cognitive/validate-equation")
+    def validate_equation(lhs: str, rhs: str) -> dict:
+        from ..cognitive.first_principles.engine import FirstPrinciplesEngine
+
+        try:
+            return FirstPrinciplesEngine().validate_equation(lhs, rhs)
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/cognitive/analogy/{pair}")
+    def analogy_benchmark(pair: str) -> dict:
+        from ..cognitive.analogies.engine import AnalogyEngine
+        from ..cognitive.analogies.systems import BENCHMARK_PAIRS
+        from ..world_model.graph import WorldModel
+
+        if pair not in BENCHMARK_PAIRS:
+            raise HTTPException(status_code=404, detail="unknown pair")
+        wm = WorldModel(session_factory, ledger, "ephemeral")
+        a = AnalogyEngine(wm).build(*BENCHMARK_PAIRS[pair], run_transfer=False)
+        return {"status": a.status.value, "deep_score": a.scores.deep_score(),
+                "surface_similarity": a.scores.surface_similarity,
+                "mapping": a.entity_mapping,
+                "validations": {v.test: v.passed for v in a.validations}}
+
+    @app.get("/projects/{project_id}/cognitive/analogies")
+    def project_analogies(project_id: str) -> list[dict]:
+        from ..cognitive.analogies.engine import AnalogyEngine
+        from ..world_model.graph import WorldModel
+
+        wm = WorldModel(session_factory, ledger, project_id)
+        return [a.model_dump() for a in AnalogyEngine(wm).analogies()]
+
     return app
 
 

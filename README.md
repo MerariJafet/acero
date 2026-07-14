@@ -27,6 +27,7 @@ limpios). Sprints 5–12 planificados. Ver `docs/roadmap/12_sprints.md`.
 | 6 | Diseño experimental y ganancia de información | ✅ |
 | 7 | Motor de ejecución, búsqueda y aprendizaje (Discovery Engine) | ✅ |
 | 8 | Modelo del mundo y grafo científico (World Model Engine) | ✅ |
+| 8.5–8.7 | Cognitive Discovery Engine (conceptos, analogías, primeros principios) | ✅ |
 | 9–12 | Tutor → publicación | ⏳ backlog |
 
 ## Principios no negociables
@@ -108,6 +109,12 @@ acero benchmark hidden-dynamics [--system ...] [--llm]   # validación integral
 acero world demo [--system ...] [--exoplanets]    # investiga → grafo → narra qué cambió
 acero world stats|narrate|viz <project-id>        # estadísticas / frases / visualización HTML
 acero world query <project-id> <anomalies|contradictions|untested|weak|single|critical>
+
+# Cognitive Discovery Engine (Sprints 8.5–8.7)
+acero cognitive benchmark                          # Cross-Domain Structural Discovery
+acero cognitive analogy <oscillator_rlc|thermal_particle_diffusion|atom_solar_system>
+acero cognitive dimensions "period=time,length=length,gravity=acceleration,mass=mass"
+acero cognitive validate-equation force velocity   # dimensional consistency check
 ```
 
 ## Arquitectura

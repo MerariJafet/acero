@@ -38,6 +38,7 @@ experiment_app = typer.Typer(help="Discovery Engine: experiments")
 discovery_app = typer.Typer(help="Discovery Engine: status / next / report")
 benchmark_app = typer.Typer(help="Validation benchmarks")
 world_app = typer.Typer(help="World Model Engine: living epistemic graph")
+cognitive_app = typer.Typer(help="Cognitive Discovery Engine: concepts, analogies, first principles")
 app.add_typer(project_app, name="project")
 app.add_typer(domain_app, name="domain")
 app.add_typer(hypothesis_app, name="hypothesis")
@@ -45,6 +46,7 @@ app.add_typer(experiment_app, name="experiment")
 app.add_typer(discovery_app, name="discovery")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(world_app, name="world")
+app.add_typer(cognitive_app, name="cognitive")
 
 
 def _ledger() -> ResearchLedger:
@@ -569,6 +571,85 @@ def world_query(project_id: str = typer.Argument(...),
         typer.echo(f"unknown query '{what}'; choose from {sorted(table)}")
         raise typer.Exit(1)
     typer.echo(_json.dumps(fn(), indent=2, ensure_ascii=False))
+
+
+@cognitive_app.command("benchmark")
+def cognitive_benchmark(
+    sandbox: str = typer.Option("subprocess", help="subprocess | docker"),
+    no_transfer: bool = typer.Option(False, "--no-transfer", help="Skip sandbox transfer test"),
+) -> None:
+    """Run the Cross-Domain Structural Discovery Benchmark (Sprints 8.5–8.7)."""
+    from ..benchmarks.cross_domain import run_cross_domain
+    from ..sandbox.runner import get_runner
+    from ..world_model.graph import WorldModel
+
+    sf, led, _ = _discovery()
+    proj = led.create_project("Cross-domain structural discovery", domain="physics")
+    wm = WorldModel(sf, led, proj.id)
+    rep = run_cross_domain(wm, runner=get_runner(sandbox), run_transfer=not no_transfer)
+    typer.echo(f"Project {proj.id}")
+    for name, a in rep["analogies"].items():
+        integ = rep["integrations"][name]
+        typer.echo(f"  {name}: {a['status']} (deep={a['deep_score']}) → "
+                   f"{integ['outcome']} conf={integ['confidence']:.2f}")
+    pg = rep["first_principles"]["oscillator_dimensional_analysis"]["pi_groups"]
+    typer.echo(f"  oscillator Pi groups: {pg}")
+    typer.echo("NOTE: known correspondences — validates the METHOD, not a discovery.")
+
+
+@cognitive_app.command("analogy")
+def cognitive_analogy(
+    pair: str = typer.Argument("oscillator_rlc",
+                               help="oscillator_rlc | thermal_particle_diffusion | atom_solar_system"),
+) -> None:
+    """Build and validate one benchmark analogy (persisted to a fresh World Model)."""
+    from ..cognitive.analogies.engine import AnalogyEngine
+    from ..cognitive.analogies.systems import BENCHMARK_PAIRS
+    from ..world_model.graph import WorldModel
+
+    if pair not in BENCHMARK_PAIRS:
+        typer.echo(f"unknown pair; choose from {sorted(BENCHMARK_PAIRS)}")
+        raise typer.Exit(1)
+    sf, led, _ = _discovery()
+    proj = led.create_project(f"Analogy: {pair}", domain="physics")
+    wm = WorldModel(sf, led, proj.id)
+    a = AnalogyEngine(wm).build(*BENCHMARK_PAIRS[pair])
+    typer.echo(f"{a.source_system} ~ {a.target_system}")
+    typer.echo(f"  status: {a.status.value} · deep_score: {a.scores.deep_score()} · "
+               f"surface: {a.scores.surface_similarity}")
+    typer.echo(f"  mapping: {a.entity_mapping}")
+    for v in a.validations:
+        typer.echo(f"  [{'✓' if v.passed else '✗'}] {v.test}: {v.detail}")
+
+
+@cognitive_app.command("dimensions")
+def cognitive_dimensions(
+    variables: str = typer.Argument(
+        "period=time,length=length,gravity=acceleration,mass=mass",
+        help="comma-separated var=dimension pairs"),
+) -> None:
+    """Dimensional analysis: Buckingham-Pi groups of the given variables."""
+    from ..cognitive.first_principles.engine import FirstPrinciplesEngine
+    from ..cognitive.first_principles.models import FirstPrinciplesProblem
+
+    var_map = dict(p.split("=", 1) for p in variables.split(",") if "=" in p)
+    prob = FirstPrinciplesProblem(project_id="cli", phenomenon="cli", variables=var_map)
+    res = FirstPrinciplesEngine().dimensional_analysis(prob)
+    import json as _json
+    typer.echo(_json.dumps(res, indent=2))
+
+
+@cognitive_app.command("validate-equation")
+def cognitive_validate_equation(
+    lhs: str = typer.Argument(..., help="lhs dimension name"),
+    rhs: str = typer.Argument(..., help="rhs dimension name"),
+) -> None:
+    """Check whether an equation lhs = rhs is dimensionally consistent."""
+    from ..cognitive.first_principles.engine import FirstPrinciplesEngine
+
+    res = FirstPrinciplesEngine().validate_equation(lhs, rhs)
+    mark = "✓ consistent" if res["consistent"] else "✗ INCONSISTENT"
+    typer.echo(f"{lhs} = {rhs}: {mark}  ({res['lhs']} vs {res['rhs']})")
 
 
 @app.command("pilot")
