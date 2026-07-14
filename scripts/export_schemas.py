@@ -10,9 +10,18 @@ from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
 
+from acero.cognitive.analogies.models import ScientificAnalogy
+from acero.cognitive.concepts.models import ScientificConcept
+from acero.cognitive.first_principles.models import (
+    FirstPrinciplesProblem,
+    ScientificDerivation,
+)
 from acero.core.config import repo_root
+from acero.discovery.candidates import HypothesisCandidate
+from acero.discovery.experiment_design import ExperimentProposal
+from acero.discovery.next_experiment import RecommendedNextExperiment
+from acero.discovery.tree import TreeNode
 from acero.epistemology.schemas import (
     Assumption,
     ExecutionRun,
@@ -25,19 +34,16 @@ from acero.epistemology.schemas import (
     ResearchResult,
     ScientificClaim,
 )
-from acero.discovery.candidates import HypothesisCandidate
-from acero.discovery.experiment_design import ExperimentProposal
-from acero.discovery.next_experiment import RecommendedNextExperiment
-from acero.discovery.tree import TreeNode
 from acero.experiment.prereg import Preregistration
-from acero.provenance.events import ProvenanceEvent
-from acero.cognitive.analogies.models import ScientificAnalogy
-from acero.cognitive.concepts.models import ScientificConcept
-from acero.cognitive.first_principles.models import (
-    FirstPrinciplesProblem,
-    ScientificDerivation,
-)
 from acero.inference.models import GoverningModelCandidate, StructureInferenceProblem
+from acero.provenance.events import ProvenanceEvent
+from acero.understanding.models import (
+    ComprehensionGateResult,
+    KnowledgeState,
+    LearnerProfile,
+    Misconception,
+    ResearchLearningRequirement,
+)
 from acero.world_model.edges import WorldEdge
 from acero.world_model.nodes import WorldNode
 
@@ -70,6 +76,12 @@ MODELS = {
     # Governing Structure Inference (Sprints 8.8–8.9)
     "structure_inference_problem": StructureInferenceProblem,
     "governing_model_candidate": GoverningModelCandidate,
+    # Human Understanding Engine (Sprint 9)
+    "learner_profile": LearnerProfile,
+    "knowledge_state": KnowledgeState,
+    "misconception": Misconception,
+    "research_learning_requirement": ResearchLearningRequirement,
+    "comprehension_gate_result": ComprehensionGateResult,
 }
 
 

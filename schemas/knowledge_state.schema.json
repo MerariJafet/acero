@@ -1,0 +1,114 @@
+{
+  "$defs": {
+    "KnowledgeStatus": {
+      "description": "Where a learner stands on one concept. Transitions require evidence.",
+      "enum": [
+        "UNKNOWN",
+        "EXPOSED",
+        "RECOGNIZED",
+        "PARTIALLY_UNDERSTOOD",
+        "PROCEDURALLY_COMPETENT",
+        "CONCEPTUALLY_UNDERSTOOD",
+        "TRANSFER_CAPABLE",
+        "MASTERED",
+        "MISCONCEIVED",
+        "DECAYED"
+      ],
+      "title": "KnowledgeStatus",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "concept_id": {
+      "title": "Concept Id",
+      "type": "string"
+    },
+    "conceptual_understanding": {
+      "default": 0.0,
+      "title": "Conceptual Understanding",
+      "type": "number"
+    },
+    "confidence_observed": {
+      "default": 0.0,
+      "title": "Confidence Observed",
+      "type": "number"
+    },
+    "confidence_self_reported": {
+      "default": 0.0,
+      "title": "Confidence Self Reported",
+      "type": "number"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "familiarity": {
+      "default": 0.0,
+      "title": "Familiarity",
+      "type": "number"
+    },
+    "last_assessed": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Assessed"
+    },
+    "learner_id": {
+      "title": "Learner Id",
+      "type": "string"
+    },
+    "mathematical_ability": {
+      "default": 0.0,
+      "title": "Mathematical Ability",
+      "type": "number"
+    },
+    "misconceptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Misconceptions",
+      "type": "array"
+    },
+    "next_review": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Next Review"
+    },
+    "procedural_ability": {
+      "default": 0.0,
+      "title": "Procedural Ability",
+      "type": "number"
+    },
+    "status": {
+      "$ref": "#/$defs/KnowledgeStatus",
+      "default": "UNKNOWN"
+    },
+    "transfer_ability": {
+      "default": 0.0,
+      "title": "Transfer Ability",
+      "type": "number"
+    }
+  },
+  "required": [
+    "concept_id",
+    "learner_id"
+  ],
+  "title": "KnowledgeState",
+  "type": "object"
+}

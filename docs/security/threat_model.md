@@ -32,6 +32,13 @@ código de experimentos** y la **fuga de secretos/costos**.
 | Conclusión más fuerte que la evidencia | inference | gate epistémico bloquea; nivel declarado; abstención | `tests/unit/test_inference_gate.py` |
 | Descarga externa no autorizada (manchas solares) | inference | `download_sunspots(authorized=True)` + cap + host fijo | `benchmarks/real_astronomy_inference.py` |
 | Código de simulación fuera del sandbox | inference | transferencias/experimentos corren en el sandbox | `cognitive/analogies/validation.py` |
+| Comprensión humana simulada (autorreporte/LLM como evidencia) | understanding | dominio exige varios tipos de evidencia de desempeño; Codex nunca certifica | `tests/unit/test_understanding_learner.py`, `test_understanding_gate_engine.py` |
+| Grader que siempre aprueba / eco de palabras clave | understanding | rúbrica determinista + penalización de forbidden + guarda anti-keyword-echo | `test_understanding_security.py`, `test_understanding_assessment.py` |
+| Alteración de una predicción tras revelar el resultado | understanding | predicción bloqueada al revelar (anti-HARKing humano) | `test_understanding_security.py::test_prediction_cannot_be_altered_after_reveal` |
+| Sobrecolección de datos personales | understanding | perfil local mínimo; auditoría marca campos sensibles | `test_understanding_security.py::test_profile_privacy_overcollection_flagged` |
+| Gate paternalista / bloqueo excesivo | understanding | tareas de bajo riesgo nunca bloqueadas; override humano con razón | `test_understanding_gate_engine.py::test_low_risk_decision_never_blocked` |
+| Conocimiento defectuoso aceptado sin gate | epistemic_gate | 81 reglas por etapa; input ausente = advertencia no-evaluable; pipeline se detiene en BLOCKED | `tests/unit/test_epistemic_gate.py` |
+| Codex legislando el gate | epistemic_gate | advisory salvo que nombre una regla; promover exige checker + prueba | `test_epistemic_gate.py::test_promotion_requires_checker_and_test` |
 
 ## Riesgos abiertos (documentados, no resueltos)
 1. El sandbox de subproceso es más débil que un contenedor/nsjail. Para código

@@ -64,3 +64,30 @@ def test_project_crud_over_api():
     assert got["title"] == "API project"
     assert c.get(f"/projects/{pid}/entities").json() == []
     assert c.get("/projects/missing").status_code == 404
+
+
+# --- Sprint 9: Human Understanding Engine + Global Gate ---------------------
+
+def test_gate_rules_and_check_endpoints():
+    c = _client()
+    rules = c.get("/gate/rules").json()
+    assert "INFERENCE" in rules and rules["INFERENCE"]
+    bad = c.get("/gate/check/INFERENCE", params={"bad": True}).json()
+    assert bad["outcome"] == "BLOCKED"
+    clean = c.get("/gate/check/INFERENCE").json()
+    assert clean["outcome"] in ("PASS", "PASS_WITH_WARNINGS")
+    assert c.get("/gate/check/NOPE").status_code == 404
+
+
+def test_learn_requirements_endpoint():
+    c = _client()
+    reqs = c.get("/learn/requirements/sindy").json()
+    assert reqs and any(r["blocking"] for r in reqs)
+    assert c.get("/learn/requirements/nope").status_code == 404
+
+
+def test_learn_benchmark_endpoint():
+    c = _client()
+    r = c.get("/learn/benchmark").json()
+    assert r["case_4_adversarial_gate"]["gate_blocked"] is True
+    assert r["transfer"]["transfer_pass"] is True

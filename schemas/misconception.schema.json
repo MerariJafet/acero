@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "Criticality": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "blocking"
+      ],
+      "title": "Criticality",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "concept": {
+      "title": "Concept",
+      "type": "string"
+    },
+    "corrective_activity": {
+      "default": "",
+      "title": "Corrective Activity",
+      "type": "string"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "detected_from": {
+      "title": "Detected From",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "learner_id": {
+      "title": "Learner Id",
+      "type": "string"
+    },
+    "resolution_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Resolution Evidence",
+      "type": "array"
+    },
+    "resolved": {
+      "default": false,
+      "title": "Resolved",
+      "type": "boolean"
+    },
+    "severity": {
+      "$ref": "#/$defs/Criticality",
+      "default": "medium"
+    },
+    "statement": {
+      "title": "Statement",
+      "type": "string"
+    }
+  },
+  "required": [
+    "learner_id",
+    "concept",
+    "statement",
+    "detected_from"
+  ],
+  "title": "Misconception",
+  "type": "object"
+}

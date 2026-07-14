@@ -211,6 +211,86 @@ def create_app() -> FastAPI:
                 "level5_regime": r["level5_regime"]["regime_change_detected"],
                 "level7_gate": r["level7_adversarial_gate"]["status"]}
 
+    # --- Human Understanding Engine (Sprint 9) ---------------------------
+    def _understanding():
+        from ..discovery.store import DiscoveryStore
+        from ..understanding.engine import HumanUnderstandingEngine
+        from ..understanding.store import UnderstandingStore
+
+        return HumanUnderstandingEngine(
+            UnderstandingStore(DiscoveryStore(session_factory, ledger)))
+
+    @app.get("/learn/requirements/{kind}")
+    def learn_requirements(kind: str, project_id: str = "proj") -> list[dict]:
+        from ..understanding.curriculum.research_curriculum import CURRICULA, requirements_for
+
+        if kind not in CURRICULA:
+            raise HTTPException(404, f"unknown curriculum {kind}")
+        return [r.model_dump() for r in requirements_for(kind, project_id)]
+
+    @app.get("/learn/profiles")
+    def learn_profiles() -> list[dict]:
+        eng = _understanding()
+        assert eng.store is not None
+        return [p.model_dump() for p in eng.store.profiles()]
+
+    @app.get("/learn/{learner_id}/status")
+    def learn_status(learner_id: str) -> dict:
+        return _understanding().status(learner_id)
+
+    @app.get("/learn/{learner_id}/knowledge")
+    def learn_knowledge(learner_id: str) -> list[dict]:
+        eng = _understanding()
+        assert eng.store is not None
+        return [s.model_dump() for s in eng.store.states(learner_id)]
+
+    @app.get("/learn/{learner_id}/misconceptions")
+    def learn_misconceptions(learner_id: str) -> list[dict]:
+        eng = _understanding()
+        assert eng.store is not None
+        return [m.model_dump() for m in eng.store.misconceptions(learner_id)]
+
+    @app.get("/learn/{learner_id}/history")
+    def learn_history(learner_id: str) -> list[dict]:
+        eng = _understanding()
+        assert eng.store is not None
+        return eng.store.history(learner_id)
+
+    @app.get("/learn/benchmark")
+    def learn_benchmark_endpoint() -> dict:
+        from ..benchmarks.human_understanding import run_human_understanding
+
+        return run_human_understanding()
+
+    # --- Global Epistemic Gate (Sprint 9) --------------------------------
+    @app.get("/gate/rules")
+    def gate_rules() -> dict:
+        from ..epistemic_gate.models import Stage
+        from ..epistemic_gate.registry import GateRegistry
+
+        reg = GateRegistry()
+        return {s.value: reg.rule_ids(s) for s in Stage}
+
+    @app.get("/gate/check/{stage}")
+    def gate_check(stage: str, bad: bool = False) -> dict:
+        from ..epistemic_gate.engine import GlobalGate
+        from ..epistemic_gate.models import Stage
+        from ..epistemic_gate.rules.inference import artifact_from_gate_input
+        from ..inference.audit.gate import GateInput
+
+        try:
+            st = Stage(stage.upper())
+        except ValueError as exc:
+            raise HTTPException(404, f"unknown stage {stage}") from exc
+        if st == Stage.INFERENCE:
+            gi = GateInput() if not bad else GateInput(
+                dimensions_valid=False, train_test_disjoint=False, reproduced=False,
+                codex_treated_as_evidence=True)
+            artifact = artifact_from_gate_input(gi)
+        else:
+            artifact = {}
+        return GlobalGate().check(st, artifact).as_dict()
+
     return app
 
 

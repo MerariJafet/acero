@@ -37,3 +37,4 @@ research/datasets/*.csv
 
 # Node (future dashboard)
 node_modules/
+research/artifacts/*.html

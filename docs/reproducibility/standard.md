@@ -61,6 +61,15 @@ salida. `reproduced = True` solo si coinciden. Prueba:
 - El dato real (SILSO) registra URL, licencia, referencia y **hash SHA-256**; el análisis
   (FFT/periodo) es determinista dado el CSV.
 
+## Human Understanding + Global Gate (Sprint 9)
+- El grader es **determinista** (cobertura de elementos + penalizaciones + anti-eco); mismo
+  texto y rúbrica → mismo score. Las transiciones de estado son deterministas dada la
+  evidencia.
+- El gate epistémico global es **determinista** por regla; el resultado de una etapa es
+  reproducible dado el artefacto. Codex es advisory y se registra aparte (no bit-reproducible).
+- La persistencia (perfil, estados, evidencia, predicciones, historial) va por el ledger con
+  procedencia, como los demás stores.
+
 ## Límites
 - Diferencias de BLAS/versión de numpy entre máquinas pueden alterar los últimos
   dígitos; por eso se comparan resultados **dentro de la misma máquina/entorno**

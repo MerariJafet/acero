@@ -1,0 +1,69 @@
+{
+  "properties": {
+    "active_research_projects": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Active Research Projects",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "learner_id": {
+      "title": "Learner Id",
+      "type": "string"
+    },
+    "learning_goals": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Learning Goals",
+      "type": "array"
+    },
+    "mathematical_background": {
+      "default": "unknown",
+      "title": "Mathematical Background",
+      "type": "string"
+    },
+    "preferred_depth": {
+      "default": "adaptive",
+      "title": "Preferred Depth",
+      "type": "string"
+    },
+    "preferred_explanation_style": {
+      "default": "balanced",
+      "title": "Preferred Explanation Style",
+      "type": "string"
+    },
+    "preferred_name": {
+      "default": "researcher",
+      "title": "Preferred Name",
+      "type": "string"
+    },
+    "programming_background": {
+      "default": "unknown",
+      "title": "Programming Background",
+      "type": "string"
+    },
+    "research_domains": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Research Domains",
+      "type": "array"
+    },
+    "scientific_background": {
+      "default": "unknown",
+      "title": "Scientific Background",
+      "type": "string"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "title": "LearnerProfile",
+  "type": "object"
+}

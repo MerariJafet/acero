@@ -1,0 +1,97 @@
+{
+  "$defs": {
+    "Criticality": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "blocking"
+      ],
+      "title": "Criticality",
+      "type": "string"
+    },
+    "KnowledgeStatus": {
+      "description": "Where a learner stands on one concept. Transitions require evidence.",
+      "enum": [
+        "UNKNOWN",
+        "EXPOSED",
+        "RECOGNIZED",
+        "PARTIALLY_UNDERSTOOD",
+        "PROCEDURALLY_COMPETENT",
+        "CONCEPTUALLY_UNDERSTOOD",
+        "TRANSFER_CAPABLE",
+        "MASTERED",
+        "MISCONCEIVED",
+        "DECAYED"
+      ],
+      "title": "KnowledgeStatus",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "blocking": {
+      "default": false,
+      "title": "Blocking",
+      "type": "boolean"
+    },
+    "concept": {
+      "title": "Concept",
+      "type": "string"
+    },
+    "criticality": {
+      "$ref": "#/$defs/Criticality",
+      "default": "medium"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "prerequisite_concepts": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Prerequisite Concepts",
+      "type": "array"
+    },
+    "reason_required": {
+      "title": "Reason Required",
+      "type": "string"
+    },
+    "related_assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Related Assumptions",
+      "type": "array"
+    },
+    "related_code": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Related Code",
+      "type": "array"
+    },
+    "related_equations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Related Equations",
+      "type": "array"
+    },
+    "required_mastery_level": {
+      "$ref": "#/$defs/KnowledgeStatus",
+      "default": "CONCEPTUALLY_UNDERSTOOD"
+    },
+    "research_project_id": {
+      "title": "Research Project Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "research_project_id",
+    "concept",
+    "reason_required"
+  ],
+  "title": "ResearchLearningRequirement",
+  "type": "object"
+}

@@ -40,6 +40,9 @@ benchmark_app = typer.Typer(help="Validation benchmarks")
 world_app = typer.Typer(help="World Model Engine: living epistemic graph")
 cognitive_app = typer.Typer(help="Cognitive Discovery Engine: concepts, analogies, first principles")
 inference_app = typer.Typer(help="Governing Structure Inference Engine")
+learner_app = typer.Typer(help="Human Understanding Engine: learner profile")
+learn_app = typer.Typer(help="Human Understanding Engine: explain / predict / assess / gate")
+gate_app = typer.Typer(help="Global Epistemic Gate")
 app.add_typer(project_app, name="project")
 app.add_typer(domain_app, name="domain")
 app.add_typer(hypothesis_app, name="hypothesis")
@@ -49,6 +52,18 @@ app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(world_app, name="world")
 app.add_typer(cognitive_app, name="cognitive")
 app.add_typer(inference_app, name="inference")
+app.add_typer(learner_app, name="learner")
+app.add_typer(learn_app, name="learn")
+app.add_typer(gate_app, name="gate")
+
+
+def _understanding():
+    """Return a HumanUnderstandingEngine bound to the persistent store."""
+    from ..understanding.engine import HumanUnderstandingEngine
+    from ..understanding.store import UnderstandingStore
+
+    _, _, store = _discovery()
+    return HumanUnderstandingEngine(UnderstandingStore(store))
 
 
 def _ledger() -> ResearchLedger:
@@ -791,6 +806,271 @@ def test() -> None:
     root = repo_root()
     code = subprocess.call([sys.executable, "-m", "pytest", str(root / "tests")], cwd=str(root))
     raise typer.Exit(code=code)
+
+
+# --- Human Understanding Engine (Sprint 9) --------------------------------
+
+@learner_app.command("init")
+def learner_init(
+    name: str = typer.Option("researcher", help="preferred name"),
+    domains: str = typer.Option("", help="comma-separated research domains"),
+) -> None:
+    """Create the local learner profile."""
+    eng = _understanding()
+    profile = eng.init_learner(
+        preferred_name=name,
+        research_domains=[d.strip() for d in domains.split(",") if d.strip()])
+    typer.echo(f"learner: {profile.learner_id} ({profile.preferred_name})")
+
+
+@learner_app.command("profile")
+def learner_profile() -> None:
+    """Show the local learner profile(s)."""
+    eng = _understanding()
+    assert eng.store is not None
+    profiles = eng.store.profiles()
+    if not profiles:
+        typer.echo("no learner profile yet — run 'acero learner init'")
+        return
+    for p in profiles:
+        typer.echo(f"{p.learner_id}: {p.preferred_name} domains={p.research_domains}")
+
+
+@learner_app.command("status")
+def learner_status(learner_id: str = typer.Argument(...)) -> None:
+    """Show knowledge status: mastered / partial / misconceived."""
+    eng = _understanding()
+    s = eng.status(learner_id)
+    typer.echo(f"learner {learner_id}: {s['n_states']} concept states")
+    typer.echo(f"  mastered: {s['mastered']}")
+    typer.echo(f"  partial: {s['partial']}")
+    typer.echo(f"  misconceived: {s['misconceived']}")
+    typer.echo(f"  open misconceptions: {s['open_misconceptions']}")
+
+
+@learner_app.command("history")
+def learner_history(learner_id: str = typer.Argument(...)) -> None:
+    """Show the learning history."""
+    eng = _understanding()
+    assert eng.store is not None
+    events = eng.store.history(learner_id)
+    typer.echo(f"{len(events)} learning events")
+    for e in events[-20:]:
+        typer.echo(f"  [{e.get('kind')}] {e.get('concept')}: {e.get('detail')}")
+
+
+@learn_app.command("requirements")
+def learn_requirements(
+    kind: str = typer.Argument("sindy", help="sindy | analogy | sunspots"),
+    project_id: str = typer.Option("proj", help="research project id"),
+) -> None:
+    """Show research-derived learning requirements."""
+    from ..understanding.curriculum.research_curriculum import requirements_for
+
+    for r in requirements_for(kind, project_id):
+        flag = "BLOCKING" if r.blocking else r.criticality.value
+        typer.echo(f"  [{flag}] {r.concept}: {r.reason_required}")
+        if r.prerequisite_concepts:
+            typer.echo(f"        prereqs: {r.prerequisite_concepts}")
+
+
+@learn_app.command("explain")
+def learn_explain(
+    subject: str = typer.Argument("sindy_damped"),
+    level: str = typer.Option("intuition", help="intuition|conceptual|mathematical|computational|frontier"),
+) -> None:
+    """Show a layered explanation of a real result."""
+    from ..understanding.explanation.levels import build_levels
+    from ..understanding.models import ExplanationLevel
+
+    arts = build_levels(
+        subject, phenomenon="damped oscillation", variables=["x", "v"],
+        mechanism="restoring force minus friction", assumptions=["linear damping"],
+        equations=["dx/dt = v", "dv/dt = -4x - 0.5v"],
+        code_references=["inference/engine.py"],
+        evidence_references=["benchmarks/governing_dynamics.py"],
+        limitations=["polynomial library imposed", "derivatives from same data"])
+    want = ExplanationLevel(level)
+    art = next(a for a in arts if a.level == want)
+    typer.echo(f"[{art.level.value}] {art.subject}\n{art.content}")
+    if art.equations:
+        typer.echo(f"  equations: {art.equations}")
+    typer.echo(f"  limitations: {art.limitations}")
+    typer.echo(f"  question: {art.questions[0] if art.questions else '—'}")
+
+
+@learn_app.command("assess")
+def learn_assess(
+    learner_id: str = typer.Argument(...),
+    concept: str = typer.Option("imposed_library"),
+    response: str = typer.Option(..., help="your explanation"),
+    expect: str = typer.Option("imposed library,fit not law", help="comma-separated expected elements"),
+) -> None:
+    """Grade an open-ended response and update knowledge state."""
+    from ..understanding.models import EvidenceType
+
+    eng = _understanding()
+    ev, update = eng.record_assessment(
+        learner_id, concept, EvidenceType.EXPLAIN_OWN_WORDS,
+        "explain in your own words", response,
+        [e.strip() for e in expect.split(",") if e.strip()])
+    typer.echo(f"score={ev.score} status: {update.from_status} -> {update.to_status}")
+    if update.misconceptions_detected:
+        typer.echo(f"  misconceptions detected: {update.misconceptions_detected}")
+
+
+@learn_app.command("transfer")
+def learn_transfer(
+    learner_id: str = typer.Argument(...),
+    concept: str = typer.Option("identifiability"),
+    response: str = typer.Option(..., help="your transfer answer"),
+) -> None:
+    """Assess cross-domain transfer of a concept."""
+    from ..understanding.assessment.transfer import assess_transfer
+
+    ev, grade = assess_transfer(learner_id, concept, response)
+    typer.echo(f"transfer score={ev.score} (pass={ev.score >= 0.7})")
+    if grade.red_flags:
+        typer.echo(f"  red flags: {grade.red_flags}")
+
+
+@learn_app.command("gate")
+def learn_gate(
+    learner_id: str = typer.Argument(...),
+    decision: str = typer.Option("claim_novelty"),
+    concepts: str = typer.Option("imposed_library,governing_structure"),
+) -> None:
+    """Run the human comprehension gate for a critical decision."""
+    eng = _understanding()
+    res = eng.comprehension_gate(
+        learner_id, decision,
+        [c.strip() for c in concepts.split(",") if c.strip()])
+    typer.echo(f"comprehension gate [{decision}]: {res.status.value}")
+    for b in res.blockers:
+        typer.echo(f"  ⛔ {b}")
+
+
+@learn_app.command("dashboard")
+def learn_dashboard(
+    learner_id: str = typer.Argument(...),
+    kind: str = typer.Option("sindy", help="research curriculum to show"),
+    out: str = typer.Option("", help="output HTML path"),
+) -> None:
+    """Render the Human Understanding dashboard to an HTML file."""
+    from ..understanding.curriculum.research_curriculum import requirements_for
+    from ..understanding.dashboard import write_html
+
+    eng = _understanding()
+    assert eng.store is not None
+    profile = eng.store.load_profile(learner_id)
+    path = out or str(repo_root() / "research" / "artifacts" / f"understanding_{learner_id}.html")
+    write_html(
+        path,
+        learner_name=profile.preferred_name if profile else learner_id,
+        status=eng.status(learner_id),
+        knowledge=[s.model_dump() for s in eng.store.states(learner_id)],
+        requirements=[r.model_dump() for r in requirements_for(kind, "proj")],
+        misconceptions=[m.model_dump() for m in eng.store.misconceptions(learner_id)],
+        predictions=[p.model_dump() for p in eng.store.predictions(learner_id)])
+    typer.echo(f"dashboard written: {path}")
+
+
+@learn_app.command("benchmark")
+def learn_benchmark() -> None:
+    """Run the Human-in-the-Loop Scientific Understanding Benchmark."""
+    from ..benchmarks.human_understanding import run_human_understanding
+
+    r = run_human_understanding()
+    c1, c4 = r["case_1_sindy"], r["case_4_adversarial_gate"]
+    typer.echo(f"C1 SINDy: status={c1['concept_status']} "
+               f"misconception={bool(c1['misconception_detected'])} "
+               f"novelty_blocked={c1['novelty_blocked']}")
+    typer.echo(f"C2 analogy: status={r['case_2_analogy']['concept_status']} "
+               f"rejects_equivalence={r['case_2_analogy']['rejects_equivalence']}")
+    typer.echo(f"C3 sunspots: distinguishes_pattern_mechanism="
+               f"{r['case_3_sunspots']['distinguishes_pattern_mechanism']}")
+    typer.echo(f"C4 adversarial gate: {c4['gate_outcome']} "
+               f"({c4['n_blockers']} blockers), human_detected={c4['human_detected_score']}")
+    typer.echo(f"transfer: pass={r['transfer']['transfer_pass']} "
+               f"wrong_flagged={bool(r['transfer']['wrong_answer_flagged'])}")
+    typer.echo(f"prediction: {r['prediction']['comparison']} "
+               f"overconfident={r['prediction']['overconfident']}")
+    typer.echo("NOTE: validates the METHOD (measuring understanding), not any human.")
+
+
+# --- Global Epistemic Gate (Sprint 9) -------------------------------------
+
+@gate_app.command("rules")
+def gate_rules(stage: str = typer.Option("", help="restrict to one stage")) -> None:
+    """List the gate rules (optionally for one stage)."""
+    from ..epistemic_gate.models import Stage
+    from ..epistemic_gate.registry import GateRegistry
+
+    reg = GateRegistry()
+    if stage:
+        ids = reg.rule_ids(Stage(stage.upper()))
+        typer.echo(f"{stage.upper()}: {len(ids)} rules")
+        for i in ids:
+            typer.echo(f"  - {i}")
+    else:
+        for s in Stage:
+            typer.echo(f"{s.value}: {len(reg.rule_ids(s))} rules")
+        typer.echo(f"total: {len(reg.all_rules())} rules")
+
+
+@gate_app.command("check")
+def gate_check(
+    stage: str = typer.Argument(..., help="pipeline stage, e.g. INFERENCE"),
+    bad: bool = typer.Option(False, "--bad", help="use a flawed inference artifact"),
+) -> None:
+    """Run the global epistemic gate for a stage on a demo artifact."""
+    from ..epistemic_gate.engine import GlobalGate
+    from ..epistemic_gate.models import Stage
+    from ..epistemic_gate.reports import render
+    from ..epistemic_gate.rules.inference import artifact_from_gate_input
+    from ..inference.audit.gate import GateInput
+
+    st = Stage(stage.upper())
+    if st == Stage.INFERENCE:
+        gi = GateInput() if not bad else GateInput(
+            dimensions_valid=False, train_test_disjoint=False, reproduced=False,
+            makes_causal_claim=True, codex_treated_as_evidence=True)
+        artifact = artifact_from_gate_input(gi)
+    else:
+        artifact = {}      # empty → rules report as 'cannot evaluate' warnings
+    res = GlobalGate().check(st, artifact)
+    typer.echo(render(res))
+
+
+@gate_app.command("report")
+def gate_report() -> None:
+    """Run the full pipeline gate on a demo set of artifacts."""
+    from ..epistemic_gate.engine import GlobalGate
+    from ..epistemic_gate.models import Stage
+    from ..epistemic_gate.reports import render_pipeline
+    from ..epistemic_gate.rules.inference import artifact_from_gate_input
+    from ..inference.audit.gate import GateInput
+
+    artifacts = {
+        Stage.EXECUTION: {"ran_in_sandbox": True, "secrets_exposed": False,
+                          "unauthorized_network": False, "environment_recorded": True,
+                          "seeds_recorded": True, "hashes_recorded": True,
+                          "timeout_configured": True, "code_modified_unversioned": False,
+                          "reproduced": True},
+        Stage.INFERENCE: artifact_from_gate_input(GateInput()),
+    }
+    typer.echo(render_pipeline(GlobalGate().run_pipeline(artifacts)))
+
+
+@gate_app.command("audit")
+def gate_audit() -> None:
+    """Adversarial audit of the gate's own coverage."""
+    from ..epistemic_gate.audit import rules_audit
+
+    rep = rules_audit()
+    typer.echo(f"gate self-audit: {rep.as_dict()['n_findings']} findings")
+    for f in rep.findings:
+        typer.echo(f"  [{f.severity}] {f.concern}: {f.detail}")
 
 
 @app.command()

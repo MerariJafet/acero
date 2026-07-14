@@ -29,7 +29,8 @@ limpios). Sprints 5–12 planificados. Ver `docs/roadmap/12_sprints.md`.
 | 8 | Modelo del mundo y grafo científico (World Model Engine) | ✅ |
 | 8.5–8.7 | Cognitive Discovery Engine (conceptos, analogías, primeros principios) | ✅ |
 | 8.8–8.9 | Governing Structure Inference Engine (SINDy, invariantes, gate epistémico) | ✅ |
-| 9–12 | Tutor → publicación | ⏳ backlog |
+| 9 | Human Understanding Engine + Global Epistemic Gate | ✅ |
+| 10–12 | Robustez → publicación | ⏳ backlog |
 
 ## Principios no negociables
 
@@ -122,6 +123,20 @@ acero inference discover <exponential_decay|logistic|harmonic|damped|predator_pr
 acero inference benchmark                           # 7-level Governing Dynamics benchmark
 acero inference sunspots                            # real SILSO sunspot analysis (authorized)
 acero inference gate [--bad]                        # mandatory epistemic gate
+
+# Human Understanding Engine + Global Epistemic Gate (Sprint 9)
+acero learner init --name <you>                     # create the local learner profile
+acero learn requirements <sindy|analogy|sunspots>   # research-derived learning requirements
+acero learn explain <subject> --level intuition     # layered explanation (5 levels)
+acero learn assess <learner> --concept .. --response ..   # graded, updates knowledge state
+acero learn transfer <learner> --concept identifiability --response ..
+acero learn gate <learner> --decision claim_novelty       # human comprehension gate
+acero learn dashboard <learner>                     # HTML knowledge dashboard
+acero learn benchmark                               # Human-in-the-Loop understanding benchmark
+acero gate rules [--stage INFERENCE]                # global epistemic gate rules (81)
+acero gate check <STAGE> [--bad]                    # run the gate for a pipeline stage
+acero gate report                                   # run the full pipeline gate
+acero gate audit                                    # adversarial self-audit of the gate
 ```
 
 ## Arquitectura

@@ -37,3 +37,13 @@
 - Convertir el gate epistémico en gate obligatorio del pipeline de Discovery/World Model.
 - Estimación de derivadas que evite la fuga de "mismo dato" (weak-form SINDy / integral).
 - Filtrado dimensional real de la biblioteca cuando se conocen unidades.
+
+## Adición tras Sprint 9 (Human Understanding + Global Gate)
+- Grader más rico (semántico, no solo cobertura de elementos) para reducir dependencia de
+  rúbricas — el eco de palabras clave ya se penaliza.
+- Cablear el Global Epistemic Gate como barrera obligatoria in-line en Discovery / World
+  Model / Cognitive / Inference (hoy disponible y probado; falta integrarlo en cada commit
+  de conocimiento).
+- Visualización del grafo de conocimiento humano integrada con el Concept Engine.
+- Política de revisión espaciada más fundamentada (hoy heurística honesta).
+- Perfil local único; si algún día hay multiusuario, añadir control de acceso.

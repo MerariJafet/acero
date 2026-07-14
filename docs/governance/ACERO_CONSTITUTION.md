@@ -125,10 +125,35 @@ permiten saber.
 *Cumplimiento:* `inference/` (engine, audit/gate, calibration), `tests/**/test_inference_*`,
 `tests/science/test_governing_dynamics.py`.
 
+## 14f. Comprensión humana medida, no supuesta (Human Understanding Engine)
+La comprensión del investigador se **mide por evidencia de desempeño**, nunca se infiere
+de un "sí, entendí" ni de una explicación de Codex. Una sola respuesta correcta no otorga
+dominio; el dominio exige varios tipos de evidencia (explicar, predecir, detectar error,
+transferir, proponer falsación, decir qué no se puede concluir). Las **misconceptions** se
+resuelven solo con nueva evidencia que contradiga la confusión, no con una explicación
+leída. Antes de una decisión científica crítica, un **gate de comprensión** verifica el
+nivel mínimo; el humano puede **override** con razón registrada; las tareas de bajo riesgo
+nunca se bloquean. "Dominio" significa desempeño demostrado, no comprensión perfecta.
+*Cumplimiento:* `understanding/` (learner, assessment, intervention/comprehension_gate,
+audit), `tests/**/test_understanding_*`, `tests/science/test_human_understanding.py`.
+
+## 14g. El gate epistémico gobierna todo el pipeline (Global Epistemic Gate)
+Ningún resultado entra como conocimiento aceptado sin pasar el **gate epistémico** de su
+etapa (Literature → Question → Hypotheses → Experiment Design → Execution → Inference →
+Analogy/Derivation → World Model → Human Review → Publication). Las reglas son
+deterministas y versionadas; un input ausente se reporta como advertencia "no evaluable",
+nunca como pase silencioso. Codex es **advisory**: solo eleva una advertencia salvo que
+nombre una regla existente, y un hallazgo se convierte en regla únicamente con checker y
+prueba. Las violaciones de política (costos, publicación, seguridad, autonomía) aparecen
+también como gate results, sin reglas contradictorias duplicadas.
+*Cumplimiento:* `epistemic_gate/` (models, registry, rules, engine, policy_bridge, audit),
+`tests/unit/test_epistemic_gate.py`.
+
 ## 14. Comprensión humana
 Ningún avance de la IA debe dejar atrás la comprensión del investigador. Cada
 ciclo produce artefactos de aprendizaje.
-*Cumplimiento:* `pedagogy/learning.py`, test `test_learning_artifacts_generated`.
+*Cumplimiento:* `pedagogy/learning.py`, test `test_learning_artifacts_generated`;
+extendido por 14f (`understanding/`).
 
 ---
 *Toda modificación a esta constitución debe hacerse por commit revisable y
