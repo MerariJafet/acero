@@ -133,6 +133,9 @@ class CodexCliProvider:
         self.sandbox = sandbox
         self.timeout_sec = timeout_sec
         self.extra_args = extra_args or []
+        # Metadata from the most recent call, for provenance (usage, exit code, ...).
+        self.last_usage: dict = {}
+        self.last_params: dict = {}
 
     def available(self) -> bool:
         return shutil.which(self.command) is not None or Path(self.command).exists()
@@ -191,6 +194,8 @@ class CodexCliProvider:
                 "exit_code": proc.returncode,
                 "usage": usage,
             }
+            self.last_usage = usage
+            self.last_params = params
             return text, params, cmd
 
     def complete(

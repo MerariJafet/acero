@@ -80,6 +80,16 @@ novedad sin búsqueda de antecedentes y revisión humana.
 *Cumplimiento:* el piloto documenta explícitamente `cannot_conclude`, test
 `test_no_discovery_claim`.
 
+## 14b. Sin falsa precisión (Discovery Engine)
+La confianza es bayesiana solo cuando hay verosimilitudes justificadas; en otro
+caso es **ordinal etiquetada**. Nunca se presenta la confianza de un LLM como
+probabilidad calibrada, ni se reportan probabilidades con precisión no justificada
+(la auditoría adversarial corrigió un posterior sobreconfiado). Ningún experimento
+sin prerregistro; ningún experimento no discriminante; ninguna hipótesis aceptada
+por plausibilidad; toda decisión de descubrimiento queda en procedencia.
+*Cumplimiento:* `discovery/confidence.py`, `experiment_design.require_discriminating`,
+`experiment_critic` (barrera por reglas), `benchmarks/audit.py`.
+
 ## 14. Comprensión humana
 Ningún avance de la IA debe dejar atrás la comprensión del investigador. Cada
 ciclo produce artefactos de aprendizaje.

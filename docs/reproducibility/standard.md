@@ -26,6 +26,17 @@ salida. `reproduced = True` solo si coinciden. Prueba:
 - IDs y timestamps se excluyen de los hashes de contenido cuando no forman parte
   del resultado científico (p. ej. `prereg_hash` excluye `registered_at`).
 
+## Discovery Engine (Sprints 5–7)
+- El **torneo** es determinista: mismo conjunto de candidatos → mismo ranking y
+  Elo (`test_tournament_is_reproducible`).
+- La **generación mock** es determinista; la generación Codex registra
+  provider/model/params/tokens para trazabilidad (no bit-reproducible por ser un
+  servicio externo).
+- El **benchmark Hidden Dynamics** reejecuta una semilla y compara el hash del JSON
+  de salida (`reproduced=True`), igual que el piloto del Sprint 4.
+- La **búsqueda random** usa semilla explícita; el **scheduler** permite *resume*
+  saltando tareas completadas.
+
 ## Límites
 - Diferencias de BLAS/versión de numpy entre máquinas pueden alterar los últimos
   dígitos; por eso se comparan resultados **dentro de la misma máquina/entorno**

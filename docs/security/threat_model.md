@@ -16,6 +16,11 @@ código de experimentos** y la **fuga de secretos/costos**.
 | Cita fabricada (alucinación) | referencias inventadas | verificación contra documentos ingeridos | `test_citation_verifier_rejects_fabricated` |
 | Manipulación de resultados (HARKing) | editar hipótesis tras ver datos | guarda que marca ediciones post-resultado en procedencia | `test_harking_guard_...` |
 | Borrado de resultados negativos | delete | bloqueado para `NEGATIVE_RESULT` | `test_negative_result_cannot_be_deleted` |
+| Herramienta generada maliciosa/errónea | tool creation | screen → sandbox obligatorio → benchmark → quarantine | `tests/security/test_tool_creation.py` |
+| Path traversal en herramienta generada | `../`, `/etc/` | screening dedicado + sandbox | `test_path_traversal_blocked` |
+| Borrado de hipótesis rechazadas / negativos de descubrimiento | delete | bloqueado en `DiscoveryStore.delete` | `test_rejected_candidates_cannot_be_deleted`, `test_negative_store_delete_blocked` |
+| Sobreconfianza / falsa precisión | confidence update | verosimilitud templada + etiqueta "no calibrada" | `test_confidence_not_overconfident` |
+| Fork bomb / agotamiento en scheduler | tareas | timeout + aislamiento de fallos + cancelación | `tests/unit/test_discovery_scheduler.py` |
 
 ## Riesgos abiertos (documentados, no resueltos)
 1. El sandbox de subproceso es más débil que un contenedor/nsjail. Para código

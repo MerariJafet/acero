@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "NodeStatus": {
+      "enum": [
+        "PROPOSED",
+        "VALIDATED",
+        "QUEUED",
+        "RUNNING",
+        "COMPLETED",
+        "FAILED",
+        "INCONCLUSIVE",
+        "PRUNED",
+        "CANCELLED",
+        "RETRYABLE"
+      ],
+      "title": "NodeStatus",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "cost": {
+      "default": 0.0,
+      "title": "Cost",
+      "type": "number"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "decision": {
+      "default": "",
+      "title": "Decision",
+      "type": "string"
+    },
+    "depends_on": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Depends On",
+      "type": "array"
+    },
+    "expansion_reason": {
+      "default": "",
+      "title": "Expansion Reason",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "information_gain": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Information Gain"
+    },
+    "kind": {
+      "title": "Kind",
+      "type": "string"
+    },
+    "parent_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parent Id"
+    },
+    "priority": {
+      "default": 0.5,
+      "title": "Priority",
+      "type": "number"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "prune_reason": {
+      "default": "",
+      "title": "Prune Reason",
+      "type": "string"
+    },
+    "ref_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ref Id"
+    },
+    "result": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Result"
+    },
+    "status": {
+      "$ref": "#/$defs/NodeStatus",
+      "default": "PROPOSED"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "kind",
+    "title"
+  ],
+  "title": "TreeNode",
+  "type": "object"
+}

@@ -1,0 +1,53 @@
+{
+  "properties": {
+    "alternatives": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Alternatives",
+      "type": "array"
+    },
+    "cost": {
+      "title": "Cost",
+      "type": "number"
+    },
+    "expected_information_gain": {
+      "title": "Expected Information Gain",
+      "type": "number"
+    },
+    "experiment_id": {
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "hypotheses_discriminated": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Hypotheses Discriminated",
+      "type": "array"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "reason_not_to_run": {
+      "default": "",
+      "title": "Reason Not To Run",
+      "type": "string"
+    },
+    "risk": {
+      "default": 0.0,
+      "title": "Risk",
+      "type": "number"
+    }
+  },
+  "required": [
+    "experiment_id",
+    "reason",
+    "expected_information_gain",
+    "cost"
+  ],
+  "title": "RecommendedNextExperiment",
+  "type": "object"
+}

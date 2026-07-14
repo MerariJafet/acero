@@ -23,6 +23,15 @@ class ProvenanceAction(str, Enum):
     REFUTE_ATTEMPT = "REFUTE_ATTEMPT"
     HUMAN_DECISION = "HUMAN_DECISION"
     EXPORT = "EXPORT"
+    # Discovery Engine (Sprints 5–7)
+    GENERATE = "GENERATE"                 # hypothesis/experiment generation
+    RANK = "RANK"                         # tournament / ranking decision
+    REJECT = "REJECT"                     # hypothesis/experiment rejected (kept, not deleted)
+    PRUNE = "PRUNE"                       # research-tree branch pruned
+    CONFIDENCE_UPDATE = "CONFIDENCE_UPDATE"
+    TOOL_PROPOSAL = "TOOL_PROPOSAL"
+    TOOL_APPROVAL = "TOOL_APPROVAL"
+    NEXT_EXPERIMENT = "NEXT_EXPERIMENT"
 
 
 class ProvenanceEvent(BaseModel):

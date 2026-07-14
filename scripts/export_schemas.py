@@ -25,6 +25,10 @@ from acero.epistemology.schemas import (
     ResearchResult,
     ScientificClaim,
 )
+from acero.discovery.candidates import HypothesisCandidate
+from acero.discovery.experiment_design import ExperimentProposal
+from acero.discovery.next_experiment import RecommendedNextExperiment
+from acero.discovery.tree import TreeNode
 from acero.experiment.prereg import Preregistration
 from acero.provenance.events import ProvenanceEvent
 
@@ -41,6 +45,11 @@ MODELS = {
     "scientific_claim": ScientificClaim,
     "preregistration": Preregistration,
     "provenance_event": ProvenanceEvent,
+    # Discovery Engine (Sprints 5–7)
+    "hypothesis_candidate": HypothesisCandidate,
+    "experiment_proposal": ExperimentProposal,
+    "tree_node": TreeNode,
+    "recommended_next_experiment": RecommendedNextExperiment,
 }
 
 

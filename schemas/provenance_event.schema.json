@@ -10,7 +10,15 @@
         "RUN_FINISH",
         "REFUTE_ATTEMPT",
         "HUMAN_DECISION",
-        "EXPORT"
+        "EXPORT",
+        "GENERATE",
+        "RANK",
+        "REJECT",
+        "PRUNE",
+        "CONFIDENCE_UPDATE",
+        "TOOL_PROPOSAL",
+        "TOOL_APPROVAL",
+        "NEXT_EXPERIMENT"
       ],
       "title": "ProvenanceAction",
       "type": "string"

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine
 
+from acero.discovery.store import DiscoveryStore
 from acero.ledger.db import make_session_factory
 from acero.ledger.models import Base
 from acero.ledger.service import ResearchLedger
@@ -40,3 +41,18 @@ def project(ledger):
 @pytest.fixture()
 def corpus_dir() -> Path:
     return FIXTURE_CORPUS
+
+
+@pytest.fixture()
+def disc_store(session_factory, ledger) -> DiscoveryStore:
+    return DiscoveryStore(session_factory, ledger)
+
+
+@pytest.fixture()
+def mock_candidates(project):
+    """A diverse set of 8 mock hypothesis candidates for a project."""
+    from acero.discovery.generation import MockHypothesisGenerator
+
+    return MockHypothesisGenerator().generate(
+        "What model explains the data?", project_id=project.id,
+        research_question_id="q_test", context={"variables": ["t", "y"]}, n=8)

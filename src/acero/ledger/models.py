@@ -97,3 +97,21 @@ class FragmentRow(Base):
     document_id: Mapped[str] = mapped_column(String(64), index=True)
     project_id: Mapped[str] = mapped_column(String(64), index=True)
     payload: Mapped[dict] = mapped_column(JSON)
+
+
+class DiscoveryRow(Base):
+    """Generic store for Discovery Engine objects (Sprints 5–7).
+
+    ``kind`` discriminates: candidate | proposal | tree_node | tool | negative.
+    ``status`` and ``parent_id`` are surfaced as columns for queryable state
+    (tournament status, scheduler state, research-tree parent/child).
+    """
+
+    __tablename__ = "discovery"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), index=True)
+    kind: Mapped[str] = mapped_column(String(32), index=True)
+    status: Mapped[str] = mapped_column(String(32), index=True, default="")
+    parent_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    payload: Mapped[dict] = mapped_column(JSON)

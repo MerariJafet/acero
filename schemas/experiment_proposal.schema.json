@@ -1,0 +1,162 @@
+{
+  "properties": {
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "baseline": {
+      "default": "",
+      "title": "Baseline",
+      "type": "string"
+    },
+    "compute_budget": {
+      "additionalProperties": true,
+      "title": "Compute Budget",
+      "type": "object"
+    },
+    "controlled_variables": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Controlled Variables",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "data_requirements": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Data Requirements",
+      "type": "array"
+    },
+    "dependent_variables": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Dependent Variables",
+      "type": "array"
+    },
+    "divergence_region": {
+      "default": "",
+      "title": "Divergence Region",
+      "type": "string"
+    },
+    "expected_information_gain": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Information Gain"
+    },
+    "expected_learning_value": {
+      "default": 0.5,
+      "title": "Expected Learning Value",
+      "type": "number"
+    },
+    "falsification_rules": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Falsification Rules",
+      "type": "array"
+    },
+    "hypotheses_tested": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Hypotheses Tested",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "independent_variables": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Independent Variables",
+      "type": "array"
+    },
+    "metrics": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Metrics",
+      "type": "array"
+    },
+    "negative_control": {
+      "default": "",
+      "title": "Negative Control",
+      "type": "string"
+    },
+    "parameter_space": {
+      "additionalProperties": true,
+      "title": "Parameter Space",
+      "type": "object"
+    },
+    "positive_control": {
+      "default": "",
+      "title": "Positive Control",
+      "type": "string"
+    },
+    "preregistered": {
+      "default": false,
+      "title": "Preregistered",
+      "type": "boolean"
+    },
+    "preregistered_predictions": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Preregistered Predictions",
+      "type": "object"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "research_question": {
+      "title": "Research Question",
+      "type": "string"
+    },
+    "risks": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Risks",
+      "type": "array"
+    },
+    "simulation_requirements": {
+      "additionalProperties": true,
+      "title": "Simulation Requirements",
+      "type": "object"
+    },
+    "stopping_rules": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Stopping Rules",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "research_question",
+    "hypotheses_tested"
+  ],
+  "title": "ExperimentProposal",
+  "type": "object"
+}

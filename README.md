@@ -23,7 +23,10 @@ limpios). Sprints 5–12 planificados. Ver `docs/roadmap/12_sprints.md`.
 | 2 | Expediente científico y modelo de conocimiento | ✅ |
 | 3 | Biblioteca científica y procedencia | ✅ |
 | 4 | Ciclo mínimo de investigación computacional | ✅ |
-| 5–12 | Torneo de hipótesis → publicación | ⏳ backlog |
+| 5 | Motor de hipótesis y torneo de ideas | ✅ |
+| 6 | Diseño experimental y ganancia de información | ✅ |
+| 7 | Motor de ejecución, búsqueda y aprendizaje (Discovery Engine) | ✅ |
+| 8–12 | Grafo científico → publicación | ⏳ backlog |
 
 ## Principios no negociables
 
@@ -89,6 +92,16 @@ acero domain benchmark  # benchmarks de respuesta conocida (todos o --name)
 acero pilot             # corre el ciclo de investigación del Sprint 4
 acero serve             # API FastAPI
 acero test              # pytest
+
+# Discovery Engine (Sprints 5–7)
+acero hypothesis generate <project-id> [--llm]   # hipótesis competidoras
+acero hypothesis evaluate <project-id>            # falsabilidad
+acero hypothesis tournament <project-id>          # torneo multiobjetivo
+acero experiment propose <project-id>             # experimento discriminante
+acero experiment rank <project-id>                # ranking por utilidad
+acero experiment run <project-id>                 # ejecuta en sandbox
+acero discovery status|next|report <project-id>   # estado / siguiente / procedencia
+acero benchmark hidden-dynamics [--system ...] [--llm]   # validación integral
 ```
 
 ## Arquitectura

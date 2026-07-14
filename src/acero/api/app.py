@@ -24,7 +24,8 @@ class ProjectCreate(BaseModel):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="ACERO API", version=__version__)
-    ledger = ResearchLedger(default_session_factory())
+    session_factory = default_session_factory()
+    ledger = ResearchLedger(session_factory)
 
     @app.get("/health")
     def health() -> dict:
@@ -92,6 +93,23 @@ def create_app() -> FastAPI:
         if ledger.get_project(project_id) is None:
             raise HTTPException(status_code=404, detail="project not found")
         return ledger.provenance_for_project(project_id)
+
+    # --- Discovery Engine (read-only; execution stays behind the CLI/sandbox) ---
+    @app.get("/projects/{project_id}/discovery/{kind}")
+    def discovery_objects(project_id: str, kind: str) -> list[dict]:
+        from ..discovery.store import DiscoveryStore
+
+        if kind not in {"candidate", "proposal", "tree_node", "tool", "negative"}:
+            raise HTTPException(status_code=400, detail="unknown discovery kind")
+        store = DiscoveryStore(session_factory, ledger)
+        return store.list_objects(project_id, kind=kind)
+
+    @app.get("/projects/{project_id}/discovery/candidates/rejected")
+    def rejected_candidates(project_id: str) -> list[dict]:
+        from ..discovery.store import DiscoveryStore
+
+        store = DiscoveryStore(session_factory, ledger)
+        return store.list_objects(project_id, kind="candidate", status="REJECTED")
 
     return app
 

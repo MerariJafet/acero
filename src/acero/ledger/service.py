@@ -286,6 +286,21 @@ class ResearchLedger:
             s.commit()
         return decision
 
+    def record_event(
+        self, project_id: str, action: ProvenanceAction, actor: str, summary: str,
+        details: dict[str, Any] | None = None, entity_id: str | None = None,
+    ) -> None:
+        """Public provenance hook for the Discovery Engine and other services.
+
+        Every discovery decision (generation, ranking, pruning, confidence update,
+        tool approval, next-experiment choice) records an auditable event here.
+        """
+        with self._sf() as s:
+            self._record_provenance(
+                s, project_id, entity_id, action, actor, summary, details or {}
+            )
+            s.commit()
+
     def provenance_for_project(self, project_id: str) -> list[dict[str, Any]]:
         with self._sf() as s:
             rows = s.execute(

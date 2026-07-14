@@ -9,9 +9,9 @@ Sprints 5–12 están **planificados** (ver `docs/backlog/sprints_05_12.md`).
 | 2 | Expediente científico y modelo de conocimiento | ✅ Hecho | Entidades epistémicas, ledger con integridad, historial, procedencia, export |
 | 3 | Biblioteca científica y procedencia | ✅ Hecho | Ingestión local, chunking, BM25, verificación de citas, métricas de recuperación |
 | 4 | Ciclo mínimo de investigación computacional | ✅ Hecho | Workflow, prereg, sandbox run multi-semilla, escéptico, reproducibilidad, piloto |
-| 5 | Motor de hipótesis y torneo de ideas | ⏳ Backlog | Generación diversa, clustering, ranking multiobjetivo, escéptico reforzado |
-| 6 | Diseño experimental avanzado | ⏳ Backlog | Controles, ablations, sensibilidad, factoriales, validación cruzada |
-| 7 | Motor de experimentos y búsqueda | ⏳ Backlog | Ejecución paralela, colas, checkpoints, optimización bayesiana/evolutiva |
+| 5 | Motor de hipótesis y torneo de ideas | ✅ Hecho | Generación (Codex+mock), diversidad, falsabilidad, torneo multiobjetivo+Elo, descartadas preservadas |
+| 6 | Diseño experimental y ganancia de información | ✅ Hecho | Experimentos discriminantes, EIG bayesiano+heurística, utilidad transparente, stopping rules, críticos |
+| 7 | Motor de ejecución, búsqueda y aprendizaje | ✅ Hecho | Árbol de investigación, scheduler, búsqueda, confidence update, tool creation, next experiment |
 | 8 | Modelo del mundo y grafo científico | ⏳ Backlog | Grafo de afirmaciones, actualización bayesiana, visualización |
 | 9 | Tutor científico y aprendizaje humano | ⏳ Backlog | Perfil, evaluación, explicaciones por niveles, ruta de aprendizaje |
 | 10 | Especialización científica | 🟡 Parcial | Plugins iniciales física/astronomía/genética/química (sin wet-lab), 14 benchmarks verdes — `docs/domains/plugins.md` |

@@ -33,12 +33,29 @@ from ..policies.loader import load_policies
 app = typer.Typer(help="ACERO — Adaptive Computational Engine for Research and Epistemic Reasoning", no_args_is_help=True)
 project_app = typer.Typer(help="Manage research projects")
 domain_app = typer.Typer(help="Scientific domain plugins")
+hypothesis_app = typer.Typer(help="Discovery Engine: hypotheses")
+experiment_app = typer.Typer(help="Discovery Engine: experiments")
+discovery_app = typer.Typer(help="Discovery Engine: status / next / report")
+benchmark_app = typer.Typer(help="Validation benchmarks")
 app.add_typer(project_app, name="project")
 app.add_typer(domain_app, name="domain")
+app.add_typer(hypothesis_app, name="hypothesis")
+app.add_typer(experiment_app, name="experiment")
+app.add_typer(discovery_app, name="discovery")
+app.add_typer(benchmark_app, name="benchmark")
 
 
 def _ledger() -> ResearchLedger:
     return ResearchLedger(default_session_factory())
+
+
+def _discovery():
+    """Return (session_factory, ledger, store) bound to the same DB."""
+    from ..discovery.store import DiscoveryStore
+
+    sf = default_session_factory()
+    led = ResearchLedger(sf)
+    return sf, led, DiscoveryStore(sf, led)
 
 
 @app.command()
@@ -169,6 +186,265 @@ def domain_benchmark(
         ok = ok and r["all_passed"]
     typer.echo("All domain benchmarks passed ✓" if ok else "SOME BENCHMARKS FAILED ✗")
     raise typer.Exit(code=0 if ok else 1)
+
+
+def _load_candidates(store, project_id: str):
+    from ..discovery.candidates import HypothesisCandidate
+    return [HypothesisCandidate(**p)
+            for p in store.list_objects(project_id, kind="candidate")]
+
+
+@hypothesis_app.command("generate")
+def hypothesis_generate(
+    project_id: str = typer.Argument(...),
+    n: int = typer.Option(8, help="Number of hypotheses"),
+    llm: bool = typer.Option(False, "--llm", help="Use Codex to generate"),
+    question: str = typer.Option("What model explains the observed data?", help="Research question"),
+) -> None:
+    """Generate competing hypothesis candidates for a project."""
+    from ..core.ids import new_id
+    from ..discovery.supervisor import DiscoverySupervisor
+    from ..epistemology.schemas import ResearchQuestion
+    from ..llm.providers import get_provider
+
+    sf, led, store = _discovery()
+    if led.get_project(project_id) is None:
+        typer.echo(f"project {project_id} not found")
+        raise typer.Exit(1)
+    q = led.add_entity(ResearchQuestion(id=new_id("q"), project_id=project_id, title=question))
+    provider = get_provider("codex") if llm else None
+    sup = DiscoverySupervisor(led, store, project_id, provider=provider)
+    cands = sup.generate(question, q.id, context={"variables": ["t", "y"]}, n=n, use_llm=llm)
+    typer.echo(f"Generated {len(cands)} candidates (generator={'codex' if llm else 'mock'}):")
+    for c in cands:
+        typer.echo(f"  {c.id}  [{c.hypothesis_type.value}]  {c.title}")
+
+
+@hypothesis_app.command("evaluate")
+def hypothesis_evaluate(project_id: str = typer.Argument(...)) -> None:
+    """Score falsifiability/actionability/specificity for stored candidates."""
+    from ..discovery.falsifiability import score_candidate
+
+    _, _, store = _discovery()
+    cands = _load_candidates(store, project_id)
+    if not cands:
+        typer.echo("(no candidates; run 'hypothesis generate' first)")
+        return
+    for c in cands:
+        s = score_candidate(c).as_dict()
+        typer.echo(f"  {c.title[:40]:40}  fals={s['falsifiability_score']:.2f} "
+                   f"act={s['actionability_score']:.2f} spec={s['specificity_score']:.2f}")
+
+
+@hypothesis_app.command("tournament")
+def hypothesis_tournament(
+    project_id: str = typer.Argument(...),
+    keep_top: int = typer.Option(4, help="How many to accept"),
+) -> None:
+    """Run the multiobjective tournament and persist accepted/rejected."""
+    from ..discovery.supervisor import DiscoverySupervisor
+
+    _, led, store = _discovery()
+    sup = DiscoverySupervisor(led, store, project_id)
+    cands = sup.filter_falsifiable(_load_candidates(store, project_id))
+    if not cands:
+        typer.echo("(no falsifiable candidates)")
+        return
+    result = sup.tournament(cands, keep_top=keep_top)
+    by_id = {c.id: c for c in cands}
+    typer.echo(f"Ranking (top {keep_top} accepted, rest rejected & kept):")
+    for rank, cid in enumerate(result.ranking):
+        mark = "✓" if rank < keep_top else "·"
+        typer.echo(f"  {mark} {result.elo[cid]:.0f}  {by_id[cid].title[:44]}")
+    typer.echo(f"Diversity: {result.diversity.as_dict()['n_mechanisms']} mechanisms, "
+               f"eff_n={result.diversity.effective_num_hypotheses:.2f}")
+
+
+_FAMILY_BEHAVIOR = {
+    "exponential": "monotonic", "damped": "oscillatory", "logistic": "saturating",
+    "cubic": "monotonic", "linear": "monotonic", "flexible": "diverging",
+    "baseline": "flat", "null": "flat",
+}
+
+
+@experiment_app.command("propose")
+def experiment_propose(project_id: str = typer.Argument(...)) -> None:
+    """Build a discriminating experiment proposal from accepted hypotheses."""
+    from ..discovery.experiment_design import require_discriminating
+    from ..discovery.supervisor import DiscoverySupervisor
+
+    _, led, store = _discovery()
+    accepted = [c for c in _load_candidates(store, project_id)
+                if c.status.value == "ACCEPTED"]
+    if len(accepted) < 2:
+        typer.echo("Need >=2 accepted candidates; run 'hypothesis tournament' first.")
+        raise typer.Exit(1)
+    predicted = {}
+    for c in accepted:
+        text = (c.title + " " + c.mechanism + " " + c.statement).lower()
+        fam = next((f for f in _FAMILY_BEHAVIOR if f in text), "linear")
+        predicted[c.id] = _FAMILY_BEHAVIOR.get(fam, "monotonic")
+    sup = DiscoverySupervisor(led, store, project_id)
+    proposal = sup.build_proposal("Discriminate accepted hypotheses", accepted, predicted,
+                                  variables=["t", "y"], parameter_space={"seed": [1, 2]})
+    try:
+        require_discriminating(proposal)
+    except ValueError as exc:
+        typer.echo(f"Not discriminating: {exc}")
+        raise typer.Exit(1) from exc
+    sup.critique_proposal(proposal)
+    store.put(project_id, "proposal", proposal.id, proposal.model_dump(),
+              status="PREREGISTERED", summary="experiment proposed via CLI")
+    typer.echo(f"Proposed experiment {proposal.id} testing {len(accepted)} hypotheses.")
+    typer.echo(f"  outcomes: {proposal.preregistered_predictions}")
+
+
+@experiment_app.command("rank")
+def experiment_rank(project_id: str = typer.Argument(...)) -> None:
+    """Rank stored experiment proposals by research utility."""
+    from ..discovery.research_utility import compute_utility
+
+    _, _, store = _discovery()
+    proposals = store.list_objects(project_id, kind="proposal")
+    if not proposals:
+        typer.echo("(no proposals)")
+        return
+    scored = []
+    for p in proposals:
+        eig = p.get("expected_information_gain") or 0.5
+        comp = {"information_gain": min(1.0, float(eig)), "scientific_value": 0.6,
+                "falsification_power": 0.7, "reproducibility": 1.0,
+                "human_learning_value": 0.6, "compute_cost": 0.3, "risk": 0.1}
+        scored.append((p["id"], compute_utility(comp).utility))
+    for pid, u in sorted(scored, key=lambda t: t[1], reverse=True):
+        typer.echo(f"  utility={u:.3f}  {pid}")
+
+
+@experiment_app.command("run")
+def experiment_run(
+    project_id: str = typer.Argument(..., help="Project id"),
+    system: str = typer.Option("exponential_decay", help="Dynamical system to fit"),
+    sandbox: str = typer.Option("subprocess", help="subprocess | docker"),
+) -> None:
+    """Execute the project's discovering experiment via the hidden-dynamics runner."""
+    from ..benchmarks.hidden_dynamics import run_hidden_dynamics
+    from ..sandbox.runner import get_runner
+
+    _, led, store = _discovery()
+    if led.get_project(project_id) is None:
+        typer.echo(f"project {project_id} not found")
+        raise typer.Exit(1)
+    art = repo_root() / "research" / "artifacts" / f"{project_id}_experiment_run"
+    rep = run_hidden_dynamics(led, store, project_id, system=system, seeds=[1, 2],
+                              artifacts_root=art, runner=get_runner(sandbox))
+    typer.echo(f"Ran experiment: winner={rep['winner_family']} reproduced={rep['reproduced']}")
+
+
+@experiment_app.command("cancel")
+def experiment_cancel(node_id: str = typer.Argument(..., help="Research-tree experiment node id"),
+                      project_id: str = typer.Option(..., help="Project id")) -> None:
+    """Cancel a research-tree experiment node."""
+    from ..discovery.tree import NodeStatus, ResearchTree
+
+    _, _, store = _discovery()
+    tree = ResearchTree(store, project_id)
+    tree.set_status(node_id, NodeStatus.CANCELLED, decision="cancelled via CLI")
+    typer.echo(f"Cancelled {node_id}")
+
+
+@experiment_app.command("resume")
+def experiment_resume(project_id: str = typer.Argument(...)) -> None:
+    """List runnable (non-completed) experiment nodes for resumption."""
+    from ..discovery.tree import ResearchTree
+
+    _, _, store = _discovery()
+    tree = ResearchTree(store, project_id)
+    frontier = tree.frontier()
+    typer.echo(f"Resumable experiment nodes: {len(frontier)}")
+    for n in frontier:
+        typer.echo(f"  {n.id}  {n.status.value}  {n.title[:50]}")
+
+
+@discovery_app.command("next")
+def discovery_next(project_id: str = typer.Argument(...)) -> None:
+    """Recommend the next experiment (with alternatives)."""
+    from ..discovery.next_experiment import recommend_next
+
+    _, _, store = _discovery()
+    proposals = store.list_objects(project_id, kind="proposal")
+    cands = [{"experiment_id": p["id"],
+              "eig": p.get("expected_information_gain") or 0.5, "cost": 0.3, "risk": 0.1,
+              "hypotheses_discriminated": p.get("hypotheses_tested", []),
+              "components": {"information_gain": 0.5, "scientific_value": 0.6,
+                             "falsification_power": 0.7, "reproducibility": 1.0,
+                             "human_learning_value": 0.6, "compute_cost": 0.3,
+                             "time_cost": 0.2, "monetary_cost": 0.0, "risk": 0.1}}
+             for p in proposals]
+    rec = recommend_next(cands)
+    if rec is None:
+        typer.echo("(no proposals to recommend from)")
+        return
+    typer.echo(f"Recommended: {rec.experiment_id}")
+    typer.echo(f"  reason: {rec.reason}")
+    typer.echo(f"  alternatives: {len(rec.alternatives)} · reason_not_to_run: {rec.reason_not_to_run}")
+
+
+@discovery_app.command("status")
+def discovery_status(project_id: str = typer.Argument(...)) -> None:
+    """Summarise the discovery state for a project."""
+    _, _, store = _discovery()
+    for kind in ("candidate", "proposal", "tree_node", "tool", "negative"):
+        items = store.list_objects(project_id, kind=kind)
+        typer.echo(f"  {kind}: {len(items)}")
+    rejected = store.list_objects(project_id, kind="candidate", status="REJECTED")
+    typer.echo(f"  rejected candidates kept: {len(rejected)}")
+
+
+@discovery_app.command("report")
+def discovery_report(project_id: str = typer.Argument(...)) -> None:
+    """Print provenance events for the discovery process."""
+    _, led, _ = _discovery()
+    prov = led.provenance_for_project(project_id)
+    disc_actions = {"GENERATE", "RANK", "REJECT", "PRUNE", "CONFIDENCE_UPDATE",
+                    "TOOL_APPROVAL", "TOOL_PROPOSAL", "NEXT_EXPERIMENT"}
+    events = [p for p in prov if p["action"] in disc_actions]
+    typer.echo(f"Discovery provenance events: {len(events)}")
+    for ev in events[-20:]:
+        typer.echo(f"  {ev['at'][:19]}  {ev['action']:18} {ev['summary'][:60]}")
+
+
+@benchmark_app.command("hidden-dynamics")
+def benchmark_hidden_dynamics(
+    system: str = typer.Option("exponential_decay", help="System to discover"),
+    seeds: str = typer.Option("1,2", help="Comma-separated seeds"),
+    sandbox: str = typer.Option("subprocess", help="subprocess | docker"),
+    llm: bool = typer.Option(False, "--llm", help="Use Codex for generation + critique"),
+) -> None:
+    """Run the Hidden Dynamics Discovery Benchmark (Sprints 5–7 integration)."""
+    from ..benchmarks.hidden_dynamics import run_hidden_dynamics
+    from ..llm.providers import get_provider
+    from ..sandbox.runner import get_runner
+
+    _, led, store = _discovery()
+    proj = led.create_project(f"Hidden dynamics: {system}", domain="physics",
+                              description="Discovery Engine validation benchmark.")
+    seed_list = [int(s) for s in seeds.split(",") if s.strip()]
+    art = repo_root() / "research" / "artifacts" / f"{proj.id}_hidden_dynamics"
+    provider = get_provider("codex") if llm else None
+    rep = run_hidden_dynamics(led, store, proj.id, system=system, seeds=seed_list,
+                              artifacts_root=art, use_llm=llm, provider=provider,
+                              runner=get_runner(sandbox))
+    typer.echo(f"Project {proj.id} · system={system} (hidden family: {rep['hidden_family']})")
+    typer.echo(f"Candidates: {rep['n_candidates']} · falsifiable: {rep['n_falsifiable']} · "
+               f"rejected kept: {rep['n_rejected_kept']}")
+    typer.echo(f"Winner family: {rep['winner_family']} · EIG≈{rep['eig_bits']} bits")
+    typer.echo(f"poly9 extrapolation RMSE: {rep['poly9_extrapolation_rmse']:.1f} "
+               f"(winner {rep['winner_extrapolation_rmse']:.2f})")
+    typer.echo(f"Reproduced: {rep['reproduced']} · negatives: {rep['negative_records']}")
+    typer.echo(f"Next experiment: {rep['next_experiment']['experiment_id']} "
+               f"(+{len(rep['next_experiment']['alternatives'])} alternatives)")
+    typer.echo(f"Artifacts: {art}")
+    typer.echo("NOTE: synthetic data; model recovery, NOT scientific discovery.")
 
 
 @app.command("pilot")

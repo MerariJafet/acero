@@ -32,6 +32,15 @@ def test_domains_endpoint():
     assert c.get("/domains/nope/benchmark").status_code == 404
 
 
+def test_discovery_endpoints():
+    c = _client()
+    pid = c.post("/projects", json={"title": "Disc API", "domain": "physics"}).json()["id"]
+    # empty to start
+    assert c.get(f"/projects/{pid}/discovery/candidate").json() == []
+    assert c.get(f"/projects/{pid}/discovery/badkind").status_code == 400
+    assert c.get(f"/projects/{pid}/discovery/candidates/rejected").json() == []
+
+
 def test_project_crud_over_api():
     c = _client()
     created = c.post("/projects", json={"title": "API project", "domain": "math"}).json()

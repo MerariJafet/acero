@@ -1,0 +1,226 @@
+{
+  "$defs": {
+    "CandidateStatus": {
+      "enum": [
+        "PROPOSED",
+        "ACCEPTED",
+        "REJECTED",
+        "DUPLICATE",
+        "WEAKENED",
+        "REFUTED"
+      ],
+      "title": "CandidateStatus",
+      "type": "string"
+    },
+    "GenerationProvenance": {
+      "properties": {
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "generator": {
+          "default": "unknown",
+          "title": "Generator",
+          "type": "string"
+        },
+        "model": {
+          "default": "unknown",
+          "title": "Model",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "prompt_version": {
+          "default": "v1",
+          "title": "Prompt Version",
+          "type": "string"
+        },
+        "provider": {
+          "default": "unknown",
+          "title": "Provider",
+          "type": "string"
+        },
+        "token_usage": {
+          "additionalProperties": true,
+          "title": "Token Usage",
+          "type": "object"
+        }
+      },
+      "title": "GenerationProvenance",
+      "type": "object"
+    },
+    "HypothesisType": {
+      "enum": [
+        "DESCRIPTIVE",
+        "PREDICTIVE",
+        "MECHANISTIC",
+        "CAUSAL",
+        "MATHEMATICAL",
+        "COMPUTATIONAL",
+        "ANALOGICAL",
+        "NULL",
+        "BASELINE",
+        "BOUNDARY_CASE"
+      ],
+      "title": "HypothesisType",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "contradictory_sources": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Contradictory Sources",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "estimated_compute": {
+      "additionalProperties": true,
+      "title": "Estimated Compute",
+      "type": "object"
+    },
+    "falsification_conditions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Falsification Conditions",
+      "type": "array"
+    },
+    "generation": {
+      "$ref": "#/$defs/GenerationProvenance"
+    },
+    "hypothesis_type": {
+      "$ref": "#/$defs/HypothesisType",
+      "default": "PREDICTIVE"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "mechanism": {
+      "default": "",
+      "title": "Mechanism",
+      "type": "string"
+    },
+    "novelty_notes": {
+      "default": "",
+      "title": "Novelty Notes",
+      "type": "string"
+    },
+    "predicted_observations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Predicted Observations",
+      "type": "array"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "rejection": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rejection"
+    },
+    "required_data": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Required Data",
+      "type": "array"
+    },
+    "required_tools": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Required Tools",
+      "type": "array"
+    },
+    "required_variables": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Required Variables",
+      "type": "array"
+    },
+    "research_question_id": {
+      "title": "Research Question Id",
+      "type": "string"
+    },
+    "risks": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Risks",
+      "type": "array"
+    },
+    "scientific_rationale": {
+      "default": "",
+      "title": "Scientific Rationale",
+      "type": "string"
+    },
+    "scores": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Scores",
+      "type": "object"
+    },
+    "sources_verified": {
+      "default": false,
+      "title": "Sources Verified",
+      "type": "boolean"
+    },
+    "statement": {
+      "title": "Statement",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/CandidateStatus",
+      "default": "PROPOSED"
+    },
+    "supporting_sources": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Supporting Sources",
+      "type": "array"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "research_question_id",
+    "project_id",
+    "title",
+    "statement"
+  ],
+  "title": "HypothesisCandidate",
+  "type": "object"
+}
