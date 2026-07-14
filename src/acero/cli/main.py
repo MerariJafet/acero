@@ -52,9 +52,11 @@ app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(world_app, name="world")
 app.add_typer(cognitive_app, name="cognitive")
 app.add_typer(inference_app, name="inference")
+domains_app = typer.Typer(help="Scientific Domain Labs (Sprint 10)")
 app.add_typer(learner_app, name="learner")
 app.add_typer(learn_app, name="learn")
 app.add_typer(gate_app, name="gate")
+app.add_typer(domains_app, name="domains")
 
 
 def _understanding():
@@ -1071,6 +1073,145 @@ def gate_audit() -> None:
     typer.echo(f"gate self-audit: {rep.as_dict()['n_findings']} findings")
     for f in rep.findings:
         typer.echo(f"  [{f.severity}] {f.concern}: {f.detail}")
+
+
+# --- Scientific Domain Labs (Sprint 10) -----------------------------------
+
+@domains_app.command("list")
+def domains_list() -> None:
+    """List the scientific domain labs."""
+    from ..domains.core.registry import all_labs
+
+    for lab in all_labs():
+        d = lab.domain()
+        typer.echo(f"  {d.id:10s} {d.name}  [safety={d.safety_class.value}]")
+
+
+@domains_app.command("inspect")
+def domains_inspect(domain: str = typer.Argument(...)) -> None:
+    """Inspect a domain lab (ontology, concepts, models, gate rules)."""
+    from ..domains.core.registry import get_lab
+
+    d = get_lab(domain).domain()
+    typer.echo(f"{d.name}\n  ontology: {d.ontology}")
+    typer.echo(f"  concepts: {[c.name for c in d.concepts]}")
+    typer.echo(f"  models: {[m.name for m in d.models]}")
+    typer.echo(f"  solvers: {d.solvers}")
+    typer.echo(f"  gate rules: {d.gate_rule_ids}")
+
+
+@domains_app.command("capabilities")
+def domains_capabilities(domain: str = typer.Argument(...)) -> None:
+    """Show what a domain lab can and cannot do."""
+    from ..domains.core.registry import get_lab
+
+    c = get_lab(domain).domain().capabilities
+    typer.echo(f"CAN: {c.can_do}")
+    typer.echo(f"CANNOT: {c.cannot_do}")
+    typer.echo(f"approximations: {c.approximations}")
+    typer.echo(f"needs collaboration: {c.needs_collaboration}")
+
+
+@domains_app.command("gate-rules")
+def domains_gate_rules(domain: str = typer.Argument(...)) -> None:
+    """Show the domain-specific gate rules."""
+    from ..domains.core.registry import get_lab
+
+    typer.echo("\n".join(f"  - {r}" for r in get_lab(domain).domain().gate_rule_ids))
+
+
+@domains_app.command("benchmark")
+def domains_benchmark(domain: str = typer.Argument(...)) -> None:
+    """Run a domain lab's benchmark suite."""
+    from ..domains.core.registry import get_lab
+
+    b = get_lab(domain).benchmark()
+    for name, case in b.items():
+        typer.echo(f"  {'✓' if case.get('passed') else '✗'} {name}")
+    typer.echo(f"{sum(bool(c['passed']) for c in b.values())}/{len(b)} cases pass")
+
+
+def _domain_bench_cmd(domain: str):
+    def _cmd() -> None:
+        from ..domains.core.registry import get_lab
+        b = get_lab(domain).benchmark()
+        for name, case in b.items():
+            typer.echo(f"  {'✓' if case.get('passed') else '✗'} {name}")
+        typer.echo(f"{sum(bool(c['passed']) for c in b.values())}/{len(b)} cases pass")
+    return _cmd
+
+
+for _d in ("physics", "astronomy", "genetics", "chemistry"):
+    _sub = typer.Typer(help=f"{_d.title()} Lab")
+    _sub.command("benchmark")(_domain_bench_cmd(_d))
+    app.add_typer(_sub, name=_d)
+
+
+@benchmark_app.command("multi-domain")
+def benchmark_multi_domain() -> None:
+    """Run the Multi-Domain Scientific Reasoning Benchmark."""
+    from ..benchmarks.multi_domain import run_multi_domain
+
+    r = run_multi_domain()
+    for track, data in r.items():
+        typer.echo(f"{track}: {data}")
+    typer.echo("NOTE: computational labs — a simulation is NOT experimental validation.")
+
+
+# --- Inline gate observability + bypass (Sprint 10) -----------------------
+
+@gate_app.command("bypass-test")
+def gate_bypass_test() -> None:
+    """Attempt seven gate bypasses; all must be blocked."""
+    from ..benchmarks.gate_bypass import run_gate_bypass
+
+    r = run_gate_bypass()
+    for name, blocked in r["checks"].items():
+        typer.echo(f"  {'BLOCKED' if blocked else 'LEAKED!'}  {name}")
+    typer.echo(f"all blocked: {r['all_blocked']} ({r['n_blocked']}/{r['n']})")
+
+
+@gate_app.command("metrics")
+def gate_metrics() -> None:
+    """Show a demo run's inline-gate metrics."""
+    from ..benchmarks.gate_bypass import run_gate_bypass
+
+    run_gate_bypass()
+    typer.echo("inline gate metrics are per-enforcer; see 'gate bypass-test' for a live run")
+
+
+# --- Hybrid grader (Sprint 10) --------------------------------------------
+
+@learner_app.command("grade-hybrid")
+def learner_grade_hybrid(
+    response: str = typer.Option(..., help="the learner response"),
+    concept: str = typer.Option("governing_structure"),
+) -> None:
+    """Grade a response with the hybrid grader (deterministic authority + advisory)."""
+    from ..understanding.grading.aggregation import grade_hybrid
+
+    g = grade_hybrid(
+        "Explain why recovering an equation from data is not discovering a law.",
+        response, ["imposed library", "fit", "not a law", "system identification"],
+        forbidden_elements=["discovered a law of nature", "proves the mechanism"])
+    typer.echo(f"verdict: {g.verdict.value}  score={g.score}  "
+               f"can_reach_mastery={g.can_reach_mastery}")
+    for r in g.reasons:
+        typer.echo(f"  - {r}")
+
+
+@learner_app.command("grader-benchmark")
+def learner_grader_benchmark() -> None:
+    """Run the grader calibration + adversarial audit."""
+    from ..understanding.grading.audit import run as audit_run
+    from ..understanding.grading.calibration import run as cal_run
+
+    c = cal_run()
+    typer.echo(f"calibration: agreement={c.agreement} FP={c.false_positives} "
+               f"FN={c.false_negatives}")
+    a = audit_run()
+    typer.echo(f"adversarial: any_fooled={a.any_fooled} "
+               f"({sum(1 for x in a.attacks if not x.fooled)}/{len(a.attacks)} resisted)")
 
 
 @app.command()

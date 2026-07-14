@@ -35,14 +35,37 @@ class GradeResult:
                 "rubric_version": self.rubric_version}
 
 
+_MENTION_STOPWORDS = {"the", "and", "for", "with", "that", "this", "are", "was", "not",
+                      "its", "into", "from", "than", "then", "our", "out", "over", "a"}
+
+
+def _content_keywords(element: str) -> list[str]:
+    return [k for k in re.split(r"[\s/|]+", element.lower())
+            if len(k) > 2 and k not in _MENTION_STOPWORDS]
+
+
 def _mentions(text: str, element: str) -> bool:
-    """Does the response cover this expected element? Matches any of its keywords."""
+    """Does the response cover this expected element? Matches half of its CONTENT
+    keywords (stopwords excluded so filler words don't create matches)."""
     low = text.lower()
-    kws = [k for k in re.split(r"[\s/|]+", element.lower()) if len(k) > 2]
+    kws = _content_keywords(element)
     if not kws:
         return element.lower() in low
     hits = sum(1 for k in kws if k in low)
     return hits >= max(1, len(kws) // 2)
+
+
+def _contains_forbidden(text: str, element: str) -> bool:
+    """A forbidden claim must match PRECISELY: every content keyword present (a phrase
+    match), not merely a filler word — otherwise 'proves the mechanism' would match any
+    response containing 'the'."""
+    low = text.lower()
+    if element.lower() in low:
+        return True
+    kws = _content_keywords(element)
+    if not kws:
+        return element.lower() in low
+    return all(k in low for k in kws)
 
 
 _STOPWORDS = {"the", "and", "for", "with", "that", "this", "are", "was", "has", "not",
@@ -81,7 +104,7 @@ def grade(response: str, expected_elements: list[str], *,
 
     red: list[str] = []
     for bad in (forbidden_elements or []):
-        if _mentions(response, bad):
+        if _contains_forbidden(response, bad):
             red.append(bad)
     penalty = 0.34 * len(red)
 

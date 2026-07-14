@@ -70,6 +70,14 @@ salida. `reproduced = True` solo si coinciden. Prueba:
 - La persistencia (perfil, estados, evidencia, predicciones, historial) va por el ledger con
   procedencia, como los demás stores.
 
+## Domain Labs + Inline Gate + Hybrid Grader (Sprint 10)
+- Los benchmarks de dominio usan RNG con semilla explícita → deterministas dado el entorno.
+  Los solvers registran método/paso/estabilidad/error.
+- El gate in-line es determinista por regla; el resultado de una mutación protegida es
+  reproducible dado el artefacto; los rechazos se registran.
+- El grader determinista es reproducible dado texto y rúbrica; la capa semántica (Codex) se
+  registra aparte (no bit-reproducible) y nunca cambia el resultado a dominio.
+
 ## Límites
 - Diferencias de BLAS/versión de numpy entre máquinas pueden alterar los últimos
   dígitos; por eso se comparan resultados **dentro de la misma máquina/entorno**

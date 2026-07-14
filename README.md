@@ -30,7 +30,8 @@ limpios). Sprints 5–12 planificados. Ver `docs/roadmap/12_sprints.md`.
 | 8.5–8.7 | Cognitive Discovery Engine (conceptos, analogías, primeros principios) | ✅ |
 | 8.8–8.9 | Governing Structure Inference Engine (SINDy, invariantes, gate epistémico) | ✅ |
 | 9 | Human Understanding Engine + Global Epistemic Gate | ✅ |
-| 10–12 | Robustez → publicación | ⏳ backlog |
+| 10 | Scientific Domain Labs + Inline Gate + Hybrid Grader | ✅ |
+| 11–12 | Robustez → publicación | ⏳ backlog |
 
 ## Principios no negociables
 
@@ -137,6 +138,16 @@ acero gate rules [--stage INFERENCE]                # global epistemic gate rule
 acero gate check <STAGE> [--bad]                    # run the gate for a pipeline stage
 acero gate report                                   # run the full pipeline gate
 acero gate audit                                    # adversarial self-audit of the gate
+
+# Scientific Domain Labs + Inline Gate + Hybrid Grader (Sprint 10)
+acero domains list                                  # physics / astronomy / genetics / chemistry
+acero domains inspect|capabilities|gate-rules <domain>
+acero domains benchmark <domain>                    # 8-case domain benchmark
+acero physics|astronomy|genetics|chemistry benchmark
+acero benchmark multi-domain                        # 4-track reasoning benchmark
+acero gate bypass-test                              # 7 bypass attempts (all blocked)
+acero learner grade-hybrid --response "..."         # deterministic + advisory grade
+acero learner grader-benchmark                      # calibration + adversarial audit
 ```
 
 ## Arquitectura

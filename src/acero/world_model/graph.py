@@ -96,7 +96,12 @@ class WorldModel:
                       counter: float = 0.0, replication: int = 0, negative: int = 0,
                       contradiction: int = 0, open_question: int = 0,
                       source: str | None = None, actor: str = "system") -> WorldNode:
-        """Apply an evidence update to a node's belief. Versioned + provenance."""
+        """Apply an evidence update to a node's belief. Versioned + provenance.
+
+        A protected mutation (Sprint 10): when inline enforcement is active it must run
+        inside a gate context, else BypassDetected is raised."""
+        from ..epistemic_gate.transaction import require_context
+        require_context("world_model.update_belief")
         with self._sf() as s:
             row = s.get(WorldNodeRow, node_id)
             if row is None:
@@ -145,7 +150,9 @@ class WorldModel:
              confidence: float = 0.5, actor: str = "system", **kw: Any) -> WorldEdge:
         """Create a typed relation. Idempotent: a duplicate (source, target, type)
         is NOT created again — the existing active edge is returned (audit fix for
-        redundant relations)."""
+        redundant relations). Protected: guarded by the inline gate (Sprint 10)."""
+        from ..epistemic_gate.transaction import require_context
+        require_context("world_model.link")
         with self._sf() as s:
             if not s.get(WorldNodeRow, source) or not s.get(WorldNodeRow, target):
                 raise IntegrityError("Edge endpoints must be existing world nodes")

@@ -6,7 +6,7 @@ import math
 from collections.abc import Callable
 from typing import Any
 
-from .base import BenchmarkCase, BenchmarkResult, DomainPlugin, ValidationResult
+from ..base import BenchmarkCase, BenchmarkResult, DomainPlugin, ValidationResult
 
 
 class AstronomyPlugin(DomainPlugin):

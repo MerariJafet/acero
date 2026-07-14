@@ -16,6 +16,7 @@ Sprints 5–12 están **planificados** (ver `docs/backlog/sprints_05_12.md`).
 | 8.5–8.7 | Cognitive Discovery Engine | ✅ Hecho | Concept Engine, Analogy Engine (oscilador↔RLC verificado), First Principles Engine (dimensiones/Buckingham-Pi/derivaciones SymPy) |
 | 8.8–8.9 | Governing Structure Inference Engine | ✅ Hecho | SINDy/STLSQ, invariantes, regímenes, identificabilidad, experimentos discriminantes, calibración, gate epistémico; dato real (manchas solares) |
 | 9 | Human Understanding Engine + Global Epistemic Gate | ✅ Hecho | Modelo del investigador (evidencia de desempeño), misconceptions, currículum por investigación, explicaciones por niveles, predicción previa, gate de comprensión con override, y gate epistémico transversal (81 reglas, 11 etapas) |
+| 10 | Scientific Domain Labs + Inline Gate + Hybrid Grader | ✅ Hecho | 4 labs computacionales (física/astronomía/genética/química) con clasificación de resultado y reglas de dominio; gate epistémico in-line obligatorio (bloqueo transaccional, bypass detection); grader híbrido (determinista + Codex advisory) |
 | 9 | Tutor científico y aprendizaje humano | ⏳ Backlog | Perfil, evaluación, explicaciones por niveles, ruta de aprendizaje |
 | 10 | Especialización científica | 🟡 Parcial | Plugins iniciales física/astronomía/genética/química (sin wet-lab), 14 benchmarks verdes — `docs/domains/plugins.md` |
 | 11 | Evaluación, auditoría y ciencia adversarial | ⏳ Backlog | Benchmarks, calibración, red-teaming, p-hacking/HARKing/leakage |

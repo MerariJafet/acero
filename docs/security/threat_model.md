@@ -39,6 +39,13 @@ código de experimentos** y la **fuga de secretos/costos**.
 | Gate paternalista / bloqueo excesivo | understanding | tareas de bajo riesgo nunca bloqueadas; override humano con razón | `test_understanding_gate_engine.py::test_low_risk_decision_never_blocked` |
 | Conocimiento defectuoso aceptado sin gate | epistemic_gate | 81 reglas por etapa; input ausente = advertencia no-evaluable; pipeline se detiene en BLOCKED | `tests/unit/test_epistemic_gate.py` |
 | Codex legislando el gate | epistemic_gate | advisory salvo que nombre una regla; promover exige checker + prueba | `test_epistemic_gate.py::test_promotion_requires_checker_and_test` |
+| Mutación científica que salta el gate | epistemic_gate | `enforce()` corre el gate ANTES de mutar; escritura protegida fuera de contexto lanza BypassDetected | `tests/unit/test_inline_gate.py`, `benchmarks/gate_bypass.py` |
+| Estado parcial tras un bloqueo | epistemic_gate | gate-then-mutate; rollback; sin mutación si bloquea | `test_inline_gate.py::test_blocked_mutation_leaves_no_state` |
+| Override de una regla crítica | epistemic_gate | reglas no-overridables (fabricación/seguridad/procedencia/autoría/publicación) | `test_inline_gate.py::test_override_refused_on_non_overridable` |
+| Simulación presentada como validación física | domains | clasificación de resultado + regla de dominio bloquea | `tests/unit/test_domain_labs.py::test_simulation_not_claimed_as_validation` |
+| Asociación presentada como causalidad | domains | regla `association_not_causal` bloquea | `test_domain_labs.py::test_association_not_causal_blocked` |
+| Petición peligrosa (patógeno/toxina/explosivo) | domains | screening de tokens prohibidos en genética/química | `tests/security/test_sprint10_security.py` |
+| Manipulación del grader (inyección/copia de rúbrica) | understanding | autoridad determinista; Codex advisory nunca da dominio; eco/contradicción fallan | `tests/unit/test_hybrid_grader.py`, `test_sprint10_security.py` |
 
 ## Riesgos abiertos (documentados, no resueltos)
 1. El sandbox de subproceso es más débil que un contenedor/nsjail. Para código

@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from .base import BenchmarkCase, BenchmarkResult, DomainPlugin, ValidationResult
+from ..base import BenchmarkCase, BenchmarkResult, DomainPlugin, ValidationResult
 
 DNA_ALPHABET = set("ACGT")
 RNA_ALPHABET = set("ACGU")

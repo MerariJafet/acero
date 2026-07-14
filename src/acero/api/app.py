@@ -291,6 +291,60 @@ def create_app() -> FastAPI:
             artifact = {}
         return GlobalGate().check(st, artifact).as_dict()
 
+    # --- Scientific Domain Labs (Sprint 10) ------------------------------
+    @app.get("/domains/labs")
+    def domain_labs() -> list[dict]:
+        from ..domains.core.registry import all_labs
+
+        return [lab.domain().info() for lab in all_labs()]
+
+    @app.get("/domains/labs/{name}")
+    def domain_lab(name: str) -> dict:
+        from ..domains.core.registry import get_lab
+
+        try:
+            return get_lab(name).domain().info()
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.get("/domains/labs/{name}/capabilities")
+    def domain_lab_capabilities(name: str) -> dict:
+        from ..domains.core.registry import get_lab
+
+        try:
+            return get_lab(name).domain().capabilities_dict()
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.get("/domains/labs/{name}/benchmark")
+    def domain_lab_benchmark(name: str) -> dict:
+        from ..domains.core.contracts import to_native
+        from ..domains.core.registry import get_lab
+
+        try:
+            return to_native(get_lab(name).benchmark())
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.get("/benchmarks/multi-domain")
+    def multi_domain_benchmark() -> dict:
+        from ..benchmarks.multi_domain import run_multi_domain
+
+        return run_multi_domain()
+
+    @app.get("/gate/bypass-test")
+    def gate_bypass_test() -> dict:
+        from ..benchmarks.gate_bypass import run_gate_bypass
+
+        return run_gate_bypass()
+
+    @app.get("/grader/benchmark")
+    def grader_benchmark() -> dict:
+        from ..understanding.grading.audit import run as audit_run
+        from ..understanding.grading.calibration import run as cal_run
+
+        return {"calibration": cal_run().as_dict(), "adversarial": audit_run().as_dict()}
+
     return app
 
 

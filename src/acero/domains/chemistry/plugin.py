@@ -10,7 +10,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from .base import BenchmarkCase, BenchmarkResult, DomainPlugin, ValidationResult
+from ..base import BenchmarkCase, BenchmarkResult, DomainPlugin, ValidationResult
 
 R_GAS = 8.314462618  # J/(mol*K)
 

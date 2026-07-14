@@ -6,7 +6,7 @@ import math
 from collections.abc import Callable
 from typing import Any
 
-from .base import BenchmarkCase, BenchmarkResult, DomainPlugin, ValidationResult
+from ..base import BenchmarkCase, BenchmarkResult, DomainPlugin, ValidationResult
 
 G_EARTH = 9.80665  # m/s^2
 

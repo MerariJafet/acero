@@ -91,3 +91,31 @@ def test_learn_benchmark_endpoint():
     r = c.get("/learn/benchmark").json()
     assert r["case_4_adversarial_gate"]["gate_blocked"] is True
     assert r["transfer"]["transfer_pass"] is True
+
+
+# --- Sprint 10: Domain Labs + inline gate + hybrid grader ------------------
+
+def test_domain_labs_endpoints():
+    c = _client()
+    labs = c.get("/domains/labs").json()
+    assert {lb["id"] for lb in labs} == {"physics", "astronomy", "genetics", "chemistry"}
+    phys = c.get("/domains/labs/physics/benchmark").json()
+    assert len(phys) == 8
+    caps = c.get("/domains/labs/genetics/capabilities").json()
+    assert caps["cannot_do"]
+    assert c.get("/domains/labs/nope").status_code == 404
+
+
+def test_multi_domain_and_bypass_endpoints():
+    c = _client()
+    md = c.get("/benchmarks/multi-domain").json()
+    assert md["track_chemistry"]["gate_blocks_stoichiometry_violation"] is True
+    bp = c.get("/gate/bypass-test").json()
+    assert bp["all_blocked"] is True
+
+
+def test_grader_benchmark_endpoint():
+    c = _client()
+    g = c.get("/grader/benchmark").json()
+    assert g["calibration"]["false_positives"] == 0
+    assert g["adversarial"]["any_fooled"] is False

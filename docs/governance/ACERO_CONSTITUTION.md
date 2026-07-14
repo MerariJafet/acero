@@ -149,6 +149,38 @@ también como gate results, sin reglas contradictorias duplicadas.
 *Cumplimiento:* `epistemic_gate/` (models, registry, rules, engine, policy_bridge, audit),
 `tests/unit/test_epistemic_gate.py`.
 
+## 14h. El gate se aplica in-line; ninguna mutación lo evita (Inline Gate)
+El gate epistémico no solo reporta: **impide físicamente** que un artefacto defectuoso
+avance. Toda mutación científica relevante (registrar evidencia, actualizar creencia,
+promover hipótesis, aprobar/cerrar experimento, aceptar inferencia/analogía/derivación,
+crear conclusión, revisión humana, export) corre el gate ANTES de mutar; un bloqueo no deja
+estado parcial y guarda un registro de rechazo. Una escritura protegida fuera del contexto
+del gate lanza `BypassDetected`. Los overrides están restringidos y las reglas de
+fabricación/seguridad/procedencia/autoría/integridad de publicación **no son overridables**.
+Codex nunca autoriza una mutación.
+*Cumplimiento:* `epistemic_gate/{enforcement,transaction,middleware}`, `integration/world_model`,
+`tests/unit/test_inline_gate.py`, `benchmarks/gate_bypass.py`.
+
+## 14i. Razonar dentro de cada ciencia; una simulación no es validación (Domain Labs)
+Cada laboratorio de dominio declara qué sabe y qué NO sabe hacer, sus aproximaciones,
+riesgos y lo que requiere colaboración institucional. Todo resultado se **clasifica**
+(cálculo/simulación/asociación/ajuste/…); ACERO nunca infla una simulación a validación
+física/biológica/química, ni una asociación a causalidad, ni viola conservación
+(masa/carga/estequiometría). Genética y química son estrictamente computacionales y
+rechazan peticiones peligrosas. **Cuatro laboratorios computacionales no equivalen a cuatro
+laboratorios físicos.**
+*Cumplimiento:* `domains/core/{contracts,gate_rules}`, `domains/{physics,astronomy,genetics,chemistry}`,
+`tests/unit/test_domain_labs.py`, `benchmarks/multi_domain.py`.
+
+## 14j. Comprensión medida por reglas + evidencia, con Codex advisory (Hybrid Grader)
+La comprensión se califica con un grader híbrido cuya **autoridad es determinista**
+(rúbrica, afirmaciones prohibidas, contradicción, evidencia acumulada). Codex es un
+asesor semántico que puede reconocer paráfrasis válidas y matices, pero **nunca certifica
+dominio**: a lo sumo eleva a PASS_WITH_REVIEW con un fragmento citado real, jamás a
+MASTERED. Los desacuerdos se registran; el eco de palabras clave y la contradicción fallan.
+*Cumplimiento:* `understanding/grading/`, `tests/unit/test_hybrid_grader.py`,
+`understanding/grading/{calibration,audit}`.
+
 ## 14. Comprensión humana
 Ningún avance de la IA debe dejar atrás la comprensión del investigador. Cada
 ciclo produce artefactos de aprendizaje.
