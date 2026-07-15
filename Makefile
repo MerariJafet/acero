@@ -50,6 +50,9 @@ doctor:
 serve:
 	$(PY) -m acero.cli.main serve
 
+run:
+	$(PY) -m acero.cli.main portal
+
 pilot:
 	$(PY) -m acero.cli.main pilot
 

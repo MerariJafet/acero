@@ -49,4 +49,7 @@ documentados) por encima de cobertura superficial de los 12.
 | 13 | Consolidación + schema versioning + doctor --deep | ✅ Hecho |
 | 14 | Runtime persistente multiproceso (workers, leases, tokens, chaos 12/12) | ✅ Hecho |
 | 16 | Research Program OS (programas, portfolio, budget duro, retrospectivas) | ✅ Hecho |
-| 15,17-20 | Portal, astronomía real, autoevaluación, colaboración, release | ⏳ pendiente |
+| 15 | Unified Research Portal (SPA vanilla-JS servida por FastAPI, datos reales) | ✅ Hecho |
+| 17 | Programa astronómico real (SILSO; 11.2yr, AR(1) red-noise; sin descubrimiento) | ✅ Hecho |
+| 20 | ACERO 2.0.0-rc1 (manifiesto, backup/restore, aceptación final) | ✅ Hecho |
+| 18,19 | Autoevaluación continua, colaboración/revisión externa | ⏳ pendiente |

@@ -59,6 +59,8 @@ secrets_app = typer.Typer(help="Local HMAC secret management (Sprint 14)")
 worker_app = typer.Typer(help="Persistent research worker runtime (Sprint 14)")
 program_app = typer.Typer(help="Research Program Operating System (Sprint 16)")
 studies_app = typer.Typer(help="Executed research studies on real data (Sprint 17)")
+backup_app = typer.Typer(help="Local backup / verify / restore (Sprint 20)")
+release_app = typer.Typer(help="Release candidate manifest + acceptance (Sprint 20)")
 app.add_typer(learner_app, name="learner")
 app.add_typer(learn_app, name="learn")
 app.add_typer(gate_app, name="gate")
@@ -69,6 +71,8 @@ app.add_typer(secrets_app, name="secrets")
 app.add_typer(worker_app, name="worker")
 app.add_typer(program_app, name="program")
 app.add_typer(studies_app, name="studies")
+app.add_typer(backup_app, name="backup")
+app.add_typer(release_app, name="release")
 
 
 def _understanding():
@@ -1718,6 +1722,76 @@ def program_prioritize() -> None:
                    "data_available": 0.3}})
     for s in pf.ranked():
         typer.echo(f"  {s.project_id}: view={s.composite_view} dims={s.dimensions}")
+
+
+# --- Backup / restore (Sprint 20) -----------------------------------------
+
+@backup_app.command("create")
+def backup_create(out: str = typer.Option("", help="backup directory")) -> None:
+    """Create a local, hashed backup of the ACERO database."""
+    from ..release import backup
+
+    path = out or str(repo_root() / "backups" / "latest")
+    m = backup.create(path)
+    typer.echo(f"backup created at {path} · files={list(m['files'])} · "
+               f"schema=v{m['schema_version']} (local_only)")
+
+
+@backup_app.command("verify")
+def backup_verify(path: str = typer.Argument(...)) -> None:
+    """Verify a backup's integrity against its manifest."""
+    from ..release import backup
+
+    r = backup.verify(path)
+    typer.echo(f"ok={r['ok']} failures={r['failures']} "
+               f"version={r['acero_version']} schema=v{r['schema_version']}")
+    if not r["ok"]:
+        raise typer.Exit(1)
+
+
+@backup_app.command("restore")
+def backup_restore(path: str = typer.Argument(...)) -> None:
+    """Restore the database from a VERIFIED backup (refuses if verification fails)."""
+    from ..release import backup
+
+    try:
+        r = backup.restore(path)
+    except backup.BackupError as exc:
+        typer.echo(f"restore BLOCKED: {exc}")
+        raise typer.Exit(1) from exc
+    typer.echo(f"restored={r['restored']} → {r['target']} (version {r['acero_version']})")
+
+
+# --- Release candidate (Sprint 20) ----------------------------------------
+
+@release_app.command("manifest")
+def release_manifest(write: bool = typer.Option(False, "--write", help="write to docs/releases")) -> None:
+    """Print (or write) the release manifest."""
+    from ..release.manifest import build_manifest, write_manifest
+
+    m = build_manifest()
+    typer.echo(f"{m['name']} {m['version']} · commit {m['commit']} · branch {m['branch']}")
+    typer.echo(f"  packages={m['n_packages']} · gate_rules={m['gate_rules']} · "
+               f"schema=v{m['schema_version']}")
+    typer.echo(f"  auto_publication={m['security']['auto_publication']} · "
+               f"benchmarks={len(m['benchmarks'])}")
+    typer.echo(f"  known_issues: {len(m['known_issues'])}")
+    if write:
+        typer.echo(f"written: {write_manifest()}")
+
+
+@release_app.command("accept")
+def release_accept() -> None:
+    """Run FINAL ACCEPTANCE (all gauntlets). Reports; never approves the release itself."""
+    from ..release.manifest import final_acceptance
+
+    r = final_acceptance()
+    for name, g in r["gauntlets"].items():
+        typer.echo(f"  {'✓' if g['all_passed'] else '✗'} {name}: {g['detail']}")
+    typer.echo(f"verdict: {r['verdict']}")
+    typer.echo(r["note"])
+    if not r["all_gauntlets_passed"]:
+        raise typer.Exit(1)
 
 
 # --- Executed research studies (Sprint 17) --------------------------------

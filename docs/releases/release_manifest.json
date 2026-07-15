@@ -1,0 +1,84 @@
+{
+  "name": "ACERO",
+  "version": "2.0.0-rc1",
+  "commit": "7b0cbdf",
+  "branch": "integration/acero-v2-program",
+  "schema_version": 3,
+  "packages": [
+    "api",
+    "benchmarks",
+    "cli",
+    "cognitive",
+    "core",
+    "discovery",
+    "domains",
+    "epistemic_gate",
+    "epistemology",
+    "evaluation",
+    "experiment",
+    "hypothesis",
+    "inference",
+    "integrations",
+    "knowledge",
+    "ledger",
+    "literature",
+    "llm",
+    "pedagogy",
+    "policies",
+    "portal",
+    "program",
+    "provenance",
+    "publication",
+    "release",
+    "reliability",
+    "runtime",
+    "sandbox",
+    "studies",
+    "understanding",
+    "world_model"
+  ],
+  "n_packages": 31,
+  "gate_rules": 81,
+  "benchmarks": [
+    "governing_dynamics",
+    "cross_domain",
+    "human_understanding",
+    "reliability_gauntlet",
+    "review_gauntlet",
+    "chaos_gauntlet",
+    "multi_domain",
+    "gate_bypass"
+  ],
+  "datasets": [
+    {
+      "name": "SILSO sunspots",
+      "license": "public domain",
+      "gated": true
+    },
+    {
+      "name": "NASA exoplanets",
+      "license": "public",
+      "gated": true
+    }
+  ],
+  "licenses": {
+    "code": "see repository",
+    "datasets": "public/public-domain only"
+  },
+  "security": {
+    "auto_publication": false,
+    "sandbox": "subprocess/docker",
+    "secrets": "env HMAC (never in Git)",
+    "inline_gate": true
+  },
+  "compatibility": {
+    "python": "3.12",
+    "db": "SQLite (PostgreSQL optional)"
+  },
+  "known_issues": [
+    "portal is a vanilla-JS SPA (no Vitest/Playwright) \u2014 pytest route/DOM/security tests",
+    "worker drains synchronously (no long-lived daemon)",
+    "single astronomy study; instrument/pipeline dependence not assessed",
+    "no Alembic (idempotent create_all + lightweight schema versioning)"
+  ]
+}
