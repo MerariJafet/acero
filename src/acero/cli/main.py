@@ -58,6 +58,7 @@ publication_app = typer.Typer(help="Publication candidates (never auto-publishes
 secrets_app = typer.Typer(help="Local HMAC secret management (Sprint 14)")
 worker_app = typer.Typer(help="Persistent research worker runtime (Sprint 14)")
 program_app = typer.Typer(help="Research Program Operating System (Sprint 16)")
+studies_app = typer.Typer(help="Executed research studies on real data (Sprint 17)")
 app.add_typer(learner_app, name="learner")
 app.add_typer(learn_app, name="learn")
 app.add_typer(gate_app, name="gate")
@@ -67,6 +68,7 @@ app.add_typer(publication_app, name="publication")
 app.add_typer(secrets_app, name="secrets")
 app.add_typer(worker_app, name="worker")
 app.add_typer(program_app, name="program")
+app.add_typer(studies_app, name="studies")
 
 
 def _understanding():
@@ -1716,6 +1718,37 @@ def program_prioritize() -> None:
                    "data_available": 0.3}})
     for s in pf.ranked():
         typer.echo(f"  {s.project_id}: view={s.composite_view} dims={s.dimensions}")
+
+
+# --- Executed research studies (Sprint 17) --------------------------------
+
+@studies_app.command("stellar-variability")
+def studies_stellar_variability(
+    surrogates: int = typer.Option(150, help="AR(1) red-noise surrogates for significance"),
+) -> None:
+    """Run the real astronomy program on the public SILSO sunspot series (no discovery)."""
+    from ..studies.stellar_variability import run_program
+
+    r = run_program(n_surrogates=surrogates)
+    a = r["analysis"]
+    typer.echo(f"Program: {r['program']}")
+    typer.echo(f"dataset: n={r['dataset']['n']} sha={r['dataset']['sha256'][:12]} "
+               f"({r['dataset']['reference']})")
+    typer.echo(f"dominant period: {a['dominant_period_years']} yr · class: {a['classification']}")
+    b = a["bootstrap_period"]
+    typer.echo(f"cycle length: {b.get('median_years')} yr, 95% CI {b.get('ci95_years')} "
+               f"({b.get('n_cycles')} cycles)")
+    s = a["surrogate"]
+    typer.echo(f"significance vs {s['null_model']}: p={s['p_value']} "
+               f"(significant={s['significant_vs_null']})")
+    typer.echo(f"low-activity regimes (Dalton-like): {a['low_activity_decades'][:4]}")
+    typer.echo("hypotheses:")
+    for h, v in r["hypotheses"].items():
+        typer.echo(f"  {h}: {v}")
+    typer.echo("CANNOT conclude:")
+    for c in r["cannot_conclude"]:
+        typer.echo(f"  · {c}")
+    typer.echo("External review PENDING. No discovery is claimed.")
 
 
 # --- Unified Research Portal (Sprint 15) ----------------------------------
