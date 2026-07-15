@@ -54,6 +54,10 @@ código de experimentos** y la **fuga de secretos/costos**.
 | Reejecución presentada como replicación | reliability | niveles de replicación; reejecución NO independiente | `test_evidence_dependency.py::test_reexecution_is_not_replication` |
 | Confianza sobreafirmada / mal calibrada | reliability | Brier/ECE/coverage; INSUFFICIENT; recalibración sin leakage | `tests/unit/test_reliability_calibration.py` |
 | Publicación prematura / descubrimiento afirmado | reliability | readiness techo human-review; sin DISCOVERY_CONFIRMED; sin auto-publicación | `tests/unit/test_red_team_scorecard.py` |
+| Export/publicación sin revisión humana | publication | export exige política + readiness + comprensión + gate + aprobación humana vinculante | `tests/unit/test_publication_review.py` |
+| Aprobación por sello automático (rubber-stamp) | publication | APPROVE exige reconocimientos + comprensión + razón declarada | `test_publication_review.py::test_approval_requires_a_stated_reason` |
+| Expediente alterado tras la aprobación | publication | hash de contenido ata la aprobación; un cambio bloquea el export | `test_publication_review.py::test_export_blocked_if_dossier_changed_after_approval` |
+| Revisor IA aprobando | publication | el revisor debe ser humano (no ACERO/IA) en review y export | `test_publication_review.py::test_ai_reviewer_cannot_approve` |
 
 ## Riesgos abiertos (documentados, no resueltos)
 1. El sandbox de subproceso es más débil que un contenedor/nsjail. Para código

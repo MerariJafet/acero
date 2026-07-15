@@ -396,6 +396,50 @@ def create_app() -> FastAPI:
                             provenance=0.9)
         return r["publication_candidate"]
 
+    # --- Human Scientific Review & Publication Preparation (Sprint 12) ----
+    @app.get("/publication/dossier")
+    def publication_dossier(ready: bool = True) -> dict:
+        from ..publication.dossier import DossierEvidence
+        from ..publication.engine import build_dossier
+
+        d = build_dossier(
+            "api", "damped oscillation recovered", externally_validated=ready,
+            reproducibility=0.9 if ready else 0.4,
+            supporting=[DossierEvidence("e1", "clean recovery", "supporting")],
+            counter=[DossierEvidence("c1", "noise degrades fit", "counter")],
+            limitations=["computational only"])
+        return d.as_dict()
+
+    @app.get("/publication/review-gauntlet")
+    def publication_review_gauntlet() -> dict:
+        import tempfile
+
+        from ..benchmarks.review_gauntlet import run_review_gauntlet
+
+        with tempfile.TemporaryDirectory() as td:
+            return run_review_gauntlet(td)
+
+    @app.get("/publication/export-decision")
+    def publication_export_decision(reviewed: bool = True) -> dict:
+        """Show whether a local export WOULD be permitted (never writes/publishes)."""
+        from ..publication.dossier import DossierEvidence
+        from ..publication.engine import build_dossier
+        from ..publication.export import evaluate_export
+        from ..publication.review import HumanReviewSession, ReviewDecision
+
+        d = build_dossier("api", "claim", externally_validated=True,
+                          supporting=[DossierEvidence("e1", "x", "supporting")],
+                          limitations=["computational only"])
+        review = None
+        if reviewed:
+            review = HumanReviewSession(dossier_id=d.id, reviewer="Merari",
+                                        comprehension_ok=True)
+            for s in ("central_claim", "main_evidence", "main_counter_evidence",
+                      "limitations", "reliability", "what_remains_to_validate_externally"):
+                review.acknowledge(s)
+            review.record(ReviewDecision.APPROVE_FOR_EXTERNAL_REVIEW, dossier=d, reasons=["reviewed; evidence and limitations understood"])
+        return evaluate_export(d, review).as_dict()
+
     return app
 
 

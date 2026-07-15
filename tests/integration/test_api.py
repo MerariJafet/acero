@@ -151,3 +151,23 @@ def test_readiness_has_no_discovery_confirmed():
     levels = c.get("/reliability/readiness").json()["levels"]
     assert "DISCOVERY_CONFIRMED" not in levels
     assert "READY_FOR_HUMAN_SCIENTIFIC_REVIEW" in levels
+
+
+# --- Sprint 12: publication preparation ------------------------------------
+
+def test_publication_dossier_endpoint():
+    c = _client()
+    d = c.get("/publication/dossier").json()
+    assert d["readiness"] == "READY_FOR_HUMAN_SCIENTIFIC_REVIEW"
+    assert any("DISCOVERY_CONFIRMED" in x for x in d["disclaimers"])
+
+
+def test_publication_review_gauntlet_endpoint():
+    c = _client()
+    assert c.get("/publication/review-gauntlet").json()["all_passed"] is True
+
+
+def test_publication_export_decision_requires_review():
+    c = _client()
+    assert c.get("/publication/export-decision?reviewed=true").json()["allowed"] is True
+    assert c.get("/publication/export-decision?reviewed=false").json()["allowed"] is False

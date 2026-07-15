@@ -85,6 +85,13 @@ salida. `reproduced = True` solo si coinciden. Prueba:
   diseño); el contexto de gate es async-safe (contextvars) y no cruza subprocesos.
 - La recalibración registra split train/calibration/test y rechaza solapes (leakage).
 
+## Human Review & Publication Preparation (Sprint 12)
+- El expediente y su export son deterministas dado el contenido; cada export escribe
+  manifest + checksums SHA-256 por archivo y una declaración de uso de IA.
+- La aprobación humana lleva un hash del expediente exacto; reexportar un expediente
+  modificado se bloquea (binding verificable).
+- Todo export es local (`destination: local_only`, `auto_published: false`).
+
 ## Límites
 - Diferencias de BLAS/versión de numpy entre máquinas pueden alterar los últimos
   dígitos; por eso se comparan resultados **dentro de la misma máquina/entorno**

@@ -204,6 +204,18 @@ no otorga comprensión y no pierde un resultado negativo.
 *Cumplimiento:* `epistemic_gate/{transaction,tokens,unit_of_work,enforcement}`,
 `tests/unit/test_gate_tokens.py`, `test_gate_context_async.py`, `test_write_surface.py`.
 
+## 14m. Preparar para revisión humana, nunca publicar (Publication Preparation)
+ACERO puede PREPARAR un expediente revisable y exportarlo LOCALMENTE, pero nunca publica ni
+envía nada automáticamente. Un export requiere: política de publicación (revisión humana),
+readiness = `READY_FOR_HUMAN_SCIENTIFIC_REVIEW`, comprensión demostrada, gate completo, sin
+contradicciones abiertas, y una aprobación de un **humano** (no ACERO) que **ata al
+contenido exacto** por hash y declara una razón. No existe `APPROVE_FOR_PUBLICATION` ni
+`DISCOVERY_CONFIRMED`. Cada export lleva una declaración de uso de IA y de autoría humana:
+ACERO no es autor ni afirma descubrimiento; los resultados computacionales no son validación
+experimental.
+*Cumplimiento:* `publication/` (dossier, review, export), `policies/publication.yaml`,
+`tests/unit/test_publication_review.py`, `tests/science/test_review_gauntlet.py`.
+
 ## 14. Comprensión humana
 Ningún avance de la IA debe dejar atrás la comprensión del investigador. Cada
 ciclo produce artefactos de aprendizaje.

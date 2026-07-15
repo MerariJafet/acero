@@ -32,7 +32,7 @@ limpios). Sprints 5–12 planificados. Ver `docs/roadmap/12_sprints.md`.
 | 9 | Human Understanding Engine + Global Epistemic Gate | ✅ |
 | 10 | Scientific Domain Labs + Inline Gate + Hybrid Grader | ✅ |
 | 11 | Scientific Reliability & Adversarial Assurance | ✅ |
-| 12 | Preparación para publicación (revisión humana) | ⏳ backlog |
+| 12 | Human Scientific Review & Local Publication Preparation | ✅ |
 
 ## Principios no negociables
 
@@ -161,6 +161,11 @@ acero reliability gauntlet                           # 10-track Scientific Relia
 acero gate token <action> [--inspect]               # issue/validate a single-use token
 acero gate full-bypass-test                          # concurrent bypass attempts (all blocked)
 acero publication candidate                          # prepare (never auto-publishes)
+
+# Human Scientific Review & Local Publication Preparation (Sprint 12)
+acero publication dossier                            # assemble a review dossier
+acero publication export --reviewer <you>            # gated LOCAL export (never publishes)
+acero publication gauntlet                           # Human Scientific Review Gauntlet
 ```
 
 ## Arquitectura

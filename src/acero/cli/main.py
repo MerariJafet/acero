@@ -1368,6 +1368,75 @@ def publication_readiness() -> None:
                "DISCOVERY_CONFIRMED does not exist).")
 
 
+@publication_app.command("dossier")
+def publication_dossier(
+    claim: str = typer.Option("damped oscillation recovered as ẋ=v, v̇=−4x−0.5v"),
+    ready: bool = typer.Option(True, help="build a review-ready dossier"),
+) -> None:
+    """Assemble a review dossier (evidence + reliability + limitations + disclaimers)."""
+    from ..publication.dossier import DossierEvidence
+    from ..publication.engine import build_dossier
+
+    d = build_dossier(
+        "cli", claim, externally_validated=ready,
+        reproducibility=0.9 if ready else 0.4,
+        supporting=[DossierEvidence("e1", "clean recovery", "supporting")],
+        counter=[DossierEvidence("c1", "noise degrades fit", "counter")],
+        limitations=["computational only", "polynomial library imposed"])
+    typer.echo(f"dossier {d.id}: readiness={d.readiness} "
+               f"independent_support={d.independent_support_count()}")
+    typer.echo(f"  comprehension={d.comprehension_status} gate={d.gate_status}")
+    for x in d.disclaimers()[:3]:
+        typer.echo(f"  · {x}")
+
+
+@publication_app.command("export")
+def publication_export(
+    reviewer: str = typer.Option(..., help="the human reviewer (not ACERO)"),
+    out: str = typer.Option("", help="output directory"),
+) -> None:
+    """Build → review → gated LOCAL export (never publishes)."""
+    from ..publication.dossier import DossierEvidence
+    from ..publication.engine import build_dossier
+    from ..publication.export import ExportBlocked, export_dossier
+    from ..publication.review import HumanReviewSession, ReviewDecision
+
+    d = build_dossier("cli", "damped oscillation recovered", externally_validated=True,
+                      supporting=[DossierEvidence("e1", "clean recovery", "supporting")],
+                      counter=[DossierEvidence("c1", "noise degrades fit", "counter")],
+                      limitations=["computational only"])
+    r = HumanReviewSession(dossier_id=d.id, reviewer=reviewer, comprehension_ok=True)
+    for s in ("central_claim", "main_evidence", "main_counter_evidence", "limitations",
+              "reliability", "what_remains_to_validate_externally"):
+        r.acknowledge(s)
+    try:
+        r.record(ReviewDecision.APPROVE_FOR_EXTERNAL_REVIEW, dossier=d, reasons=["reviewed; evidence and limitations understood"])
+    except Exception as exc:  # noqa: BLE001
+        typer.echo(f"review not approved: {exc}")
+        raise typer.Exit(1) from exc
+    path = out or str(repo_root() / "research" / "artifacts" / "review_export")
+    try:
+        res = export_dossier(d, r, path)
+        typer.echo(f"exported LOCALLY to {res['dir']} (auto_published={res['auto_published']})")
+    except ExportBlocked as exc:
+        typer.echo(f"export BLOCKED: {exc.blockers}")
+        raise typer.Exit(1) from exc
+
+
+@publication_app.command("gauntlet")
+def publication_gauntlet() -> None:
+    """Run the Human Scientific Review Gauntlet."""
+    import tempfile
+
+    from ..benchmarks.review_gauntlet import run_review_gauntlet
+
+    with tempfile.TemporaryDirectory() as td:
+        r = run_review_gauntlet(td)
+    for name, c in r["cases"].items():
+        typer.echo(f"  {'✓' if c['passed'] else '✗'} {name}")
+    typer.echo(f"{r['passed']}/{r['n']} cases passed; all_passed={r['all_passed']}")
+
+
 @app.command()
 def version() -> None:
     """Print the ACERO version."""
