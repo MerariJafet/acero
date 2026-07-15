@@ -153,3 +153,19 @@ class DiscoveryRow(Base):
     status: Mapped[str] = mapped_column(String(32), index=True, default="")
     parent_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     payload: Mapped[dict] = mapped_column(JSON)
+
+
+class SchemaVersionRow(Base):
+    """Records the applied schema version (Sprint 13 lightweight migrations).
+
+    ACERO uses SQLAlchemy ``create_all`` (idempotent) rather than Alembic; this table
+    records the logical schema version and when it was applied so ``acero doctor --deep``
+    can detect a DB created by an older/newer ACERO and refuse to run against a mismatch.
+    """
+
+    __tablename__ = "schema_version"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    version: Mapped[int] = mapped_column(Integer, index=True)
+    applied_at: Mapped[str] = mapped_column(String(64))
+    note: Mapped[str] = mapped_column(Text, default="")

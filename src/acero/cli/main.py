@@ -86,7 +86,7 @@ def _discovery():
 
 
 @app.command()
-def doctor() -> None:
+def doctor(deep: bool = typer.Option(False, "--deep", help="run the v2 deep diagnostic")) -> None:
     """Report environment + policy health. Exits non-zero if anything is broken."""
     configure_logging(json=False)
     ok = True
@@ -126,8 +126,122 @@ def doctor() -> None:
     except Exception:  # noqa: BLE001
         pass
 
+    if deep:
+        ok = _doctor_deep() and ok
+
     typer.echo("OK ✓" if ok else "PROBLEMS FOUND ✗")
     raise typer.Exit(code=0 if ok else 1)
+
+
+def _doctor_deep() -> bool:
+    """v2 deep diagnostic: DB/migrations, schemas, write surface, tokens, gates, runtime,
+    disk, secrets, git. Returns True if all critical checks pass."""
+    ok = True
+    typer.echo("\n--- deep diagnostic (v2) ---")
+
+    def check(name: str, passed: bool, detail: str = "") -> None:
+        nonlocal ok
+        mark = "✓" if passed else "✗"
+        typer.echo(f"  [{mark}] {name}{': ' + detail if detail else ''}")
+        if not passed:
+            ok = False
+
+    # DB + schema version
+    try:
+        from ..core.schema_version import check as schema_check
+        from ..core.schema_version import ensure_stamped
+        sf = default_session_factory()
+        ensure_stamped(sf)
+        st = schema_check(sf)
+        check("schema version", st.compatible, f"db={st.db_version} code={st.code_version} · {st.detail}")
+    except Exception as exc:  # noqa: BLE001
+        check("schema version", False, str(exc))
+
+    # policies
+    try:
+        load_policies()
+        guard = PolicyGuard()
+        check("policies + no paid services", not guard.paid_llm_allowed())
+    except Exception as exc:  # noqa: BLE001
+        check("policies", False, str(exc))
+
+    # global gate rules present (write surface protected)
+    try:
+        from ..epistemic_gate.registry import GateRegistry
+        n_rules = len(GateRegistry().all_rules())
+        check("epistemic gate rules loaded", n_rules >= 80, f"{n_rules} rules")
+    except Exception as exc:  # noqa: BLE001
+        check("epistemic gate", False, str(exc))
+
+    # mutation tokens
+    try:
+        from ..epistemic_gate.tokens import TokenError, TokenRegistry
+        reg = TokenRegistry(ttl_seconds=30)
+        tok = reg.issue(action="doctor", project_id="_")
+        reg.validate(tok, action="doctor", project_id="_")
+        reg.spend(tok)
+        replay_blocked = False
+        try:
+            reg.validate(tok, action="doctor", project_id="_")
+        except TokenError:
+            replay_blocked = True
+        check("mutation tokens (issue/validate/replay-block)", replay_blocked)
+    except Exception as exc:  # noqa: BLE001
+        check("mutation tokens", False, str(exc))
+
+    # runtime backend (Sprint 14) — informational until installed, then a real check
+    try:
+        from ..runtime.store import RuntimeStore
+        RuntimeStore(default_session_factory())
+        check("persistent runtime backend", True)
+    except ImportError:
+        typer.echo("  [i] persistent runtime backend not installed (Sprint 14)")
+    except Exception as exc:  # noqa: BLE001
+        check("persistent runtime backend", False, str(exc))
+
+    # secrets (Sprint 14) — env-provided HMAC secret status (never shows the secret)
+    try:
+        from ..runtime.secrets import secret_status
+        s = secret_status()
+        check("secret management", True, f"mode={s['mode']} key_id={s['key_id']}")
+    except ImportError:
+        typer.echo("  [i] secret management not installed (Sprint 14)")
+    except Exception as exc:  # noqa: BLE001
+        check("secret management", False, str(exc))
+
+    # schemas exported + up to date
+    try:
+        import subprocess as _sp
+        r = _sp.run([sys.executable, "scripts/export_schemas.py", "--check"],
+                    cwd=str(repo_root()), capture_output=True, text=True)
+        check("exported JSON schemas up to date", r.returncode == 0)
+    except Exception as exc:  # noqa: BLE001
+        check("schemas", False, str(exc))
+
+    # disk headroom
+    try:
+        import shutil as _sh
+        free_gb = _sh.disk_usage(str(repo_root())).free / 1e9
+        check("disk headroom", free_gb > 0.5, f"{free_gb:.1f} GB free")
+    except Exception as exc:  # noqa: BLE001
+        check("disk", False, str(exc))
+
+    # vestigial packages (informational, never fails)
+    for pkg in ("hypothesis", "integrations", "knowledge"):
+        p = repo_root() / "src" / "acero" / pkg
+        if p.exists():
+            typer.echo(f"  [i] vestigial package '{pkg}' retained (see architecture audit)")
+
+    # git
+    try:
+        import subprocess as _sp
+        branch = _sp.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                         cwd=str(repo_root()), capture_output=True, text=True).stdout.strip()
+        typer.echo(f"  [i] git branch: {branch}")
+    except Exception:  # noqa: BLE001
+        pass
+
+    return ok
 
 
 @app.command("policy")
