@@ -181,6 +181,29 @@ MASTERED. Los desacuerdos se registran; el eco de palabras clave y la contradicc
 *Cumplimiento:* `understanding/grading/`, `tests/unit/test_hybrid_grader.py`,
 `understanding/grading/{calibration,audit}`.
 
+## 14k. Confiabilidad se demuestra, no se asume (Scientific Reliability)
+ACERO distingue y cuantifica por separado: que el código funcione ≠ que el experimento sea
+correcto ≠ que el resultado sea reproducible ≠ que la inferencia esté calibrada ≠ que la
+evidencia sea independiente ≠ que la conclusión sea verdadera ≠ que el conocimiento esté
+listo para publicarse. La evidencia dependiente (mismo dataset/pipeline/simulador/analista)
+NO cuenta como replicación independiente; una reejecución con la misma semilla NO es una
+replicación. La calibración se reporta por dominio y se declara `INSUFFICIENT` cuando la
+muestra no basta. No existe un "trust score" único: la confiabilidad es una tarjeta
+multidimensional. El nivel máximo de un artefacto es `READY_FOR_HUMAN_SCIENTIFIC_REVIEW`
+(que no significa publicación ni descubrimiento); `DISCOVERY_CONFIRMED` no se implementa.
+*Cumplimiento:* `reliability/` (evidence, calibration, red_team, mutation, scorecard),
+`tests/**/test_reliability_*`, `tests/science/test_reliability_gauntlet.py`.
+
+## 14l. El gate se aplica in-line en TODA ruta científica (Universal Inline Gate)
+Ninguna mutación científica central se realiza sin pasar el gate: requiere un contexto de
+ejecución (async-safe, `contextvars`) abierto solo tras un PASS y un **token de mutación**
+de un solo uso, específico de acción+proyecto+artefactos, con expiración, a prueba de replay
+y manipulación. Una escritura protegida fuera de contexto lanza `BypassDetected`. Las
+acciones multi-store usan una Unit of Work con rollback: un fallo no deja confianza parcial,
+no otorga comprensión y no pierde un resultado negativo.
+*Cumplimiento:* `epistemic_gate/{transaction,tokens,unit_of_work,enforcement}`,
+`tests/unit/test_gate_tokens.py`, `test_gate_context_async.py`, `test_write_surface.py`.
+
 ## 14. Comprensión humana
 Ningún avance de la IA debe dejar atrás la comprensión del investigador. Cada
 ciclo produce artefactos de aprendizaje.

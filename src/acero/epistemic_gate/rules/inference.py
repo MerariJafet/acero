@@ -100,4 +100,6 @@ def artifact_from_gate_input(gi: GateInput) -> dict[str, Any]:
         "has_provenance": gi.has_provenance,
         "reproduced": gi.reproduced,
         "inference_level": gi.inference_level,
+        # data insufficient → the engine must ESCALATE_TO_HUMAN (abstain), not pass
+        "escalate_to_human": gi.identifiability == IdentifiabilityStatus.DATA_INSUFFICIENT,
     }

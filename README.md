@@ -31,7 +31,8 @@ limpios). Sprints 5–12 planificados. Ver `docs/roadmap/12_sprints.md`.
 | 8.8–8.9 | Governing Structure Inference Engine (SINDy, invariantes, gate epistémico) | ✅ |
 | 9 | Human Understanding Engine + Global Epistemic Gate | ✅ |
 | 10 | Scientific Domain Labs + Inline Gate + Hybrid Grader | ✅ |
-| 11–12 | Robustez → publicación | ⏳ backlog |
+| 11 | Scientific Reliability & Adversarial Assurance | ✅ |
+| 12 | Preparación para publicación (revisión humana) | ⏳ backlog |
 
 ## Principios no negociables
 
@@ -148,6 +149,18 @@ acero benchmark multi-domain                        # 4-track reasoning benchmar
 acero gate bypass-test                              # 7 bypass attempts (all blocked)
 acero learner grade-hybrid --response "..."         # deterministic + advisory grade
 acero learner grader-benchmark                      # calibration + adversarial audit
+
+# Scientific Reliability & Adversarial Assurance (Sprint 11)
+acero reliability red-team                           # 22-attack scientific red team
+acero reliability mutate                             # scientific mutation testing
+acero reliability evidence-dependencies             # dependency graph (no inflated support)
+acero reliability calibration-report                # calibration metrics
+acero reliability scorecard                          # multidimensional reliability card
+acero reliability readiness                          # readiness ladder (no DISCOVERY_CONFIRMED)
+acero reliability gauntlet                           # 10-track Scientific Reliability Gauntlet
+acero gate token <action> [--inspect]               # issue/validate a single-use token
+acero gate full-bypass-test                          # concurrent bypass attempts (all blocked)
+acero publication candidate                          # prepare (never auto-publishes)
 ```
 
 ## Arquitectura

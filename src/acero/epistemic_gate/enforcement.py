@@ -23,6 +23,7 @@ from .engine import GlobalGate
 from .exceptions import GateBlockedError, OverrideNotAllowed
 from .middleware import GateMetrics, GateTrace
 from .models import GateOutcome, GateResult, Stage
+from .tokens import TokenRegistry
 from .transaction import Transaction, enforcement_enabled, gate_context
 
 
@@ -45,7 +46,7 @@ NON_OVERRIDABLE_RULES: frozenset[str] = frozenset({
     "negative_result_preserved",                           # deleting negatives
     "codex_as_evidence", "not_codex_only",                 # Codex/LLM as evidence
     "confidence_below_one",                                # absolute-truth claim
-    "harking",                                             # post-hoc hypothesis edit
+    "metrics_prespecified",                                # HARKing (post-hoc metrics)
     # publication-stage integrity (Codex-audit fix): never overridable
     "citations_verified", "results_reproducible",
     "discovery_human_reviewed", "central_conclusion_understood",
@@ -94,12 +95,13 @@ class GateEnforcer:
     def __init__(self, gate: GlobalGate | None = None,
                  metrics: GateMetrics | None = None,
                  trace: GateTrace | None = None,
-                 rejection_sink: Callable[[GateProtectedAction], None] | None = None
-                 ) -> None:
+                 rejection_sink: Callable[[GateProtectedAction], None] | None = None,
+                 tokens: TokenRegistry | None = None) -> None:
         self.gate = gate or GlobalGate()
         self.metrics = metrics or GateMetrics()
         self.trace = trace or GateTrace()
         self.rejection_sink = rejection_sink
+        self.tokens = tokens or TokenRegistry()
 
     def enforce(
         self, *, action: str, stage: Stage, artifact: dict[str, Any],
@@ -107,6 +109,7 @@ class GateEnforcer:
         override: Override | None = None,
         override_policy: OverridePolicy = OverridePolicy.HUMAN_OVERRIDE_ALLOWED,
         codex_findings: list[dict[str, Any]] | None = None,
+        artifact_ids: tuple[str, ...] = (), project_id: str = "_",
     ) -> tuple[GateProtectedAction, Any]:
         """Gate-then-mutate. Returns (protected_action, mutation_result).
 
@@ -142,18 +145,26 @@ class GateEnforcer:
             if warnings:
                 self.metrics.record_warning(stage.value)
 
-        # Passed (or valid override): perform the mutation inside a gate context so guarded
-        # persistence sees an open window; roll back on failure.
+        # Passed (or valid override): mint a single-use mutation token, then perform the
+        # mutation inside a gate context carrying it. Guarded persistence validates the
+        # token; it is spent on success. Roll back on failure.
+        rule_versions = tuple(sorted({r.rule_id for r in result.passed_rules}))[:8]
+        token = self.tokens.issue(action=action, project_id=project_id,
+                                  artifact_ids=artifact_ids, rule_versions=rule_versions)
         txn = Transaction()
-        with enforcement_enabled(), gate_context(action, stage.value, action_id):
+        with enforcement_enabled(), gate_context(
+                action, stage.value, token.token_id, artifact_ids=artifact_ids,
+                actor=ctx.get("actor", "system"), allowed_mutations=(action,),
+                rule_versions=rule_versions, expires_at=token.expires_at):
             try:
                 mutation_result = mutation()
+                self.tokens.spend(token)
                 txn.commit()
             except Exception:
                 txn.rollback()
                 raise
         gpa.provenance = {"action_id": action_id, "outcome": result.outcome.value,
-                          "timestamp": now_iso(),
+                          "timestamp": now_iso(), "token_id": token.token_id,
                           "override": gpa.override.__dict__ if gpa.override else None}
         self.metrics.record_allowed(stage.value)
         self.trace.add(gpa)

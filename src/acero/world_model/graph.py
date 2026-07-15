@@ -124,7 +124,10 @@ class WorldModel:
 
     def update_node_data(self, node_id: str, changes: dict[str, Any], *,
                          summary: str = "", actor: str = "system") -> WorldNode:
-        """Update a node's ``data`` (non-belief metadata), versioned + provenance."""
+        """Update a node's ``data`` (non-belief metadata), versioned + provenance.
+        Protected (Sprint 11)."""
+        from ..epistemic_gate.transaction import require_context
+        require_context("world_model.update_node_data")
         with self._sf() as s:
             row = s.get(WorldNodeRow, node_id)
             if row is None:
@@ -192,7 +195,10 @@ class WorldModel:
     def reweight_edge(self, edge_id: str, *, weight: float | None = None,
                       confidence: float | None = None, deactivate: bool = False,
                       actor: str = "system") -> WorldEdge:
-        """Strengthen/weaken a relation. Weakening to inactive is NOT deletion."""
+        """Strengthen/weaken a relation. Weakening to inactive is NOT deletion. Protected
+        (Sprint 11): guarded by the inline gate."""
+        from ..epistemic_gate.transaction import require_context
+        require_context("world_model.reweight_edge")
         with self._sf() as s:
             row = s.get(WorldEdgeRow, edge_id)
             if row is None:

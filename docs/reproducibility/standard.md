@@ -78,6 +78,13 @@ salida. `reproduced = True` solo si coinciden. Prueba:
 - El grader determinista es reproducible dado texto y rúbrica; la capa semántica (Codex) se
   registra aparte (no bit-reproducible) y nunca cambia el resultado a dominio.
 
+## Scientific Reliability (Sprint 11)
+- El grafo de dependencia de evidencia, la calibración y el red team son deterministas dado
+  el conjunto de entrada; el gauntlet reejecuta detectores deterministas.
+- Los tokens de mutación son single-use y por-proceso (no sobreviven un reinicio, por
+  diseño); el contexto de gate es async-safe (contextvars) y no cruza subprocesos.
+- La recalibración registra split train/calibration/test y rechaza solapes (leakage).
+
 ## Límites
 - Diferencias de BLAS/versión de numpy entre máquinas pueden alterar los últimos
   dígitos; por eso se comparan resultados **dentro de la misma máquina/entorno**

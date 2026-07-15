@@ -143,10 +143,40 @@ def sunspot_requirements(project_id: str) -> list[ResearchLearningRequirement]:
             for n, reason, crit, eqs, code, level, blocking in specs]
 
 
+def reliability_requirements(project_id: str) -> list[ResearchLearningRequirement]:
+    """Sprint 11: what a human must understand before approving a PublicationCandidate."""
+    C, K = Criticality, KnowledgeStatus
+    specs: list[_Spec] = [
+        ("evidence_independence",
+         "dependent evidence (same dataset/pipeline/simulator) is not independent replication",
+         C.BLOCKING, [], ["reliability/evidence.py"], K.CONCEPTUALLY_UNDERSTOOD, True),
+        ("replication_vs_reexecution",
+         "a re-execution with the same seed is NOT a scientific replication",
+         C.BLOCKING, [], ["reliability/evidence.py"], K.CONCEPTUALLY_UNDERSTOOD, True),
+        ("calibration",
+         "confidence must match observed accuracy; overconfidence is a defect",
+         C.HIGH, [], ["reliability/calibration.py"], K.CONCEPTUALLY_UNDERSTOOD, True),
+        ("numerical_stability",
+         "an unstable solver can produce physically plausible false evidence",
+         C.HIGH, [], ["reliability/domain_reliability.py"], K.CONCEPTUALLY_UNDERSTOOD, True),
+        ("external_validity",
+         "a result validated only in simulation is not experimentally validated",
+         C.BLOCKING, [], ["reliability/scorecard.py"], K.CONCEPTUALLY_UNDERSTOOD, True),
+        ("abstention",
+         "abstaining on insufficient data is correct, not a failure",
+         C.MEDIUM, [], ["reliability/calibration.py"], K.PROCEDURALLY_COMPETENT, False),
+    ]
+    return [_req(project_id, n, reason, crit, base_concept_graph().prerequisites_of(n),
+                 eqs, code, ["computational assessment", "not external validation"],
+                 level, blocking)
+            for n, reason, crit, eqs, code, level, blocking in specs]
+
+
 CURRICULA = {
     "sindy": sindi_requirements,
     "analogy": analogy_requirements,
     "sunspots": sunspot_requirements,
+    "reliability": reliability_requirements,
 }
 
 

@@ -119,3 +119,35 @@ def test_grader_benchmark_endpoint():
     g = c.get("/grader/benchmark").json()
     assert g["calibration"]["false_positives"] == 0
     assert g["adversarial"]["any_fooled"] is False
+
+
+# --- Sprint 11: reliability + publication candidate ------------------------
+
+def test_reliability_endpoints():
+    c = _client()
+    rt = c.get("/reliability/red-team").json()
+    assert rt["detected"] == rt["n"] and not rt["missed"]
+    mut = c.get("/reliability/mutation").json()
+    assert not mut["survived"]
+    assert c.get("/reliability/gauntlet").json()["all_passed"] is True
+    card = c.get("/reliability/scorecard").json()
+    assert "adversarial_robustness" in card["dimensions"]
+
+
+def test_publication_candidate_never_auto_publishes():
+    c = _client()
+    pc = c.get("/publication/candidate").json()
+    assert pc["can_publish_automatically"] is False
+
+
+def test_evidence_dependencies_endpoint():
+    c = _client()
+    d = c.get("/reliability/evidence-dependencies").json()
+    assert d["n_independent_groups"] < d["n_items"]
+
+
+def test_readiness_has_no_discovery_confirmed():
+    c = _client()
+    levels = c.get("/reliability/readiness").json()["levels"]
+    assert "DISCOVERY_CONFIRMED" not in levels
+    assert "READY_FOR_HUMAN_SCIENTIFIC_REVIEW" in levels

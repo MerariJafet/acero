@@ -345,6 +345,57 @@ def create_app() -> FastAPI:
 
         return {"calibration": cal_run().as_dict(), "adversarial": audit_run().as_dict()}
 
+    # --- Scientific Reliability (Sprint 11) ------------------------------
+    @app.get("/reliability/red-team")
+    def reliability_red_team() -> dict:
+        from ..reliability.red_team import run_red_team
+
+        return run_red_team().as_dict()
+
+    @app.get("/reliability/mutation")
+    def reliability_mutation() -> dict:
+        from ..reliability.mutation import run_mutation_testing
+
+        return run_mutation_testing().as_dict()
+
+    @app.get("/reliability/scorecard")
+    def reliability_scorecard() -> dict:
+        from ..reliability.engine import build_card
+
+        return build_card().as_dict()
+
+    @app.get("/reliability/gauntlet")
+    def reliability_gauntlet() -> dict:
+        from ..benchmarks.reliability_gauntlet import run_gauntlet
+
+        return run_gauntlet()
+
+    @app.get("/reliability/evidence-dependencies")
+    def reliability_evidence() -> dict:
+        from ..reliability.evidence import DependencyGraph, Evidence, dependency_aware_support
+
+        g = DependencyGraph()
+        for i in range(3):
+            g.add(Evidence(id=f"e{i}", dataset="D1", pipeline="P1"))
+        g.add(Evidence(id="ind", dataset="D2"))
+        return dependency_aware_support(g)
+
+    @app.get("/reliability/readiness")
+    def reliability_readiness() -> dict:
+        from ..reliability.engine import readiness_levels
+
+        return {"levels": readiness_levels(),
+                "note": "DISCOVERY_CONFIRMED does not exist; ceiling is human review"}
+
+    @app.get("/publication/candidate")
+    def publication_candidate() -> dict:
+        from ..reliability.engine import run_reliability
+
+        r = run_reliability("api-demo", reproducibility=0.9, calibration=0.8,
+                            evidence_independence=0.7, human_understanding=0.9,
+                            provenance=0.9)
+        return r["publication_candidate"]
+
     return app
 
 

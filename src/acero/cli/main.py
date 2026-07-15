@@ -53,10 +53,14 @@ app.add_typer(world_app, name="world")
 app.add_typer(cognitive_app, name="cognitive")
 app.add_typer(inference_app, name="inference")
 domains_app = typer.Typer(help="Scientific Domain Labs (Sprint 10)")
+reliability_app = typer.Typer(help="Scientific Reliability & Adversarial Assurance (Sprint 11)")
+publication_app = typer.Typer(help="Publication candidates (never auto-publishes)")
 app.add_typer(learner_app, name="learner")
 app.add_typer(learn_app, name="learn")
 app.add_typer(gate_app, name="gate")
 app.add_typer(domains_app, name="domains")
+app.add_typer(reliability_app, name="reliability")
+app.add_typer(publication_app, name="publication")
 
 
 def _understanding():
@@ -1212,6 +1216,156 @@ def learner_grader_benchmark() -> None:
     a = audit_run()
     typer.echo(f"adversarial: any_fooled={a.any_fooled} "
                f"({sum(1 for x in a.attacks if not x.fooled)}/{len(a.attacks)} resisted)")
+
+
+# --- Scientific Reliability (Sprint 11) -----------------------------------
+
+@reliability_app.command("audit-writes")
+def reliability_audit_writes() -> None:
+    """Show the write-surface inventory summary."""
+    typer.echo("See docs/security/write_surface_inventory.md")
+    typer.echo("Protected: World Model, Discovery, Understanding, Negative Registry, "
+               "Literature, Publication candidates")
+    typer.echo("Admin-only: ledger/provenance (append-only). No central path LEGACY_UNPROTECTED.")
+
+
+@reliability_app.command("evidence-dependencies")
+def reliability_evidence() -> None:
+    """Demo the evidence dependency graph (3 same-dataset + 1 independent)."""
+    from ..reliability.evidence import DependencyGraph, Evidence, dependency_aware_support
+
+    g = DependencyGraph()
+    for i in range(3):
+        g.add(Evidence(id=f"e{i}", dataset="D1", pipeline="P1"))
+    g.add(Evidence(id="ind", dataset="D2"))
+    s = dependency_aware_support(g)
+    typer.echo(f"items={s['n_items']} independent_groups={s['n_independent_groups']} "
+               f"naive={s['naive_support']} dependency_aware={s['dependency_aware_support']}")
+
+
+@reliability_app.command("replication")
+def reliability_replication() -> None:
+    """Show replication levels and which count as independent."""
+    from ..reliability.evidence import INDEPENDENT_REPLICATION_LEVELS, ReplicationLevel
+
+    for lvl in ReplicationLevel:
+        indep = "independent" if lvl in INDEPENDENT_REPLICATION_LEVELS else "NOT independent"
+        typer.echo(f"  {lvl.value}: {indep}")
+
+
+@reliability_app.command("calibration-report")
+def reliability_calibration_report() -> None:
+    """Demo calibration metrics on overconfident predictions."""
+    from ..reliability.calibration import CalibrationObservation, CalibrationRegistry
+
+    reg = CalibrationRegistry()
+    for i in range(12):
+        reg.record(CalibrationObservation("m", "probability", predicted_probability=0.9,
+                                          actual_outcome=(i % 5 == 0)))
+    typer.echo(f"probability metrics: {reg.probability_metrics()}")
+
+
+@reliability_app.command("red-team")
+def reliability_red_team() -> None:
+    """Run the scientific red team."""
+    from ..reliability.red_team import run_red_team
+
+    r = run_red_team().as_dict()
+    typer.echo(f"red team {r['version']}: {r['detected']}/{r['n']} detected")
+    if r["missed"]:
+        typer.echo(f"  MISSED: {r['missed']}")
+    for cat, s in r["by_category"].items():
+        typer.echo(f"  {cat}: {s['detected']}/{s['total']}")
+
+
+@reliability_app.command("mutate")
+def reliability_mutate() -> None:
+    """Run scientific mutation testing."""
+    from ..reliability.mutation import run_mutation_testing
+
+    m = run_mutation_testing().as_dict()
+    typer.echo(f"mutations: {m['caught']}/{m['n']} caught")
+    if m["survived"]:
+        typer.echo(f"  SURVIVED: {m['survived']}")
+
+
+@reliability_app.command("scorecard")
+def reliability_scorecard() -> None:
+    """Build and print a Scientific Reliability Card."""
+    from ..reliability.engine import build_card
+
+    card = build_card().as_dict()
+    for name, d in card["dimensions"].items():
+        m = d["measurement"]
+        typer.echo(f"  {name}: {'n/a' if m is None else round(m, 3)} "
+                   f"(n={d['sample']}, thr={d['threshold']})")
+
+
+@reliability_app.command("readiness")
+def reliability_readiness() -> None:
+    """Show the readiness ladder (DISCOVERY_CONFIRMED does not exist)."""
+    from ..reliability.engine import readiness_levels
+
+    for lvl in readiness_levels():
+        typer.echo(f"  {lvl}")
+    typer.echo("NOTE: DISCOVERY_CONFIRMED is intentionally not implemented.")
+
+
+@reliability_app.command("gauntlet")
+def reliability_gauntlet() -> None:
+    """Run the Scientific Reliability Gauntlet (10 tracks)."""
+    from ..benchmarks.reliability_gauntlet import run_gauntlet
+
+    r = run_gauntlet()
+    for name, t in r["tracks"].items():
+        typer.echo(f"  {'✓' if t['passed'] else '✗'} {name}")
+    typer.echo(f"{r['passed']}/{r['n']} tracks passed; all_passed={r['all_passed']}")
+
+
+@gate_app.command("token")
+def gate_token(action: str = typer.Argument("demo"),
+               inspect: bool = typer.Option(False, "--inspect")) -> None:
+    """Issue and validate a demo mutation token."""
+    from ..epistemic_gate.tokens import TokenRegistry
+
+    reg = TokenRegistry()
+    tok = reg.issue(action=action, project_id="demo", artifact_ids=("a1",))
+    typer.echo(f"issued token {tok.token_id} (action={action}, expires {tok.expires_at})")
+    if inspect:
+        typer.echo(f"  {tok.as_dict()}")
+    reg.validate(tok, action=action, project_id="demo")
+    reg.spend(tok)
+    typer.echo(f"validated + spent; metrics={reg.metrics()}")
+
+
+@gate_app.command("full-bypass-test")
+def gate_full_bypass_test() -> None:
+    """Run the concurrent bypass track (threads without a valid context)."""
+    from ..benchmarks.reliability_gauntlet import track10_concurrent_bypass
+
+    r = track10_concurrent_bypass()
+    typer.echo(f"concurrent bypass: {r['blocked']}/{r['attempts']} blocked "
+               f"(passed={r['passed']})")
+
+
+@publication_app.command("candidate")
+def publication_candidate() -> None:
+    """Prepare a demo publication candidate (never publishes)."""
+    from ..reliability.engine import run_reliability
+
+    r = run_reliability("demo", reproducibility=0.9, calibration=0.8,
+                        evidence_independence=0.7, human_understanding=0.9,
+                        provenance=0.9, externally_validated=False)
+    pc = r["publication_candidate"]
+    typer.echo(f"readiness: {pc['readiness']}  auto-publish: {pc['can_publish_automatically']}")
+    typer.echo(f"blockers: {r['blockers']}")
+
+
+@publication_app.command("readiness")
+def publication_readiness() -> None:
+    """Show the readiness ceiling."""
+    typer.echo("Ceiling: READY_FOR_HUMAN_SCIENTIFIC_REVIEW (never auto-publishes; "
+               "DISCOVERY_CONFIRMED does not exist).")
 
 
 @app.command()

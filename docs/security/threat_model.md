@@ -46,6 +46,14 @@ código de experimentos** y la **fuga de secretos/costos**.
 | Asociación presentada como causalidad | domains | regla `association_not_causal` bloquea | `test_domain_labs.py::test_association_not_causal_blocked` |
 | Petición peligrosa (patógeno/toxina/explosivo) | domains | screening de tokens prohibidos en genética/química | `tests/security/test_sprint10_security.py` |
 | Manipulación del grader (inyección/copia de rúbrica) | understanding | autoridad determinista; Codex advisory nunca da dominio; eco/contradicción fallan | `tests/unit/test_hybrid_grader.py`, `test_sprint10_security.py` |
+| Mutación fuera del gate en async/hilo/subproceso | epistemic_gate | contexto contextvars; require_context lanza BypassDetected sin contexto válido | `tests/unit/test_gate_context_async.py` |
+| Replay / reuso / falsificación de autorización de mutación | epistemic_gate | tokens HMAC single-use con TTL, ligados a acción+proyecto+artefacto | `tests/unit/test_gate_tokens.py` |
+| Estado parcial en acción multi-store | epistemic_gate | Unit of Work con rollback por paso; intento preservado | `tests/unit/test_gate_context_async.py::test_unit_of_work_rolls_back_on_failure` |
+| Escritura directa saltando el boundary | arquitectura | test de import falla si un módulo no-boundary importa persistencia | `tests/unit/test_write_surface.py` |
+| Evidencia dependiente contada como independiente | reliability | grafo de dependencia + clusters; soporte no inflado | `tests/unit/test_evidence_dependency.py` |
+| Reejecución presentada como replicación | reliability | niveles de replicación; reejecución NO independiente | `test_evidence_dependency.py::test_reexecution_is_not_replication` |
+| Confianza sobreafirmada / mal calibrada | reliability | Brier/ECE/coverage; INSUFFICIENT; recalibración sin leakage | `tests/unit/test_reliability_calibration.py` |
+| Publicación prematura / descubrimiento afirmado | reliability | readiness techo human-review; sin DISCOVERY_CONFIRMED; sin auto-publicación | `tests/unit/test_red_team_scorecard.py` |
 
 ## Riesgos abiertos (documentados, no resueltos)
 1. El sandbox de subproceso es más débil que un contenedor/nsjail. Para código
