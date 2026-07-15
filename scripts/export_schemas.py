@@ -36,6 +36,7 @@ from acero.epistemology.schemas import (
 )
 from acero.experiment.prereg import Preregistration
 from acero.inference.models import GoverningModelCandidate, StructureInferenceProblem
+from acero.program.models import ResearchProgram
 from acero.provenance.events import ProvenanceEvent
 from acero.understanding.models import (
     ComprehensionGateResult,
@@ -82,6 +83,8 @@ MODELS = {
     "misconception": Misconception,
     "research_learning_requirement": ResearchLearningRequirement,
     "comprehension_gate_result": ComprehensionGateResult,
+    # Research Program OS (Sprint 16)
+    "research_program": ResearchProgram,
 }
 
 

@@ -57,6 +57,7 @@ reliability_app = typer.Typer(help="Scientific Reliability & Adversarial Assuran
 publication_app = typer.Typer(help="Publication candidates (never auto-publishes)")
 secrets_app = typer.Typer(help="Local HMAC secret management (Sprint 14)")
 worker_app = typer.Typer(help="Persistent research worker runtime (Sprint 14)")
+program_app = typer.Typer(help="Research Program Operating System (Sprint 16)")
 app.add_typer(learner_app, name="learner")
 app.add_typer(learn_app, name="learn")
 app.add_typer(gate_app, name="gate")
@@ -65,6 +66,7 @@ app.add_typer(reliability_app, name="reliability")
 app.add_typer(publication_app, name="publication")
 app.add_typer(secrets_app, name="secrets")
 app.add_typer(worker_app, name="worker")
+app.add_typer(program_app, name="program")
 
 
 def _understanding():
@@ -1653,6 +1655,67 @@ def worker_chaos() -> None:
     for name, c in r["cases"].items():
         typer.echo(f"  {'✓' if c['passed'] else '✗'} {name}")
     typer.echo(f"{r['passed']}/{r['n']} scenarios passed; all_passed={r['all_passed']}")
+
+
+# --- Research Program OS (Sprint 16) --------------------------------------
+
+def _program_engine():
+    from ..program.engine import ProgramEngine
+    _, _, store = _discovery()
+    return ProgramEngine(store)
+
+
+@program_app.command("create")
+def program_create(
+    mission: str = typer.Argument(...),
+    domains: str = typer.Option("", help="comma-separated domains"),
+    question: str = typer.Option("", help="central question"),
+) -> None:
+    """Create a research program."""
+    pe = _program_engine()
+    p = pe.create(mission, domains=[d.strip() for d in domains.split(",") if d.strip()],
+                  central_question=question or None)
+    typer.echo(f"program {p.id}: {p.mission[:60]} [{p.status.value}]")
+
+
+@program_app.command("list")
+def program_list() -> None:
+    """List research programs."""
+    pe = _program_engine()
+    for p in pe.programs():
+        typer.echo(f"  {p.id}: {p.mission[:55]} [{p.status.value}] "
+                   f"({len(p.subprojects)} subprojects)")
+
+
+@program_app.command("view")
+def program_view(program_id: str = typer.Argument(...)) -> None:
+    """Show a program's strategic view (questions, milestones, budget, retrospectives)."""
+    pe = _program_engine()
+    try:
+        v = pe.strategic_view(program_id)
+    except KeyError:
+        typer.echo("program not found")
+        raise typer.Exit(1) from None
+    typer.echo(f"mission: {v['mission']} [{v['status']}]")
+    typer.echo(f"questions: {v['questions_by_role']}")
+    typer.echo(f"milestones: {v['milestones_done']}/{v['n_milestones']} · "
+               f"retrospectives: {v['n_retrospectives']}")
+    for res, b in v["budget"].items():
+        if b["budget"]:
+            typer.echo(f"  budget {res}: {b['used']}/{b['budget']} (remaining {b['remaining']})")
+
+
+@program_app.command("prioritize")
+def program_prioritize() -> None:
+    """Demo multi-dimensional portfolio prioritization (no single opaque score)."""
+    pe = _program_engine()
+    pf = pe.prioritize({
+        "proj_A": {"information_gain": 0.9, "feasibility": 0.8, "risk": 0.2,
+                   "data_available": 0.9},
+        "proj_B": {"information_gain": 0.4, "feasibility": 0.5, "risk": 0.7,
+                   "data_available": 0.3}})
+    for s in pf.ranked():
+        typer.echo(f"  {s.project_id}: view={s.composite_view} dims={s.dimensions}")
 
 
 @app.command()

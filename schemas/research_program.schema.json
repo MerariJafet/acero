@@ -1,0 +1,372 @@
+{
+  "$defs": {
+    "BudgetUsage": {
+      "properties": {
+        "cpu_core_hours": {
+          "default": 0.0,
+          "title": "Cpu Core Hours",
+          "type": "number"
+        },
+        "download_mb": {
+          "default": 0.0,
+          "title": "Download Mb",
+          "type": "number"
+        },
+        "gpu_hours": {
+          "default": 0.0,
+          "title": "Gpu Hours",
+          "type": "number"
+        },
+        "human_hours": {
+          "default": 0.0,
+          "title": "Human Hours",
+          "type": "number"
+        },
+        "llm_tokens": {
+          "default": 0,
+          "title": "Llm Tokens",
+          "type": "integer"
+        },
+        "ram_gb": {
+          "default": 0.0,
+          "title": "Ram Gb",
+          "type": "number"
+        },
+        "storage_gb": {
+          "default": 0.0,
+          "title": "Storage Gb",
+          "type": "number"
+        }
+      },
+      "title": "BudgetUsage",
+      "type": "object"
+    },
+    "ComputeBudget": {
+      "properties": {
+        "cpu_core_hours": {
+          "default": 0.0,
+          "title": "Cpu Core Hours",
+          "type": "number"
+        },
+        "download_mb": {
+          "default": 0.0,
+          "title": "Download Mb",
+          "type": "number"
+        },
+        "gpu_hours": {
+          "default": 0.0,
+          "title": "Gpu Hours",
+          "type": "number"
+        },
+        "human_hours": {
+          "default": 0.0,
+          "title": "Human Hours",
+          "type": "number"
+        },
+        "llm_tokens": {
+          "default": 0,
+          "title": "Llm Tokens",
+          "type": "integer"
+        },
+        "ram_gb": {
+          "default": 0.0,
+          "title": "Ram Gb",
+          "type": "number"
+        },
+        "storage_gb": {
+          "default": 0.0,
+          "title": "Storage Gb",
+          "type": "number"
+        }
+      },
+      "title": "ComputeBudget",
+      "type": "object"
+    },
+    "Milestone": {
+      "properties": {
+        "done": {
+          "default": false,
+          "title": "Done",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "default": "milestone",
+          "title": "Kind",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        },
+        "target_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Date"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "Milestone",
+      "type": "object"
+    },
+    "ProgramStatus": {
+      "enum": [
+        "DRAFT",
+        "ACTIVE",
+        "PAUSED",
+        "ARCHIVED"
+      ],
+      "title": "ProgramStatus",
+      "type": "string"
+    },
+    "QuestionRole": {
+      "enum": [
+        "central",
+        "instrumental",
+        "prerequisite",
+        "enabling",
+        "discarded",
+        "paused"
+      ],
+      "title": "QuestionRole",
+      "type": "string"
+    },
+    "Retrospective": {
+      "properties": {
+        "beliefs_changed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Beliefs Changed",
+          "type": "array"
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "string"
+        },
+        "cycle": {
+          "title": "Cycle",
+          "type": "string"
+        },
+        "dead_hypotheses": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dead Hypotheses",
+          "type": "array"
+        },
+        "failed": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Failed",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "learned": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Learned",
+          "type": "array"
+        },
+        "missing_tools": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Tools",
+          "type": "array"
+        },
+        "next_to_investigate": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Next To Investigate",
+          "type": "array"
+        },
+        "not_worth_cost": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Not Worth Cost",
+          "type": "array"
+        }
+      },
+      "required": [
+        "cycle"
+      ],
+      "title": "Retrospective",
+      "type": "object"
+    },
+    "StrategicQuestion": {
+      "properties": {
+        "depends_on": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Depends On",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "rationale": {
+          "default": "",
+          "title": "Rationale",
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/QuestionRole",
+          "default": "instrumental"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "StrategicQuestion",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "budget_usage": {
+      "$ref": "#/$defs/BudgetUsage"
+    },
+    "central_questions": {
+      "items": {
+        "$ref": "#/$defs/StrategicQuestion"
+      },
+      "title": "Central Questions",
+      "type": "array"
+    },
+    "collaboration_plan": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Collaboration Plan",
+      "type": "array"
+    },
+    "compute_budget": {
+      "$ref": "#/$defs/ComputeBudget"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "datasets": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Datasets",
+      "type": "array"
+    },
+    "domains": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Domains",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "learning_plan": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Learning Plan",
+      "type": "array"
+    },
+    "milestones": {
+      "items": {
+        "$ref": "#/$defs/Milestone"
+      },
+      "title": "Milestones",
+      "type": "array"
+    },
+    "mission": {
+      "title": "Mission",
+      "type": "string"
+    },
+    "models": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Models",
+      "type": "array"
+    },
+    "publication_plan": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Publication Plan",
+      "type": "array"
+    },
+    "retrospectives": {
+      "items": {
+        "$ref": "#/$defs/Retrospective"
+      },
+      "title": "Retrospectives",
+      "type": "array"
+    },
+    "risks": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Risks",
+      "type": "array"
+    },
+    "status": {
+      "$ref": "#/$defs/ProgramStatus",
+      "default": "DRAFT"
+    },
+    "subprojects": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Subprojects",
+      "type": "array"
+    },
+    "theories": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Theories",
+      "type": "array"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "mission"
+  ],
+  "title": "ResearchProgram",
+  "type": "object"
+}

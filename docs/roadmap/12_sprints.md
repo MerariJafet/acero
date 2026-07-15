@@ -43,3 +43,10 @@ Sprints 5–12 están **planificados** (ver `docs/backlog/sprints_05_12.md`).
 ## Alcance de esta entrega
 Profundidad real en 1–4 (código que ejecuta, pruebas que pasan, artefactos
 documentados) por encima de cobertura superficial de los 12.
+
+
+## Post-v1 (ACERO v2 — rama integration/acero-v2-program)
+| 13 | Consolidación + schema versioning + doctor --deep | ✅ Hecho |
+| 14 | Runtime persistente multiproceso (workers, leases, tokens, chaos 12/12) | ✅ Hecho |
+| 16 | Research Program OS (programas, portfolio, budget duro, retrospectivas) | ✅ Hecho |
+| 15,17-20 | Portal, astronomía real, autoevaluación, colaboración, release | ⏳ pendiente |
