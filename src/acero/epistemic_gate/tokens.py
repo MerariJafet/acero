@@ -21,9 +21,21 @@ from typing import Any
 from ..core.clock import now
 from ..core.ids import new_id
 
-# Per-process secret. Not persisted: tokens do not survive a restart (by design — a token
-# is short-lived and single-use within one run).
-_SECRET = os.urandom(32)
+
+def _secret() -> bytes:
+    """The HMAC secret for token signing.
+
+    Uses the runtime secret manager (Sprint 14): an env-provided secret enables tokens that
+    verify across processes/restarts; otherwise an ephemeral per-process dev secret (tokens
+    are short-lived and single-use, so a dev secret is safe within one run)."""
+    try:
+        from ..runtime.secrets import get_secret
+        return get_secret()[1]
+    except Exception:  # noqa: BLE001 - fall back to a per-process secret
+        return _FALLBACK_SECRET
+
+
+_FALLBACK_SECRET = os.urandom(32)
 
 
 class TokenError(Exception):
@@ -48,10 +60,10 @@ class MutationToken:
             self.issued_at, self.expires_at]).encode()
 
     def sign(self) -> None:
-        self.signature = hmac.new(_SECRET, self._payload(), hashlib.sha256).hexdigest()
+        self.signature = hmac.new(_secret(), self._payload(), hashlib.sha256).hexdigest()
 
     def verify_signature(self) -> bool:
-        expected = hmac.new(_SECRET, self._payload(), hashlib.sha256).hexdigest()
+        expected = hmac.new(_secret(), self._payload(), hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, self.signature)
 
     def as_dict(self, *, redact: bool = True) -> dict[str, Any]:

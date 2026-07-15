@@ -169,3 +169,64 @@ class SchemaVersionRow(Base):
     version: Mapped[int] = mapped_column(Integer, index=True)
     applied_at: Mapped[str] = mapped_column(String(64))
     note: Mapped[str] = mapped_column(Text, default="")
+
+
+class RuntimeTaskRow(Base):
+    """Persistent research task (Sprint 14): survives restarts, carries lease + checkpoint.
+
+    ``status``: QUEUED | LEASED | RUNNING | DONE | FAILED | DEAD_LETTER | CANCELLED.
+    ``lease_owner``/``lease_expires_at`` implement worker leases; ``heartbeat_at`` detects a
+    lost worker; ``checkpoint`` persists partial progress for RESUME; ``idempotency_key``
+    dedups re-enqueues.
+    """
+
+    __tablename__ = "runtime_tasks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), index=True, default="_")
+    kind: Mapped[str] = mapped_column(String(48), index=True)
+    status: Mapped[str] = mapped_column(String(24), index=True, default="QUEUED")
+    priority: Mapped[float] = mapped_column(Float, default=0.5)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    checkpoint: Mapped[dict] = mapped_column(JSON, default=dict)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=3)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    lease_owner: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    lease_expires_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    heartbeat_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[str] = mapped_column(String(64))
+    updated_at: Mapped[str] = mapped_column(String(64))
+
+
+class RuntimeTokenRow(Base):
+    """Cross-process record of issued/spent mutation tokens (Sprint 14 replay protection).
+
+    In-process replay is blocked by TokenRegistry; this makes single-use enforcement survive
+    across workers and restarts."""
+
+    __tablename__ = "runtime_tokens"
+
+    token_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    project_id: Mapped[str] = mapped_column(String(64), index=True)
+    spent: Mapped[bool] = mapped_column(default=False, index=True)
+    issued_at: Mapped[str] = mapped_column(String(64))
+    spent_at: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class RuntimeEventRow(Base):
+    """Append-only runtime/recovery event log (Sprint 14 observability)."""
+
+    __tablename__ = "runtime_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(48), index=True)
+    decision: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    detail: Mapped[str] = mapped_column(Text, default="")
+    worker_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    at: Mapped[str] = mapped_column(String(64))

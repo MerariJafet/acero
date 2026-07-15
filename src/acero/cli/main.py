@@ -55,12 +55,16 @@ app.add_typer(inference_app, name="inference")
 domains_app = typer.Typer(help="Scientific Domain Labs (Sprint 10)")
 reliability_app = typer.Typer(help="Scientific Reliability & Adversarial Assurance (Sprint 11)")
 publication_app = typer.Typer(help="Publication candidates (never auto-publishes)")
+secrets_app = typer.Typer(help="Local HMAC secret management (Sprint 14)")
+worker_app = typer.Typer(help="Persistent research worker runtime (Sprint 14)")
 app.add_typer(learner_app, name="learner")
 app.add_typer(learn_app, name="learn")
 app.add_typer(gate_app, name="gate")
 app.add_typer(domains_app, name="domains")
 app.add_typer(reliability_app, name="reliability")
 app.add_typer(publication_app, name="publication")
+app.add_typer(secrets_app, name="secrets")
+app.add_typer(worker_app, name="worker")
 
 
 def _understanding():
@@ -1549,6 +1553,106 @@ def publication_gauntlet() -> None:
     for name, c in r["cases"].items():
         typer.echo(f"  {'✓' if c['passed'] else '✗'} {name}")
     typer.echo(f"{r['passed']}/{r['n']} cases passed; all_passed={r['all_passed']}")
+
+
+# --- Secret management (Sprint 14) ----------------------------------------
+
+@secrets_app.command("init")
+def secrets_init() -> None:
+    """Generate a fresh HMAC secret to export (never stored in Git; shown once)."""
+    from ..runtime.secrets import generate_secret
+
+    key_id, hex_secret = generate_secret()
+    typer.echo("Add these to your environment (do NOT commit them):")
+    typer.echo(f"  export ACERO_HMAC_KEY_ID={key_id}")
+    typer.echo(f"  export ACERO_HMAC_SECRET={hex_secret}")
+    typer.echo("For production: also set ACERO_ENV=production (refuses to sign without a secret).")
+
+
+@secrets_app.command("rotate")
+def secrets_rotate() -> None:
+    """Generate a replacement secret + key id (rotation). Old tokens stop verifying."""
+    from ..runtime.secrets import generate_secret
+
+    key_id, hex_secret = generate_secret()
+    typer.echo("Rotate by exporting the new values (tokens signed with the old key will fail):")
+    typer.echo(f"  export ACERO_HMAC_KEY_ID={key_id}")
+    typer.echo(f"  export ACERO_HMAC_SECRET={hex_secret}")
+
+
+@secrets_app.command("status")
+def secrets_status() -> None:
+    """Show secret mode + key id (never the secret itself)."""
+    from ..runtime.secrets import secret_status
+
+    s = secret_status()
+    typer.echo(f"mode: {s['mode']} · key_id: {s['key_id']} · configured: {s['configured']}")
+    if not s["configured"] and s["mode"] == "production":
+        typer.echo("  WARNING: production mode without a configured secret — signing will refuse.")
+
+
+# --- Worker runtime (Sprint 14) -------------------------------------------
+
+@worker_app.command("start")
+def worker_start(
+    max_tasks: int = typer.Option(50, help="max tasks to drain this invocation"),
+) -> None:
+    """Drain the persistent research queue (claims → runs registered handlers → completes).
+
+    This drains once and exits (a long-running daemon needs an external process manager;
+    call repeatedly or from a supervisor). A demo 'echo' handler is registered."""
+    from ..runtime.queue import ResearchQueue
+    from ..runtime.worker import Worker
+
+    q = ResearchQueue(default_session_factory())
+    w = Worker(q)
+    w.register("echo", lambda payload, ckpt, hb: {"echo": payload})
+    q.reap_expired()
+    n = w.drain(max_tasks=max_tasks)
+    typer.echo(f"worker {w.worker_id}: processed={w.processed} failed={w.failed} drained={n}")
+
+
+@worker_app.command("status")
+def worker_status() -> None:
+    """Show the persistent queue state by status."""
+    from ..runtime.store import RuntimeStore
+
+    store = RuntimeStore(default_session_factory())
+    by_status: dict[str, int] = {}
+    for t in store.tasks():
+        by_status[t["status"]] = by_status.get(t["status"], 0) + 1
+    typer.echo(f"queue: {by_status or 'empty'}")
+
+
+@worker_app.command("enqueue")
+def worker_enqueue(kind: str = typer.Argument("echo"),
+                   note: str = typer.Option("hello", help="payload note")) -> None:
+    """Enqueue a demo task (idempotent via a key)."""
+    from ..core.ids import new_id
+    from ..runtime.queue import ResearchQueue
+
+    q = ResearchQueue(default_session_factory())
+    tid = new_id("task")
+    q.enqueue(tid, kind, payload={"note": note}, idempotency_key=f"cli-{note}")
+    typer.echo(f"enqueued {tid} (kind={kind})")
+
+
+@worker_app.command("stop")
+def worker_stop() -> None:
+    """Signal workers to stop (cooperative). This build drains synchronously, so this is a
+    no-op marker; documented in the Sprint 14 report."""
+    typer.echo("workers drain synchronously in this build; nothing to stop.")
+
+
+@worker_app.command("chaos")
+def worker_chaos() -> None:
+    """Run the Persistent Runtime Chaos Gauntlet (12 fault scenarios)."""
+    from ..benchmarks.chaos_gauntlet import run_chaos_gauntlet
+
+    r = run_chaos_gauntlet()
+    for name, c in r["cases"].items():
+        typer.echo(f"  {'✓' if c['passed'] else '✗'} {name}")
+    typer.echo(f"{r['passed']}/{r['n']} scenarios passed; all_passed={r['all_passed']}")
 
 
 @app.command()

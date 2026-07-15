@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..core.clock import now_iso
 from ..ledger.models import SchemaVersionRow
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 
 @dataclass
