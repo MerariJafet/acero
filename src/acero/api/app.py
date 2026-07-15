@@ -440,6 +440,10 @@ def create_app() -> FastAPI:
             review.record(ReviewDecision.APPROVE_FOR_EXTERNAL_REVIEW, dossier=d, reasons=["reviewed; evidence and limitations understood"])
         return evaluate_export(d, review).as_dict()
 
+    # --- Unified Research Portal (Sprint 15) -----------------------------
+    from ..portal.app import mount_portal
+    mount_portal(app)
+
     return app
 
 

@@ -1718,6 +1718,17 @@ def program_prioritize() -> None:
         typer.echo(f"  {s.project_id}: view={s.composite_view} dims={s.dimensions}")
 
 
+# --- Unified Research Portal (Sprint 15) ----------------------------------
+
+@app.command("portal")
+def portal(host: str = "127.0.0.1", port: int = 8000) -> None:
+    """Serve the unified research portal (local web app at /portal)."""
+    import uvicorn
+
+    typer.echo(f"ACERO portal → http://{host}:{port}/portal/  (local-first; never publishes)")
+    uvicorn.run("acero.api.app:create_app", host=host, port=port, factory=True)
+
+
 @app.command()
 def version() -> None:
     """Print the ACERO version."""
