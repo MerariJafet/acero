@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..core.clock import now, now_iso
@@ -40,31 +40,47 @@ class ResearchQueue:
 
     def claim(self, worker_id: str) -> dict[str, Any] | None:
         """Atomically claim the best claimable task (QUEUED, or LEASED with expired lease)."""
-        with self._sf_begin() as s:
-            candidates = s.execute(
-                select(RuntimeTaskRow)
-                .where(RuntimeTaskRow.status.in_(("QUEUED", "LEASED", "RUNNING")))
-                .order_by(RuntimeTaskRow.priority.desc())
-            ).scalars().all()
-            picked = None
-            for row in candidates:
-                if row.status == "QUEUED" or self._lease_expired(row):
-                    picked = row
-                    break
-            if picked is None:
-                return None
-            resumed = picked.status in ("LEASED", "RUNNING")
-            picked.status = "LEASED"
-            picked.lease_owner = worker_id
-            picked.lease_expires_at = (now() + timedelta(seconds=self.lease_seconds)).isoformat()
-            picked.heartbeat_at = now_iso()
-            picked.attempts += 1
-            picked.updated_at = now_iso()
-            task = _task_dict(picked)
-            s.commit()
-        self.store.log_event("claim", task_id=task["id"], worker_id=worker_id,
-                             detail="resume" if resumed else "fresh")
-        return task
+        # Atomic compare-and-set claim: two processes MUST NOT claim the same task. We attempt
+        # a conditional UPDATE per candidate and only the process whose UPDATE affects a row
+        # wins (rowcount == 1). This is the fix for the multiprocess double-claim the burn-in
+        # benchmark caught (Sprint 22).
+        while True:
+            with self._sf_begin() as s:
+                candidates = s.execute(
+                    select(RuntimeTaskRow)
+                    .where(RuntimeTaskRow.status.in_(("QUEUED", "LEASED", "RUNNING")))
+                    .order_by(RuntimeTaskRow.priority.desc())
+                ).scalars().all()
+                target = None
+                for row in candidates:
+                    if row.status == "QUEUED" or self._lease_expired(row):
+                        target = row
+                        break
+                if target is None:
+                    return None
+                target_id = target.id
+                resumed = target.status in ("LEASED", "RUNNING")
+                prev_status = target.status
+                prev_expiry = target.lease_expires_at
+                new_expiry = (now() + timedelta(seconds=self.lease_seconds)).isoformat()
+                # conditional update guarded on the exact state we read
+                res = s.execute(
+                    update(RuntimeTaskRow)
+                    .where(RuntimeTaskRow.id == target_id,
+                           RuntimeTaskRow.status == prev_status,
+                           RuntimeTaskRow.lease_expires_at.is_(prev_expiry))
+                    .values(status="LEASED", lease_owner=worker_id,
+                            lease_expires_at=new_expiry, heartbeat_at=now_iso(),
+                            attempts=RuntimeTaskRow.attempts + 1, updated_at=now_iso()))
+                if res.rowcount != 1:
+                    s.rollback()
+                    continue                    # another worker won the race; retry
+                s.commit()
+                won = s.get(RuntimeTaskRow, target_id)
+                task = _task_dict(won)
+            self.store.log_event("claim", task_id=task["id"], worker_id=worker_id,
+                                 detail="resume" if resumed else "fresh")
+            return task
 
     def heartbeat(self, task_id: str, worker_id: str, *,
                   checkpoint: dict[str, Any] | None = None) -> bool:

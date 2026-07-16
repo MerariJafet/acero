@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -79,12 +79,23 @@ def build_portal_router() -> APIRouter:
     @r.get("/api/runtime")
     def runtime() -> dict[str, Any]:
         from ..ledger.db import default_session_factory
+        from ..runtime.observability import metrics_snapshot
         from ..runtime.store import RuntimeStore
         store = RuntimeStore(default_session_factory())
         tasks = store.tasks()
         return {"n_tasks": len(tasks),
                 "by_status": _count(tasks, "status"),
+                "metrics": metrics_snapshot(store),
                 "recent": tasks[-10:]}
+
+    @r.get("/api/metrics")
+    def metrics() -> Response:
+        """Prometheus-compatible metrics text (local; no external platform required)."""
+        from ..ledger.db import default_session_factory
+        from ..runtime.observability import prometheus_text
+        from ..runtime.store import RuntimeStore
+        return Response(prometheus_text(RuntimeStore(default_session_factory())),
+                        media_type="text/plain")
 
     @r.get("/api/review")
     def review() -> dict[str, Any]:

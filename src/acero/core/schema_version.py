@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ..core.clock import now_iso
 from ..ledger.models import SchemaVersionRow
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 3  # Alembic head 0001_baseline (Sprint 22)
 
 
 @dataclass

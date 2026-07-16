@@ -59,6 +59,7 @@ secrets_app = typer.Typer(help="Local HMAC secret management (Sprint 14)")
 worker_app = typer.Typer(help="Persistent research worker runtime (Sprint 14)")
 program_app = typer.Typer(help="Research Program Operating System (Sprint 16)")
 studies_app = typer.Typer(help="Executed research studies on real data (Sprint 17)")
+db_app = typer.Typer(help="Database migrations (Alembic, Sprint 22)")
 evaluation_app = typer.Typer(help="Scientific Capability Evaluation Engine (Sprint 18)")
 collab_app = typer.Typer(help="Collaboration & External Review Preparation (Sprint 19)")
 backup_app = typer.Typer(help="Local backup / verify / restore (Sprint 20)")
@@ -73,6 +74,7 @@ app.add_typer(secrets_app, name="secrets")
 app.add_typer(worker_app, name="worker")
 app.add_typer(program_app, name="program")
 app.add_typer(studies_app, name="studies")
+app.add_typer(db_app, name="db")
 app.add_typer(evaluation_app, name="evaluation")
 app.add_typer(collab_app, name="collab")
 app.add_typer(backup_app, name="backup")
@@ -1726,6 +1728,61 @@ def program_prioritize() -> None:
                    "data_available": 0.3}})
     for s in pf.ranked():
         typer.echo(f"  {s.project_id}: view={s.composite_view} dims={s.dimensions}")
+
+
+# --- Database migrations (Sprint 22) --------------------------------------
+
+@db_app.command("status")
+def db_status() -> None:
+    """Show the current migration revision and head."""
+    from ..migrations import api
+
+    c = api.check()
+    typer.echo(f"current: {c['current']} · head: {c['head']} · status: {c['status']}")
+
+
+@db_app.command("upgrade")
+def db_upgrade(revision: str = typer.Argument("head")) -> None:
+    """Upgrade the database to a revision (default head). Idempotent on a create_all DB."""
+    from ..migrations import api
+
+    typer.echo(f"upgraded to: {api.upgrade(revision=revision)}")
+
+
+@db_app.command("downgrade")
+def db_downgrade(revision: str = typer.Argument("base")) -> None:
+    """Downgrade to a revision (default base = drop all)."""
+    from ..migrations import api
+
+    typer.echo(f"downgraded to: {api.downgrade(revision=revision)}")
+
+
+@db_app.command("check")
+def db_check() -> None:
+    """Exit non-zero if the DB is not at head (CI/ops gate)."""
+    from ..migrations import api
+
+    c = api.check()
+    typer.echo(f"{c['status']} (current={c['current']}, head={c['head']})")
+    if not c["at_head"]:
+        raise typer.Exit(1)
+
+
+@db_app.command("history")
+def db_history() -> None:
+    """Show the migration history."""
+    from ..migrations import api
+
+    typer.echo(api.render_history() or "(no migrations)")
+
+
+@db_app.command("stamp")
+def db_stamp() -> None:
+    """Stamp an existing (create_all) database at head without recreating tables."""
+    from ..migrations import api
+
+    api.stamp_head()
+    typer.echo(f"stamped at head: {api.head()}")
 
 
 # --- Collaboration & external review prep (Sprint 19) ---------------------

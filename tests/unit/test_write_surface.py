@@ -19,6 +19,7 @@ ALLOWED_PREFIXES = (
     "acero/world_model/",       # world model graph (guarded mutations)
     "acero/understanding/store",
     "acero/literature/",
+    "acero/migrations/",        # Alembic migrations ARE the schema-evolution boundary
 )
 
 FORBIDDEN_IMPORTS = {"acero.ledger.models"}

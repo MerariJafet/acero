@@ -20,6 +20,22 @@ def make_engine(cfg: Config | None = None, *, echo: bool = False) -> Engine:
         path = url[len("sqlite:///"):]
         if path and path != ":memory:":
             os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    if url.startswith("sqlite"):
+        # WAL + a busy timeout so concurrent worker processes wait for the write lock instead
+        # of raising 'database is locked' (Sprint 22 multiprocess runtime).
+        engine = create_engine(url, echo=echo, future=True,
+                               connect_args={"timeout": 30})
+
+        from sqlalchemy import event
+
+        @event.listens_for(engine, "connect")
+        def _sqlite_pragmas(dbapi_conn, _rec):  # type: ignore[no-untyped-def]
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA busy_timeout=30000")
+            cur.execute("PRAGMA journal_mode=WAL")
+            cur.close()
+
+        return engine
     engine = create_engine(url, echo=echo, future=True)
     return engine
 
