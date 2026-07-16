@@ -68,6 +68,16 @@ const VIEWS = {
       Object.entries(body.cases).map(([k, c]) =>
         kv(k, `<span class="pill ${c.passed ? 'ok' : 'bad'}">${c.passed ? 'pass' : 'FAIL'}</span>`)).join(""));
   },
+  "Collaboration": async () => {
+    const { body } = await api("/portal/api/collaboration");
+    const qs = body.review_questions.map((q) => `<li>${esc(q)}</li>`).join("");
+    return panel("External Review Preparation (NOT external review)",
+      kv("gauntlet", `${body.gauntlet.passed}/${body.gauntlet.n} ` +
+        `<span class="pill ${body.gauntlet.all_passed ? 'ok' : 'bad'}">${body.gauntlet.all_passed ? 'ok' : 'FAIL'}</span>`) +
+      kv("AI authorship", body.ai_authorship_allowed ? "ALLOWED(!)" : "never")) +
+      panel("Review questions", `<ul>${qs}</ul>`) +
+      `<p class="loading">${esc(body.note)}</p>`;
+  },
   "World Model": async () => {
     return panel("World Model Explorer",
       "<p class='loading'>Enter a project id:</p><input id='wm-pid' placeholder='project id'>" +

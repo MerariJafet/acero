@@ -137,6 +137,25 @@ def build_portal_router() -> APIRouter:
                             "n": rep["prompts"]["n_fixtures"]},
                 "regression": rep["regression"], "note": rep["note"]}
 
+    @r.get("/api/collaboration")
+    def collaboration() -> dict[str, Any]:
+        import tempfile
+
+        from ..benchmarks.external_review_gauntlet import run_external_review_gauntlet
+        from ..collaboration.questions import REVIEW_QUESTIONS
+        from ..discovery.store import DiscoveryStore
+        from ..ledger.db import default_session_factory
+        from ..ledger.service import ResearchLedger
+        sf = default_session_factory()
+        store = DiscoveryStore(sf, ResearchLedger(sf))
+        with tempfile.TemporaryDirectory() as td:
+            gauntlet = run_external_review_gauntlet(td, store)
+        return {"review_questions": list(REVIEW_QUESTIONS),
+                "gauntlet": {"passed": gauntlet["passed"], "n": gauntlet["n"],
+                             "all_passed": gauntlet["all_passed"]},
+                "ai_authorship_allowed": False,
+                "note": "preparing a review bundle is NOT external review; nothing is sent."}
+
     @r.get("/api/world/{project_id}")
     def world(project_id: str) -> dict[str, Any]:
         from ..ledger.db import default_session_factory
@@ -151,8 +170,8 @@ def build_portal_router() -> APIRouter:
 
 SECTIONS = [
     "Overview", "Research Programs", "Projects", "World Model", "Reliability",
-    "Red Team", "Runtime", "Self-Evaluation", "Review", "Publication Candidates",
-    "Decision Center", "Settings",
+    "Red Team", "Runtime", "Self-Evaluation", "Review", "Collaboration",
+    "Publication Candidates", "Decision Center", "Settings",
 ]
 
 

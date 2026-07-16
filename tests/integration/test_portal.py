@@ -110,3 +110,13 @@ def test_portal_evaluation_view():
 
 def test_self_evaluation_in_sections():
     assert "Self-Evaluation" in _client().get("/portal/api/overview").json()["sections"]
+
+
+# --- Sprint 19: collaboration view -----------------------------------------
+
+def test_portal_collaboration_view():
+    col = _client().get("/portal/api/collaboration").json()
+    assert col["ai_authorship_allowed"] is False
+    assert col["gauntlet"]["all_passed"] is True
+    assert len(col["review_questions"]) >= 8
+    assert "NOT external review" in col["note"]

@@ -60,6 +60,7 @@ worker_app = typer.Typer(help="Persistent research worker runtime (Sprint 14)")
 program_app = typer.Typer(help="Research Program Operating System (Sprint 16)")
 studies_app = typer.Typer(help="Executed research studies on real data (Sprint 17)")
 evaluation_app = typer.Typer(help="Scientific Capability Evaluation Engine (Sprint 18)")
+collab_app = typer.Typer(help="Collaboration & External Review Preparation (Sprint 19)")
 backup_app = typer.Typer(help="Local backup / verify / restore (Sprint 20)")
 release_app = typer.Typer(help="Release candidate manifest + acceptance (Sprint 20)")
 app.add_typer(learner_app, name="learner")
@@ -73,6 +74,7 @@ app.add_typer(worker_app, name="worker")
 app.add_typer(program_app, name="program")
 app.add_typer(studies_app, name="studies")
 app.add_typer(evaluation_app, name="evaluation")
+app.add_typer(collab_app, name="collab")
 app.add_typer(backup_app, name="backup")
 app.add_typer(release_app, name="release")
 
@@ -1724,6 +1726,56 @@ def program_prioritize() -> None:
                    "data_available": 0.3}})
     for s in pf.ranked():
         typer.echo(f"  {s.project_id}: view={s.composite_view} dims={s.dimensions}")
+
+
+# --- Collaboration & external review prep (Sprint 19) ---------------------
+
+@collab_app.command("bundle")
+def collab_bundle(out: str = typer.Option("", help="output directory"),
+                  blind: str = typer.Option("OPEN_IDENTITY")) -> None:
+    """Build a LOCAL external review bundle (never published)."""
+    from ..collaboration.bundle import BlindMode, BundleError, build_bundle
+
+    path = out or str(repo_root() / "research" / "artifacts" / "external_review_bundle")
+    try:
+        r = build_bundle(
+            path, project="Stellar Variability & Regime Discovery",
+            central_claims=[{"claim": "~11.2 yr cycle (data-level, no discovery)"}],
+            methods="FFT periodogram + AR(1) red-noise surrogate + bootstrap CI",
+            evidence_map=[{"id": "e1", "summary": "clean recovery"}],
+            counterevidence=[{"id": "c1", "summary": "cycle length varies"}],
+            limitations=["single dataset (SILSO)", "no instrument dependence assessed"],
+            reliability_card={"adversarial_robustness": 1.0}, commit="2.0.0-rc2",
+            licenses={"code": "MIT", "data": "public-domain"}, blind=BlindMode(blind))
+    except BundleError as exc:
+        typer.echo(f"bundle BLOCKED: {exc}")
+        raise typer.Exit(1) from exc
+    typer.echo(f"bundle → {r['dir']} · files={r['n_files']} · blind={r['blind']} · "
+               f"auto_published={r['auto_published']}")
+
+
+@collab_app.command("questions")
+def collab_questions(role: str = typer.Option("", help="reviewer role")) -> None:
+    """Show the review questions (not just 'do you agree?')."""
+    from ..collaboration.questions import questions_for
+
+    for q in questions_for(role or None):
+        typer.echo(f"  - {q}")
+
+
+@collab_app.command("gauntlet")
+def collab_gauntlet() -> None:
+    """Run the External Review Preparation Gauntlet."""
+    import tempfile
+
+    from ..benchmarks.external_review_gauntlet import run_external_review_gauntlet
+
+    _, _, store = _discovery()
+    with tempfile.TemporaryDirectory() as td:
+        r = run_external_review_gauntlet(td, store)
+    for name, c in r["cases"].items():
+        typer.echo(f"  {'✓' if c['passed'] else '✗'} {name}")
+    typer.echo(f"{r['passed']}/{r['n']} cases passed; all_passed={r['all_passed']}")
 
 
 # --- Scientific self-evaluation (Sprint 18) -------------------------------

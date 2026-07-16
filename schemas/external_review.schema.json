@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "ReviewerRole": {
+      "enum": [
+        "DOMAIN_EXPERT",
+        "STATISTICIAN",
+        "METHODS_REVIEWER",
+        "REPRODUCIBILITY_REVIEWER",
+        "DATA_EXPERT",
+        "SECURITY_REVIEWER",
+        "ETHICS_REVIEWER",
+        "SKEPTICAL_GENERALIST"
+      ],
+      "title": "ReviewerRole",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "claim_comments": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Claim Comments",
+      "type": "array"
+    },
+    "confidence": {
+      "default": 0.5,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "imported_at": {
+      "title": "Imported At",
+      "type": "string"
+    },
+    "major_concerns": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Major Concerns",
+      "type": "array"
+    },
+    "method_comments": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Method Comments",
+      "type": "array"
+    },
+    "minor_concerns": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Minor Concerns",
+      "type": "array"
+    },
+    "overall_assessment": {
+      "default": "",
+      "title": "Overall Assessment",
+      "type": "string"
+    },
+    "reproduction_result": {
+      "default": "not_attempted",
+      "title": "Reproduction Result",
+      "type": "string"
+    },
+    "requested_changes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Requested Changes",
+      "type": "array"
+    },
+    "review_id": {
+      "title": "Review Id",
+      "type": "string"
+    },
+    "reviewed_bundle_hash": {
+      "default": "",
+      "title": "Reviewed Bundle Hash",
+      "type": "string"
+    },
+    "reviewed_version": {
+      "title": "Reviewed Version",
+      "type": "string"
+    },
+    "reviewer_role": {
+      "$ref": "#/$defs/ReviewerRole"
+    },
+    "trusted": {
+      "default": false,
+      "title": "Trusted",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "reviewer_role",
+    "reviewed_version"
+  ],
+  "title": "ExternalReview",
+  "type": "object"
+}

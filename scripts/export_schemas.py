@@ -17,6 +17,7 @@ from acero.cognitive.first_principles.models import (
     FirstPrinciplesProblem,
     ScientificDerivation,
 )
+from acero.collaboration.models import CollaborationWorkspace, ExternalReview, ReviewIssue
 from acero.core.config import repo_root
 from acero.discovery.candidates import HypothesisCandidate
 from acero.discovery.experiment_design import ExperimentProposal
@@ -85,6 +86,10 @@ MODELS = {
     "comprehension_gate_result": ComprehensionGateResult,
     # Research Program OS (Sprint 16)
     "research_program": ResearchProgram,
+    # Collaboration (Sprint 19)
+    "collaboration_workspace": CollaborationWorkspace,
+    "external_review": ExternalReview,
+    "review_issue": ReviewIssue,
 }
 
 

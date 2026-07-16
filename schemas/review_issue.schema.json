@@ -1,0 +1,82 @@
+{
+  "$defs": {
+    "IssueStatus": {
+      "enum": [
+        "OPEN",
+        "ACKNOWLEDGED",
+        "IN_PROGRESS",
+        "RESOLVED",
+        "REJECTED_WITH_REASON",
+        "REQUIRES_EXTERNAL_VALIDATION"
+      ],
+      "title": "IssueStatus",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "artifact": {
+      "default": "",
+      "title": "Artifact",
+      "type": "string"
+    },
+    "category": {
+      "default": "methodological",
+      "title": "Category",
+      "type": "string"
+    },
+    "claim": {
+      "default": "",
+      "title": "Claim",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "issue_id": {
+      "title": "Issue Id",
+      "type": "string"
+    },
+    "owner": {
+      "default": "human",
+      "title": "Owner",
+      "type": "string"
+    },
+    "remediation": {
+      "default": "",
+      "title": "Remediation",
+      "type": "string"
+    },
+    "review_id": {
+      "title": "Review Id",
+      "type": "string"
+    },
+    "severity": {
+      "default": "medium",
+      "title": "Severity",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/IssueStatus",
+      "default": "OPEN"
+    },
+    "validation": {
+      "default": "",
+      "title": "Validation",
+      "type": "string"
+    }
+  },
+  "required": [
+    "review_id"
+  ],
+  "title": "ReviewIssue",
+  "type": "object"
+}

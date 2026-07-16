@@ -1,0 +1,92 @@
+{
+  "$defs": {
+    "ReviewerRole": {
+      "enum": [
+        "DOMAIN_EXPERT",
+        "STATISTICIAN",
+        "METHODS_REVIEWER",
+        "REPRODUCIBILITY_REVIEWER",
+        "DATA_EXPERT",
+        "SECURITY_REVIEWER",
+        "ETHICS_REVIEWER",
+        "SKEPTICAL_GENERALIST"
+      ],
+      "title": "ReviewerRole",
+      "type": "string"
+    },
+    "WorkspaceStatus": {
+      "enum": [
+        "DRAFT",
+        "READY_FOR_REVIEW",
+        "IN_REVIEW",
+        "CLOSED"
+      ],
+      "title": "WorkspaceStatus",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "artifacts": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "confidentiality": {
+      "default": "local_only",
+      "title": "Confidentiality",
+      "type": "string"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "license": {
+      "default": "unspecified",
+      "title": "License",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "purpose": {
+      "default": "",
+      "title": "Purpose",
+      "type": "string"
+    },
+    "requested_expertise": {
+      "items": {
+        "$ref": "#/$defs/ReviewerRole"
+      },
+      "title": "Requested Expertise",
+      "type": "array"
+    },
+    "review_questions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Review Questions",
+      "type": "array"
+    },
+    "status": {
+      "$ref": "#/$defs/WorkspaceStatus",
+      "default": "DRAFT"
+    },
+    "version": {
+      "default": "2.0.0-rc2",
+      "title": "Version",
+      "type": "string"
+    },
+    "workspace_id": {
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id"
+  ],
+  "title": "CollaborationWorkspace",
+  "type": "object"
+}
