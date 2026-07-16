@@ -171,3 +171,12 @@ def test_questions_are_not_just_do_you_agree():
     assert any("invalidate" in q.lower() for q in qs)
     assert any("independent" in q.lower() for q in qs)
     assert "review_request" in DRAFT_KINDS
+
+
+def test_approved_response_preserves_ai_draft_provenance():
+    """Codex-audit fix: approval records the human but PRESERVES that AI drafted it."""
+    d = draft_response("iss1", ResponseKind.ACCEPTED, "ok")
+    d.approve("Merari")
+    out = d.as_dict()
+    assert out["ai_drafted"] is True and out["human_approved"] is True
+    assert out["approver"] == "Merari"       # human recorded separately from the AI draft

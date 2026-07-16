@@ -36,7 +36,8 @@ def build_manifest() -> dict[str, Any]:
         "gate_rules": len(GateRegistry().all_rules()),
         "benchmarks": ["governing_dynamics", "cross_domain", "human_understanding",
                        "reliability_gauntlet", "review_gauntlet", "chaos_gauntlet",
-                       "multi_domain", "gate_bypass"],
+                       "multi_domain", "gate_bypass", "stellar_variability",
+                       "self_evaluation", "external_review_gauntlet"],
         "datasets": [{"name": "SILSO sunspots", "license": "public domain", "gated": True},
                      {"name": "NASA exoplanets", "license": "public", "gated": True}],
         "licenses": {"code": "see repository", "datasets": "public/public-domain only"},
@@ -48,6 +49,9 @@ def build_manifest() -> dict[str, Any]:
             "worker drains synchronously (no long-lived daemon)",
             "single astronomy study; instrument/pipeline dependence not assessed",
             "no Alembic (idempotent create_all + lightweight schema versioning)",
+            "self-evaluation uses ACERO's own benchmarks — NOT independent evaluation",
+            "external review preparation is NOT external review; a validation plan is not "
+            "validation; nothing is sent or contacted",
         ],
     }
 
@@ -86,6 +90,26 @@ def final_acceptance() -> dict[str, Any]:
     with tempfile.TemporaryDirectory() as td:
         rv = run_review_gauntlet(td)
     _record("review", rv["all_passed"], f"{rv['passed']}/{rv['n']}")
+
+    # Sprint 18/19 additions
+    from ..selfeval.engine import run_evaluation
+    ev = run_evaluation()
+    _record("self_evaluation", not ev["regression"].get("has_regression"),
+            ev["verdict"])
+    from sqlalchemy import create_engine
+
+    from ..benchmarks.external_review_gauntlet import run_external_review_gauntlet
+    from ..discovery.store import DiscoveryStore
+    from ..ledger.db import make_session_factory
+    from ..ledger.models import Base
+    from ..ledger.service import ResearchLedger
+    eng = create_engine("sqlite:///:memory:", future=True)
+    Base.metadata.create_all(eng)
+    sf = make_session_factory(eng)
+    store = DiscoveryStore(sf, ResearchLedger(sf))
+    with tempfile.TemporaryDirectory() as td:
+        erg = run_external_review_gauntlet(td, store)
+    _record("external_review", erg["all_passed"], f"{erg['passed']}/{erg['n']}")
 
     all_passed = all(g["all_passed"] for g in gauntlets.values())
     return {"gauntlets": gauntlets, "all_gauntlets_passed": all_passed,

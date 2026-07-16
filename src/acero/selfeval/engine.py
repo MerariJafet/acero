@@ -19,10 +19,13 @@ from .regression import compare_run
 def run_evaluation(*, baseline_version: str = "v2.0.0-rc1") -> dict[str, Any]:
     """Run all benchmarks; compare vs baseline if present; refresh capability statuses."""
     current = benchmarks.run_all()
-    if baseline.exists(baseline_version):
+    has_baseline = baseline.exists(baseline_version)
+    if has_baseline:
         base = baseline.load(baseline_version)
         regression = compare_run(base, current)
     else:
+        # No baseline ⇒ we cannot claim NO_REGRESSION (nothing was compared). Report it
+        # honestly as insufficient rather than overreaching (Codex-audit fix).
         regression = {"per_benchmark": {}, "regressions": [],
                       "has_regression": False, "no_baseline": True}
 
@@ -51,9 +54,12 @@ def run_evaluation(*, baseline_version: str = "v2.0.0-rc1") -> dict[str, Any]:
         "prompts": prompts.run(),
         "codex_drift": detect_drift(None),
         "verdict": ("REGRESSION_DETECTED" if regression.get("has_regression")
-                    else "NO_REGRESSION"),
-        "note": "self-evaluation reports evidence; it never self-approves and never treats "
-                "more tests/code as scientific improvement. A human decides.",
+                    else "NO_REGRESSION" if has_baseline
+                    else "INSUFFICIENT_BASELINE"),
+        "note": "self-evaluation reports evidence against ACERO's OWN (not independent) "
+                "benchmarks; NO_REGRESSION means only 'no change vs the locked baseline'. It "
+                "never self-approves and never treats more tests/code as improvement. A human "
+                "decides.",
     }
 
 

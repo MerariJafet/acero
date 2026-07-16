@@ -1,14 +1,15 @@
 {
   "name": "ACERO",
-  "version": "2.0.0-rc1",
-  "commit": "7b0cbdf",
-  "branch": "integration/acero-v2-program",
+  "version": "2.0.0-rc2",
+  "commit": "d36248b",
+  "branch": "feature/acero-v2-rc2-sprints-18-19",
   "schema_version": 3,
   "packages": [
     "api",
     "benchmarks",
     "cli",
     "cognitive",
+    "collaboration",
     "core",
     "discovery",
     "domains",
@@ -33,11 +34,12 @@
     "reliability",
     "runtime",
     "sandbox",
+    "selfeval",
     "studies",
     "understanding",
     "world_model"
   ],
-  "n_packages": 31,
+  "n_packages": 33,
   "gate_rules": 81,
   "benchmarks": [
     "governing_dynamics",
@@ -47,7 +49,10 @@
     "review_gauntlet",
     "chaos_gauntlet",
     "multi_domain",
-    "gate_bypass"
+    "gate_bypass",
+    "stellar_variability",
+    "self_evaluation",
+    "external_review_gauntlet"
   ],
   "datasets": [
     {
@@ -79,6 +84,8 @@
     "portal is a vanilla-JS SPA (no Vitest/Playwright) \u2014 pytest route/DOM/security tests",
     "worker drains synchronously (no long-lived daemon)",
     "single astronomy study; instrument/pipeline dependence not assessed",
-    "no Alembic (idempotent create_all + lightweight schema versioning)"
+    "no Alembic (idempotent create_all + lightweight schema versioning)",
+    "self-evaluation uses ACERO's own benchmarks \u2014 NOT independent evaluation",
+    "external review preparation is NOT external review; a validation plan is not validation; nothing is sent or contacted"
   ]
 }

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "acero"
-version = "2.0.0-rc1"
+version = "2.0.0-rc2"
 description = "ACERO — Adaptive Computational Engine for Research and Epistemic Reasoning"
 readme = "README.md"
 requires-python = ">=3.12"

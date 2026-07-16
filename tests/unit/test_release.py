@@ -99,7 +99,8 @@ def test_manifest_reports_rc_version_and_no_autopublish():
 
 def test_final_acceptance_runs_all_gauntlets():
     r = final_acceptance()
-    assert set(r["gauntlets"]) == {"reliability", "chaos", "red_team", "mutation", "review"}
+    assert {"reliability", "chaos", "red_team", "mutation", "review",
+            "self_evaluation", "external_review"} <= set(r["gauntlets"])
     assert r["all_gauntlets_passed"] is True
     # acceptance reports; it never self-approves a release
     assert r["verdict"] == "RECOMMENDED_FOR_HUMAN_RELEASE_REVIEW"

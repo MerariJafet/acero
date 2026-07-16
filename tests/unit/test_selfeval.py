@@ -168,3 +168,19 @@ def test_engine_reports_no_self_approval():
     r = run_evaluation()
     assert "never self-approves" in r["note"]
     assert r["verdict"] in ("NO_REGRESSION", "REGRESSION_DETECTED")
+
+
+# --- Codex-audit regression fixes (RC2) -----------------------------------
+
+def test_no_baseline_yields_insufficient_not_no_regression(monkeypatch):
+    """Codex-audit fix: without a baseline we must NOT claim NO_REGRESSION."""
+    import acero.selfeval.baseline as bl
+    monkeypatch.setattr(bl, "exists", lambda v: False)
+    r = run_evaluation(baseline_version="v-nonexistent")
+    assert r["verdict"] == "INSUFFICIENT_BASELINE"
+    assert "not independent" in r["note"]
+
+
+def test_no_regression_note_scopes_the_claim():
+    r = run_evaluation()
+    assert "vs the locked baseline" in r["note"]
