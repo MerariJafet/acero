@@ -59,6 +59,7 @@ secrets_app = typer.Typer(help="Local HMAC secret management (Sprint 14)")
 worker_app = typer.Typer(help="Persistent research worker runtime (Sprint 14)")
 program_app = typer.Typer(help="Research Program Operating System (Sprint 16)")
 studies_app = typer.Typer(help="Executed research studies on real data (Sprint 17)")
+evaluation_app = typer.Typer(help="Scientific Capability Evaluation Engine (Sprint 18)")
 backup_app = typer.Typer(help="Local backup / verify / restore (Sprint 20)")
 release_app = typer.Typer(help="Release candidate manifest + acceptance (Sprint 20)")
 app.add_typer(learner_app, name="learner")
@@ -71,6 +72,7 @@ app.add_typer(secrets_app, name="secrets")
 app.add_typer(worker_app, name="worker")
 app.add_typer(program_app, name="program")
 app.add_typer(studies_app, name="studies")
+app.add_typer(evaluation_app, name="evaluation")
 app.add_typer(backup_app, name="backup")
 app.add_typer(release_app, name="release")
 
@@ -1722,6 +1724,79 @@ def program_prioritize() -> None:
                    "data_available": 0.3}})
     for s in pf.ranked():
         typer.echo(f"  {s.project_id}: view={s.composite_view} dims={s.dimensions}")
+
+
+# --- Scientific self-evaluation (Sprint 18) -------------------------------
+
+@evaluation_app.command("run")
+def evaluation_run(benchmark: str = typer.Argument("", help="one benchmark, or all")) -> None:
+    """Run the benchmark suite (or one), compare vs the locked baseline, report regressions."""
+    from ..selfeval import benchmarks as bm
+    from ..selfeval.engine import run_evaluation
+
+    if benchmark:
+        r = bm.run_one(benchmark)
+        typer.echo(f"{benchmark}: passed={r['passed']} metrics={r['metrics']} "
+                   f"({r['duration_sec']}s) commit={r['commit']}")
+        return
+    r = run_evaluation()
+    typer.echo(f"verdict: {r['verdict']} · version {r['version']} · commit {r['commit']}")
+    for b, v in r["benchmarks"].items():
+        typer.echo(f"  {'✓' if v['passed'] else '✗'} {b}: {v['metrics']} ({v['duration_sec']}s)")
+    if r["regression"].get("has_regression"):
+        typer.echo(f"  REGRESSIONS: {r['regression']['regressions']}")
+    typer.echo(r["note"])
+
+
+@evaluation_app.command("status")
+def evaluation_status() -> None:
+    """Show capability statuses (evidence-driven; no auto-promotion)."""
+    from ..selfeval.engine import run_evaluation
+
+    for c in run_evaluation()["capabilities"]:
+        typer.echo(f"  [{c['status']}] {c['name']} ({c['domain']}) "
+                   f"benchmarks={c['benchmarks']}")
+
+
+@evaluation_app.command("history")
+def evaluation_history() -> None:
+    """Show the locked baselines available for comparison."""
+    from ..core.config import repo_root
+
+    d = repo_root() / "evaluation" / "baselines"
+    versions = sorted(p.name for p in d.iterdir()) if d.exists() else []
+    typer.echo(f"locked baselines: {versions or 'none'}")
+
+
+@evaluation_app.command("lock-baseline")
+def evaluation_lock_baseline(
+    version: str = typer.Argument("v2.0.0-rc1"),
+    force: bool = typer.Option(False, "--force"),
+) -> None:
+    """Run all benchmarks and lock them as the signed baseline for a version."""
+    from ..selfeval.baseline import BaselineError
+    from ..selfeval.engine import lock_baseline
+
+    try:
+        r = lock_baseline(version, force=force)
+    except BaselineError as exc:
+        typer.echo(f"refused: {exc}")
+        raise typer.Exit(1) from exc
+    typer.echo(f"baseline locked: {version} → {r['path']} (hash {r['hash'][:16]})")
+
+
+@evaluation_app.command("failures")
+def evaluation_failures() -> None:
+    """Seed + list the failure memory by category."""
+    from ..selfeval.failures import FailureMemory
+
+    _, _, store = _discovery()
+    fm = FailureMemory(store)
+    fm.seed()
+    typer.echo(f"failure memory by category: {fm.by_category()}")
+    missing = fm.without_regression_test()
+    if missing:
+        typer.echo(f"  FIXED without regression test: {missing}")
 
 
 # --- Backup / restore (Sprint 20) -----------------------------------------

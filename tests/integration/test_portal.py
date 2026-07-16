@@ -95,3 +95,18 @@ def test_spa_shell_has_nav_and_view_mounts():
     html = (Path(__file__).parents[2] / "src" / "acero" / "portal" / "static" / "index.html").read_text()
     assert 'id="nav"' in html and 'id="view"' in html
     assert "/portal/static/app.js" in html
+
+
+# --- Sprint 18: self-evaluation view ---------------------------------------
+
+def test_portal_evaluation_view():
+    e = _client().get("/portal/api/evaluation").json()
+    assert e["verdict"] in ("NO_REGRESSION", "REGRESSION_DETECTED")
+    assert len(e["benchmarks"]) >= 5
+    astro = next(c for c in e["capabilities"]
+                 if c["name"] == "astronomy_timeseries_analysis")
+    assert astro["status"] == "EXPERIMENTAL"       # no self-promotion in the UI either
+
+
+def test_self_evaluation_in_sections():
+    assert "Self-Evaluation" in _client().get("/portal/api/overview").json()["sections"]

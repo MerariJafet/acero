@@ -49,6 +49,18 @@ const VIEWS = {
       kv("tasks", body.n_tasks) +
       Object.entries(body.by_status || {}).map(([k, v]) => kv(k, v)).join(""));
   },
+  "Self-Evaluation": async () => {
+    const { body } = await api("/portal/api/evaluation");
+    const bm = Object.entries(body.benchmarks).map(([b, v]) =>
+      kv(b, `<span class="pill ${v.passed ? 'ok' : 'bad'}">${v.passed ? 'pass' : 'FAIL'}</span> ${JSON.stringify(v.metrics)}`)).join("");
+    const caps = body.capabilities.map((c) =>
+      kv(c.name, `<span class="pill ${c.status === 'DEGRADED' ? 'bad' : c.status === 'EXPERIMENTAL' ? 'warn' : 'ok'}">${c.status}</span>`)).join("");
+    return panel("Verdict: " + esc(body.verdict),
+      kv("version", body.version) + kv("prompts", `${body.prompts.passed}/${body.prompts.n}`) +
+      kv("regression", body.regression.has_regression ? "REGRESSED" : "none")) +
+      panel("Benchmark status", bm) + panel("Capability registry", caps) +
+      `<p class="loading">${esc(body.note)}</p>`;
+  },
   "Review": async () => {
     const { body } = await api("/portal/api/review");
     return panel("Human Scientific Review Gauntlet",

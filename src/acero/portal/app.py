@@ -126,6 +126,17 @@ def build_portal_router() -> APIRouter:
         return {"recorded": body.decision, "reason": body.reason,
                 "note": "recorded locally; ACERO never publishes or sends anything"}
 
+    @r.get("/api/evaluation")
+    def evaluation() -> dict[str, Any]:
+        from ..selfeval.engine import run_evaluation
+        rep = run_evaluation()
+        return {"verdict": rep["verdict"], "version": rep["version"],
+                "benchmarks": rep["benchmarks"],
+                "capabilities": rep["capabilities"],
+                "prompts": {"passed": rep["prompts"]["passed"],
+                            "n": rep["prompts"]["n_fixtures"]},
+                "regression": rep["regression"], "note": rep["note"]}
+
     @r.get("/api/world/{project_id}")
     def world(project_id: str) -> dict[str, Any]:
         from ..ledger.db import default_session_factory
@@ -140,7 +151,8 @@ def build_portal_router() -> APIRouter:
 
 SECTIONS = [
     "Overview", "Research Programs", "Projects", "World Model", "Reliability",
-    "Red Team", "Runtime", "Review", "Publication Candidates", "Decision Center", "Settings",
+    "Red Team", "Runtime", "Self-Evaluation", "Review", "Publication Candidates",
+    "Decision Center", "Settings",
 ]
 
 
