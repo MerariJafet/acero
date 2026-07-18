@@ -1,8 +1,8 @@
 {
   "name": "ACERO",
-  "version": "2.0.0-rc2",
-  "commit": "d36248b",
-  "branch": "feature/acero-v2-rc2-sprints-18-19",
+  "version": "2.1.0-rc1",
+  "commit": "09ef703",
+  "branch": "integration/acero-2.1-program",
   "schema_version": 3,
   "packages": [
     "api",
@@ -24,6 +24,7 @@
     "ledger",
     "literature",
     "llm",
+    "migrations",
     "pedagogy",
     "policies",
     "portal",
@@ -32,6 +33,7 @@
     "publication",
     "release",
     "reliability",
+    "reproduction",
     "runtime",
     "sandbox",
     "selfeval",
@@ -39,7 +41,7 @@
     "understanding",
     "world_model"
   ],
-  "n_packages": 33,
+  "n_packages": 35,
   "gate_rules": 81,
   "benchmarks": [
     "governing_dynamics",
@@ -51,6 +53,7 @@
     "multi_domain",
     "gate_bypass",
     "stellar_variability",
+    "exoplanet_transit_robustness",
     "self_evaluation",
     "external_review_gauntlet"
   ],
@@ -64,28 +67,34 @@
       "name": "NASA exoplanets",
       "license": "public",
       "gated": true
+    },
+    {
+      "name": "Kepler-8 + control light curves",
+      "license": "public domain",
+      "gated": true
     }
   ],
   "licenses": {
-    "code": "see repository",
+    "code": "Apache-2.0",
     "datasets": "public/public-domain only"
   },
   "security": {
     "auto_publication": false,
     "sandbox": "subprocess/docker",
     "secrets": "env HMAC (never in Git)",
-    "inline_gate": true
+    "inline_gate": true,
+    "portal_auth": "PBKDF2 + server sessions + CSRF + rate limit"
   },
   "compatibility": {
     "python": "3.12",
     "db": "SQLite (PostgreSQL optional)"
   },
   "known_issues": [
-    "portal is a vanilla-JS SPA (no Vitest/Playwright) \u2014 pytest route/DOM/security tests",
-    "worker drains synchronously (no long-lived daemon)",
-    "single astronomy study; instrument/pipeline dependence not assessed",
-    "no Alembic (idempotent create_all + lightweight schema versioning)",
+    "portal is a modular vanilla-JS SPA (per ADR-PORTAL-STACK-V2); real Playwright browser E2E + pytest route/DOM/security tests",
+    "runtime uses real multiprocess workers over on-disk SQLite; no long-lived daemon",
+    "two astronomy studies (sunspots, transit); instrument/pipeline dependence still not exhaustively assessed",
+    "transit program ABSTAINS: naive BLS-SNR does not control red-noise false positives (preserved negative result, not a defect to hide)",
     "self-evaluation uses ACERO's own benchmarks \u2014 NOT independent evaluation",
-    "external review preparation is NOT external review; a validation plan is not validation; nothing is sent or contacted"
+    "reproduction is INDEPENDENT_PROCESS_REPRODUCTION \u2014 NOT external replication; external review preparation is NOT external review; nothing is sent or contacted"
   ]
 }

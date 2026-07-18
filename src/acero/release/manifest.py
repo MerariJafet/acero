@@ -37,21 +37,28 @@ def build_manifest() -> dict[str, Any]:
         "benchmarks": ["governing_dynamics", "cross_domain", "human_understanding",
                        "reliability_gauntlet", "review_gauntlet", "chaos_gauntlet",
                        "multi_domain", "gate_bypass", "stellar_variability",
-                       "self_evaluation", "external_review_gauntlet"],
+                       "exoplanet_transit_robustness", "self_evaluation",
+                       "external_review_gauntlet"],
         "datasets": [{"name": "SILSO sunspots", "license": "public domain", "gated": True},
-                     {"name": "NASA exoplanets", "license": "public", "gated": True}],
-        "licenses": {"code": "see repository", "datasets": "public/public-domain only"},
+                     {"name": "NASA exoplanets", "license": "public", "gated": True},
+                     {"name": "Kepler-8 + control light curves", "license": "public domain",
+                      "gated": True}],
+        "licenses": {"code": "Apache-2.0", "datasets": "public/public-domain only"},
         "security": {"auto_publication": False, "sandbox": "subprocess/docker",
-                     "secrets": "env HMAC (never in Git)", "inline_gate": True},
+                     "secrets": "env HMAC (never in Git)", "inline_gate": True,
+                     "portal_auth": "PBKDF2 + server sessions + CSRF + rate limit"},
         "compatibility": {"python": "3.12", "db": "SQLite (PostgreSQL optional)"},
         "known_issues": [
-            "portal is a vanilla-JS SPA (no Vitest/Playwright) — pytest route/DOM/security tests",
-            "worker drains synchronously (no long-lived daemon)",
-            "single astronomy study; instrument/pipeline dependence not assessed",
-            "no Alembic (idempotent create_all + lightweight schema versioning)",
+            "portal is a modular vanilla-JS SPA (per ADR-PORTAL-STACK-V2); real Playwright "
+            "browser E2E + pytest route/DOM/security tests",
+            "runtime uses real multiprocess workers over on-disk SQLite; no long-lived daemon",
+            "two astronomy studies (sunspots, transit); instrument/pipeline dependence "
+            "still not exhaustively assessed",
+            "transit program ABSTAINS: naive BLS-SNR does not control red-noise false "
+            "positives (preserved negative result, not a defect to hide)",
             "self-evaluation uses ACERO's own benchmarks — NOT independent evaluation",
-            "external review preparation is NOT external review; a validation plan is not "
-            "validation; nothing is sent or contacted",
+            "reproduction is INDEPENDENT_PROCESS_REPRODUCTION — NOT external replication; "
+            "external review preparation is NOT external review; nothing is sent or contacted",
         ],
     }
 

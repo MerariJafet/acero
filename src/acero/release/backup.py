@@ -87,3 +87,34 @@ def restore(backup_dir: str | Path, *, cfg: Any = None) -> dict[str, Any]:
     return {"restored": restored, "target": str(db) if db else None,
             "acero_version": report["acero_version"],
             "schema_version": report["schema_version"]}
+
+
+def verify_backup_roundtrip() -> dict[str, Any]:
+    """Self-contained backup→verify→restore round-trip against a temp DB."""
+    import tempfile
+
+    from sqlalchemy import create_engine, text
+    with tempfile.TemporaryDirectory() as td:
+        db = Path(td) / "src.sqlite"
+        eng = create_engine(f"sqlite:///{db}", future=True)
+        with eng.begin() as c:
+            c.execute(text("CREATE TABLE t (id INTEGER)"))
+            c.execute(text("INSERT INTO t VALUES (1),(2),(3)"))
+        # independent config copies so the shared cached config is never mutated
+        cfg = get_config().model_copy(deep=True)
+        cfg.storage.db_url = f"sqlite:///{db}"
+        bdir = Path(td) / "backup"
+        create(bdir, cfg=cfg)
+        vok = verify(bdir)["ok"]
+        # restore into a fresh target
+        db2 = Path(td) / "restored.sqlite"
+        cfg2 = get_config().model_copy(deep=True)
+        cfg2.storage.db_url = f"sqlite:///{db2}"
+        rep = restore(bdir, cfg=cfg2)
+        rok = rep["restored"] and db2.exists()
+        rows = 0
+        if rok:
+            eng2 = create_engine(f"sqlite:///{db2}", future=True)
+            with eng2.begin() as c:
+                rows = int(c.execute(text("SELECT count(*) FROM t")).scalar_one())
+    return {"backup_ok": bool(vok), "restore_ok": bool(rok and rows == 3), "rows": rows}

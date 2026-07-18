@@ -89,7 +89,7 @@ def test_backup_manifest_is_local_only(tmp_path):
 
 def test_manifest_reports_rc_version_and_no_autopublish():
     m = build_manifest()
-    assert m["version"].startswith("2.0.0-rc")
+    assert m["version"].startswith("2.1.0-rc")
     assert m["security"]["auto_publication"] is False
     assert m["gate_rules"] >= 80 and m["n_packages"] >= 25
     assert m["known_issues"]                         # honest known issues listed

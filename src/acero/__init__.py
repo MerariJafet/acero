@@ -4,4 +4,4 @@ A local-first, human-in-the-loop discovery operating system for computational
 science. See docs/governance/ACERO_CONSTITUTION.md for the non-negotiable rules.
 """
 
-__version__ = "2.0.0-rc2"
+__version__ = "2.1.0-rc1"

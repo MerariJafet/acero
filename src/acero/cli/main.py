@@ -2064,5 +2064,41 @@ def version() -> None:
     typer.echo(__version__)
 
 
+@app.command()
+def demo(what: str = typer.Argument("full")) -> None:
+    """Run an end-to-end research demo (`acero demo full`) — local, no publication."""
+    if what != "full":
+        typer.secho("only 'full' is supported", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    from .demo import run_full_demo
+    for line in run_full_demo():
+        typer.echo(line)
+
+
+@app.command()
+def acceptance() -> None:
+    """Run the ACERO 2.1.0-rc1 acceptance matrix (reports; a human decides)."""
+    from ..release.acceptance import acceptance_matrix
+    m = acceptance_matrix()
+    for name, row in m["rows"].items():
+        color = typer.colors.GREEN if row["status"] == "PASS" else typer.colors.RED
+        typer.secho(f"  {name:26s} {row['status']:8s} [{row['verified_by']}] {row['evidence']}",
+                    fg=color)
+    typer.secho(f"\n{m['verdict']} — {m['n_pass']}/{m['n']} pass; blockers: {m['blockers'] or 'none'}",
+                fg=typer.colors.GREEN if m["all_pass"] else typer.colors.RED)
+
+
+@app.command("security-audit")
+def security_audit_cmd() -> None:
+    """Run the release security audit."""
+    from ..release.security_audit import security_audit
+    a = security_audit()
+    for c in a["checks"]:
+        typer.secho(f"  {'OK ' if c['ok'] else 'BAD'} {c['check']:24s} {c['evidence']}",
+                    fg=typer.colors.GREEN if c["ok"] else typer.colors.RED)
+    typer.secho(f"\n{a['n_ok']}/{a['n']} ok; failures: {a['failures'] or 'none'}",
+                fg=typer.colors.GREEN if a["all_ok"] else typer.colors.RED)
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()
