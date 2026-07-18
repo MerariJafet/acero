@@ -79,6 +79,49 @@ def test_abstention_fires_on_pipeline_disagreement():
     assert any("disagree" in r for r in d.reasons)
 
 
+def test_abstention_fires_on_wrong_period_recovery():
+    # Codex #3: agreeing on a WRONG period is not recovery of the known transit.
+    thr = prereg.PREREGISTRATION["thresholds"]
+    d = abstention.decide(
+        snr=50.0, period_agreement={"agree_1pct": True, "frac_diff": 0.0},
+        period_stability_frac=0.001,
+        null_summary={"all_controlled": True, "false_positive_rate": 0.0},
+        recovery_rate=0.95, quality_severe=False, n_indistinguishable_candidates=1,
+        thresholds=thr, period_recovery_frac=0.2)     # 20% from known ephemeris
+    assert d.abstain is True
+    assert any("known ephemeris" in r for r in d.reasons)
+
+
+def test_abstention_fires_on_false_positive_scenarios():
+    # Codex #6: computed false-positive scenarios must count against the claim.
+    thr = prereg.PREREGISTRATION["thresholds"]
+    d = abstention.decide(
+        snr=50.0, period_agreement={"agree_1pct": True, "frac_diff": 0.0},
+        period_stability_frac=0.001,
+        null_summary={"all_controlled": True, "false_positive_rate": 0.0},
+        recovery_rate=0.95, quality_severe=False, n_indistinguishable_candidates=1,
+        thresholds=thr, period_recovery_frac=0.0, n_false_positive_scenarios=3)
+    assert d.abstain is True
+    assert any("false-positive scenario" in r for r in d.reasons)
+
+
+def test_nulls_use_declared_detrend_window():
+    # Codex #4: nulls/injection must use the preregistered Pipeline A window.
+    assert pl.PIPELINE_A_WINDOW == prereg.PREREGISTRATION["detrending"]["A_median_window_points"]
+
+
+def test_control_null_checks_both_pipelines():
+    # Codex #5: the control-star null exposes false positives from EITHER pipeline.
+    rng = np.random.default_rng(4)
+    n = 3000
+    time = np.cumsum(rng.uniform(0.019, 0.021, n))
+    time -= time[0]
+    flux = 1.0 + rng.normal(0, 0.0017, n)          # pure noise control
+    out = nulls.null_control_star(time, flux, 3.52254)
+    assert "pipeline_A" in out and "pipeline_B" in out
+    assert out["pass"] is True                      # neither pipeline finds the target period
+
+
 def test_transit_curriculum_has_blocking_concepts():
     from acero.understanding.curriculum.research_curriculum import CURRICULA, requirements_for
     assert "transit" in CURRICULA

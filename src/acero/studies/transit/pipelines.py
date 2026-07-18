@@ -15,6 +15,11 @@ from typing import Any
 
 import numpy as np
 
+# The preregistration fixes Pipeline A's median-detrend window at 101 points.
+# Nulls and injection MUST use the same declared detector so the claim is gated
+# by controls for the exact pipeline that produces it (Codex finding #4).
+PIPELINE_A_WINDOW = 101
+
 # --- detrending ------------------------------------------------------------
 
 def detrend_median(flux: np.ndarray, window: int = 101) -> np.ndarray:

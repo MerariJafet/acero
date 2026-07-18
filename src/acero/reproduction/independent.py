@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 MAX_STATE = "INDEPENDENT_PROCESS_REPRODUCTION"
+NON_ISOLATED_STATE = "NON_ISOLATED_RERUN"
 FORBIDDEN_STATE = "EXTERNAL_SCIENTIFIC_REPLICATION"
 
 
@@ -30,8 +31,16 @@ class ReproductionRecord:
     warnings: list[str]
 
     @property
+    def isolated(self) -> bool:
+        return (self.fresh_container and self.fresh_database and self.fresh_workspace
+                and self.empty_caches and self.no_acero_imports)
+
+    @property
     def state(self) -> str:
-        # Even if everything is clean, the ceiling is process reproduction.
+        # The ceiling is process reproduction — and only if the run was actually
+        # isolated. A non-fresh, same-process re-run is NOT even that (Codex #2).
+        if not self.isolated or self.hash_drift:
+            return NON_ISOLATED_STATE
         return MAX_STATE
 
     def as_dict(self) -> dict[str, Any]:

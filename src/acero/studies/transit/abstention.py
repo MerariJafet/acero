@@ -25,13 +25,28 @@ def decide(*, snr: float, period_agreement: dict[str, Any],
            period_stability_frac: float, null_summary: dict[str, Any],
            recovery_rate: float, quality_severe: bool,
            n_indistinguishable_candidates: int,
-           thresholds: dict[str, Any]) -> AbstentionDecision:
+           thresholds: dict[str, Any],
+           period_recovery_frac: float | None = None,
+           n_false_positive_scenarios: int = 0) -> AbstentionDecision:
     reasons: list[str] = []
     if snr < thresholds["detection_SNR"]:
         reasons.append(f"SNR {snr:.1f} < detection threshold {thresholds['detection_SNR']}")
     if not period_agreement.get("agree_1pct", False):
         reasons.append(
             f"pipelines disagree on period (frac_diff={period_agreement.get('frac_diff')})")
+    # the "RECOVERED_KNOWN_TRANSIT" verdict must actually recover the KNOWN ephemeris;
+    # agreeing on a WRONG period is not recovery (Codex finding #3).
+    if period_recovery_frac is not None:
+        tol = thresholds.get("period_agreement_tol_frac", 0.01)
+        if period_recovery_frac > tol:
+            reasons.append(
+                f"recovered period is {period_recovery_frac:.4f} from the known ephemeris "
+                f"(> {tol}); agreeing on a wrong period is not recovery")
+    # false-positive scenarios that trigger detections must count against the claim
+    # (Codex finding #6): computed-but-ignored FP scenarios cannot be hidden.
+    if n_false_positive_scenarios > 0:
+        reasons.append(
+            f"{n_false_positive_scenarios} false-positive scenario(s) produced detections")
     if period_stability_frac > thresholds["period_stability_tol_frac"]:
         reasons.append(
             f"period unstable across detrending ({period_stability_frac:.3f} > "

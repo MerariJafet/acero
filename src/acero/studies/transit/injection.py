@@ -54,7 +54,7 @@ def recovery_grid(*, depths: list[float], periods: list[float],
                     time, base = _baseline(n_points, rng, noise=noise)
                     inj = inject_box(time, base, period=period, depth=depth,
                                      duration_hours=dur, phase=phase)
-                    res = pl.pipeline_a(time, inj, window=51, p_min=0.5,
+                    res = pl.pipeline_a(time, inj, window=pl.PIPELINE_A_WINDOW, p_min=0.5,
                                         p_max=min(10.0, (time[-1] - time[0]) / 2))
                     err = abs(res.period - period) / period
                     ok = err < tol_frac and res.snr >= 7.0
@@ -92,7 +92,7 @@ def recovery_vs_snr(*, snr_levels: list[float], period: float = 3.5, seed: int =
         for _ in range(trials):
             time, base = _baseline(n_points, rng, noise=noise)
             inj = inject_box(time, base, period=period, depth=depth, duration_hours=dur_h)
-            res = pl.pipeline_a(time, inj, window=51, p_min=0.5, p_max=8.0)
+            res = pl.pipeline_a(time, inj, window=pl.PIPELINE_A_WINDOW, p_min=0.5, p_max=8.0)
             if abs(res.period - period) / period < 0.01 and res.snr >= 7.0:
                 hits += 1
         curve.append({"target_snr": target_snr, "depth": round(float(depth), 5),

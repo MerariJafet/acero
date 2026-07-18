@@ -96,3 +96,17 @@ def test_independent_state_never_external_replication():
     assert d["state"] == independent.MAX_STATE
     assert d["is_external_replication"] is False
     assert d["no_hash_drift"] is True
+
+
+def test_non_isolated_run_is_downgraded():
+    # Codex #2: a non-fresh, same-process re-run must NOT claim process reproduction.
+    rec = independent.ReproductionRecord(
+        package="p", fresh_container=False, fresh_database=False, fresh_workspace=False,
+        empty_caches=False, no_acero_imports=True, outputs={}, hash_drift=[], warnings=[])
+    assert rec.as_dict()["state"] == independent.NON_ISOLATED_STATE
+    # hash drift also downgrades even if flags are fresh
+    drifted = independent.ReproductionRecord(
+        package="p", fresh_container=True, fresh_database=True, fresh_workspace=True,
+        empty_caches=True, no_acero_imports=True, outputs={}, hash_drift=["f.fits"],
+        warnings=[])
+    assert drifted.as_dict()["state"] == independent.NON_ISOLATED_STATE

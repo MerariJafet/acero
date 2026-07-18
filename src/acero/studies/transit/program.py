@@ -80,7 +80,9 @@ def run_program(*, downloaded_at: str, full_injection: bool = True) -> dict[str,
         snr=a.snr, period_agreement=agreement,
         period_stability_frac=stability["max_frac_deviation"],
         null_summary=null_summary, recovery_rate=recovery["recovery_rate"],
-        quality_severe=False, n_indistinguishable_candidates=1, thresholds=thr)
+        quality_severe=False, n_indistinguishable_candidates=1, thresholds=thr,
+        period_recovery_frac=abs(a.period - KEPLER8B_PERIOD) / KEPLER8B_PERIOD,
+        n_false_positive_scenarios=fp_scenarios["n_false_detections"])
 
     # (2) a FORCED, honest abstention on a genuinely hard low-SNR case
     forced = _forced_abstention_case(thr)

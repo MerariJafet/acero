@@ -67,8 +67,11 @@ def test_login_logout_cycle(anon):
     assert anon.get("/portal/api/session").status_code == 401
     r = anon.post("/portal/api/login", json={"username": "tester", "password": "testpass123"})
     assert r.status_code == 200 and "csrf" in r.json()
+    csrf = r.json()["csrf"]
     assert anon.get("/portal/api/overview").status_code == 200
-    anon.post("/portal/api/logout")
+    # logout without CSRF is rejected (state-changing endpoint)
+    assert anon.post("/portal/api/logout").status_code == 403
+    assert anon.post("/portal/api/logout", headers={"X-CSRF-Token": csrf}).status_code == 200
     assert anon.get("/portal/api/overview").status_code == 401
 
 

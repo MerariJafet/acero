@@ -19,7 +19,7 @@ DETECTION_SNR = 7.0
 
 def _detects(time: np.ndarray, flux: np.ndarray, *, near_period: float | None = None,
              tol: float = 0.01) -> tuple[bool, float, float]:
-    res = pl.pipeline_a(time, flux, window=51, p_min=0.5,
+    res = pl.pipeline_a(time, flux, window=pl.PIPELINE_A_WINDOW, p_min=0.5,
                         p_max=min(10.0, (time[-1] - time[0]) / 2))
     detected = res.snr >= DETECTION_SNR
     if near_period is not None:
@@ -39,11 +39,22 @@ def null_flux_shuffled(time: np.ndarray, flux: np.ndarray, *, seed: int = 3) -> 
 
 def null_control_star(time: np.ndarray, flux: np.ndarray, target_period: float
                       ) -> dict[str, Any]:
-    """Real control star must NOT show the target's transit at its period."""
-    det, p, snr = _detects(time, flux, near_period=target_period)
-    return {"null": "control_star", "detected_target_period": det,
-            "period": round(p, 4), "snr": round(snr, 2),
-            "pass": not det, "note": "control lacks Kepler-8b; must not match its period"}
+    """Real control star must NOT show the target's transit under EITHER pipeline.
+
+    Checks BOTH Pipeline A and Pipeline B so a false positive from either detector
+    surfaces here (Codex finding #5); the claim is a two-pipeline claim.
+    """
+    det_a, p_a, snr_a = _detects(time, flux, near_period=target_period)
+    b = pl.pipeline_b(time, flux, p_min=0.5, p_max=min(10.0, (time[-1] - time[0]) / 2))
+    det_b = b.snr >= DETECTION_SNR and abs(b.period - target_period) / target_period < 0.01
+    det = det_a or det_b
+    return {"null": "control_star", "detected_target_period": bool(det),
+            "pipeline_A": {"detected": det_a, "period": round(p_a, 4), "snr": round(snr_a, 2)},
+            "pipeline_B": {"detected": bool(det_b), "period": round(float(b.period), 4),
+                           "snr": round(float(b.snr), 2)},
+            "period": round(p_a, 4), "snr": round(snr_a, 2),
+            "pass": not det,
+            "note": "control lacks Kepler-8b; neither pipeline may match its period"}
 
 
 def null_no_transit_synthetic(n: int = 3000, *, seed: int = 5) -> dict[str, Any]:
@@ -79,7 +90,7 @@ def null_inverted_transit(time: np.ndarray, flux: np.ndarray, *, period: float,
     """Inject an inverted transit (bump); a dip-searching BLS must not lock onto it."""
     from .injection import inject_box
     inj = inject_box(time, flux, period=period, depth=-depth, duration_hours=3.2)  # bump
-    res = pl.pipeline_a(time, inj, window=51, p_min=0.5, p_max=8.0)
+    res = pl.pipeline_a(time, inj, window=pl.PIPELINE_A_WINDOW, p_min=0.5, p_max=8.0)
     # a dip search should not return this bump period with high box power at that phase
     matched = abs(res.period - period) / period < 0.01 and res.depth > 0
     return {"null": "inverted_transit", "locked_on_bump": bool(matched and res.snr >= DETECTION_SNR),

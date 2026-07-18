@@ -130,8 +130,11 @@ def build_portal_router() -> APIRouter:
         return {"user": sess.user, "csrf": sess.csrf}
 
     @r.post("/api/logout")
-    def logout(response: Response, acero_session: str | None = Cookie(default=None)
-               ) -> dict[str, Any]:
+    def logout(response: Response, sess: Session = Depends(_require_session),
+               x_csrf_token: str | None = Header(default=None),
+               acero_session: str | None = Cookie(default=None)) -> dict[str, Any]:
+        # logout is state-changing: require a valid session + CSRF (Codex finding #7)
+        _require_csrf(sess, x_csrf_token)
         _SESSIONS.invalidate(acero_session)
         response.delete_cookie(_COOKIE, path="/portal")
         return {"logged_out": True}
