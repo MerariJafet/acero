@@ -1,21 +1,37 @@
-"""Portal backend: aggregator + safe-action endpoints mounted under /portal.
+"""Portal backend: authenticated aggregator + safe-action endpoints under /portal.
 
-Read endpoints aggregate real engine state; action endpoints go through the SAME protected
-services as the CLI (gates cannot be bypassed from the UI). No endpoint exposes a secret, a
-raw mutation token, or a shell.
+Read endpoints aggregate real engine state; action endpoints go through the SAME
+protected services as the CLI (gates cannot be bypassed from the UI). All ``/api``
+endpoints except login/session require a valid session; mutating endpoints also
+require a matching CSRF token. No endpoint exposes a secret, a raw mutation token,
+or a shell.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi import APIRouter, Cookie, Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import Response as RawResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from .auth import RateLimiter, Session, SessionManager, UserStore
+
 _STATIC = Path(__file__).parent / "static"
+_COOKIE = "acero_session"
+
+# process-level auth singletons (local single-process portal)
+_SESSIONS = SessionManager()
+_LIMITER = RateLimiter()
+
+
+def _user_store() -> UserStore:
+    # fresh each call so ACERO_PORTAL_USERS (env) is honored at request time
+    return UserStore()
 
 
 class DecisionBody(BaseModel):
@@ -23,20 +39,114 @@ class DecisionBody(BaseModel):
     reason: str = ""
 
 
+class LoginBody(BaseModel):
+    username: str
+    password: str
+
+
+class ProgramBody(BaseModel):
+    mission: str
+    domains: list[str] = []
+
+
+class ProjectBody(BaseModel):
+    title: str
+    domain: str = "general"
+    program_id: str | None = None
+
+
+class QuestionBody(BaseModel):
+    program_id: str
+    text: str
+
+
+class HypothesesBody(BaseModel):
+    project_id: str
+    question: str
+
+
+class ApproveBody(BaseModel):
+    hypothesis_id: str
+    reason: str
+
+
+class ExperimentBody(BaseModel):
+    project_id: str
+    hypothesis_id: str
+
+
+class GateBody(BaseModel):
+    artifact: dict[str, Any] = {}
+
+
+class WorldUpdateBody(BaseModel):
+    project_id: str
+    label: str
+
+
+class DossierBody(BaseModel):
+    project_id: str
+    claim: str
+
+
+def _cookie_secure() -> bool:
+    return os.environ.get("ACERO_PORTAL_COOKIE_SECURE", "0") == "1"
+
+
+def _require_session(acero_session: str | None = Cookie(default=None)) -> Session:
+    sess = _SESSIONS.get(acero_session)
+    if sess is None:
+        raise HTTPException(401, "authentication required")
+    return sess
+
+
+def _require_csrf(sess: Session, x_csrf_token: str | None) -> None:
+    if not x_csrf_token or x_csrf_token != sess.csrf:
+        raise HTTPException(403, "missing or invalid CSRF token")
+
+
 def build_portal_router() -> APIRouter:
     r = APIRouter(prefix="/portal", tags=["portal"])
 
+    # --- shell (public) ---------------------------------------------------
     @r.get("/", include_in_schema=False)
     def index() -> FileResponse:
         return FileResponse(_STATIC / "index.html")
 
+    # --- auth (public) ----------------------------------------------------
+    @r.post("/api/login")
+    def login(body: LoginBody, response: Response, request: Request) -> dict[str, Any]:
+        key = body.username or (request.client.host if request.client else "anon")
+        if not _LIMITER.check(key):
+            raise HTTPException(429, f"too many attempts; retry after "
+                                     f"{_LIMITER.retry_after(key)}s")
+        if not _user_store().verify(body.username, body.password):
+            _LIMITER.record_failure(key)
+            raise HTTPException(401, "invalid credentials")
+        _LIMITER.record_success(key)
+        sess = _SESSIONS.create(body.username)
+        response.set_cookie(_COOKIE, sess.sid, httponly=True, samesite="strict",
+                            secure=_cookie_secure(), max_age=int(_SESSIONS.ttl_s), path="/portal")
+        return {"user": sess.user, "csrf": sess.csrf}
+
+    @r.post("/api/logout")
+    def logout(response: Response, acero_session: str | None = Cookie(default=None)
+               ) -> dict[str, Any]:
+        _SESSIONS.invalidate(acero_session)
+        response.delete_cookie(_COOKIE, path="/portal")
+        return {"logged_out": True}
+
+    @r.get("/api/session")
+    def session_info(sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        return {"user": sess.user, "csrf": sess.csrf}
+
+    # --- reads (auth required) -------------------------------------------
     @r.get("/api/overview")
-    def overview() -> dict[str, Any]:
+    def overview(sess: Session = Depends(_require_session)) -> dict[str, Any]:
         from .. import __version__
         from ..core.config import get_config
         from ..epistemic_gate.registry import GateRegistry
         cfg = get_config()
-        # runtime queue snapshot (best-effort)
         queue: dict[str, int] = {}
         try:
             from ..ledger.db import default_session_factory
@@ -46,19 +156,15 @@ def build_portal_router() -> APIRouter:
         except Exception:  # noqa: BLE001
             queue = {}
         return {
-            "version": __version__,
-            "env": cfg.app.env,
-            "llm_provider": cfg.llm.provider,
-            "sandbox": cfg.sandbox.backend,
-            "gate_rules": len(GateRegistry().all_rules()),
-            "runtime_queue": queue,
+            "version": __version__, "env": cfg.app.env, "user": sess.user,
+            "llm_provider": cfg.llm.provider, "sandbox": cfg.sandbox.backend,
+            "gate_rules": len(GateRegistry().all_rules()), "runtime_queue": queue,
             "readiness_ceiling": "READY_FOR_HUMAN_SCIENTIFIC_REVIEW",
-            "auto_publication": False,
-            "sections": SECTIONS,
+            "auto_publication": False, "sections": SECTIONS,
         }
 
     @r.get("/api/programs")
-    def programs() -> list[dict[str, Any]]:
+    def programs(sess: Session = Depends(_require_session)) -> list[dict[str, Any]]:
         from ..discovery.store import DiscoveryStore
         from ..ledger.db import default_session_factory
         from ..ledger.service import ResearchLedger
@@ -70,44 +176,50 @@ def build_portal_router() -> APIRouter:
                 for p in pe.programs()]
 
     @r.get("/api/reliability")
-    def reliability() -> dict[str, Any]:
+    def reliability(sess: Session = Depends(_require_session)) -> dict[str, Any]:
         from ..reliability.engine import build_card
         from ..reliability.red_team import run_red_team
-        return {"card": build_card().as_dict(),
-                "red_team": run_red_team().as_dict()}
+        return {"card": build_card().as_dict(), "red_team": run_red_team().as_dict()}
 
     @r.get("/api/runtime")
-    def runtime() -> dict[str, Any]:
+    def runtime(sess: Session = Depends(_require_session)) -> dict[str, Any]:
         from ..ledger.db import default_session_factory
         from ..runtime.observability import metrics_snapshot
         from ..runtime.store import RuntimeStore
         store = RuntimeStore(default_session_factory())
         tasks = store.tasks()
-        return {"n_tasks": len(tasks),
-                "by_status": _count(tasks, "status"),
-                "metrics": metrics_snapshot(store),
-                "recent": tasks[-10:]}
+        return {"n_tasks": len(tasks), "by_status": _count(tasks, "status"),
+                "metrics": metrics_snapshot(store), "recent": _redact_tasks(tasks[-10:])}
 
     @r.get("/api/metrics")
-    def metrics() -> Response:
-        """Prometheus-compatible metrics text (local; no external platform required)."""
+    def metrics(sess: Session = Depends(_require_session)) -> RawResponse:
         from ..ledger.db import default_session_factory
         from ..runtime.observability import prometheus_text
         from ..runtime.store import RuntimeStore
-        return Response(prometheus_text(RuntimeStore(default_session_factory())),
-                        media_type="text/plain")
+        return RawResponse(prometheus_text(RuntimeStore(default_session_factory())),
+                           media_type="text/plain")
 
     @r.get("/api/review")
-    def review() -> dict[str, Any]:
+    def review(sess: Session = Depends(_require_session)) -> dict[str, Any]:
         import tempfile
 
         from ..benchmarks.review_gauntlet import run_review_gauntlet
         with tempfile.TemporaryDirectory() as td:
             return run_review_gauntlet(td)
 
+    @r.get("/api/results/cards")
+    def result_cards(sess: Session = Depends(_require_session)) -> list[dict[str, Any]]:
+        """Scientific result cards with full epistemic metadata (no over-claiming)."""
+        return RESULT_CARDS
+
+    @r.get("/api/learning")
+    def learning(sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        from ..understanding.curriculum.research_curriculum import CURRICULA
+        return {"curricula": sorted(CURRICULA.keys()),
+                "note": "human must demonstrate understanding before a dossier is approved"}
+
     @r.get("/api/decision")
-    def decision() -> dict[str, Any]:
-        """A Decision Center item — every field a human needs, plus why NOT to auto-run."""
+    def decision(sess: Session = Depends(_require_session)) -> dict[str, Any]:
         return {
             "question": "Approve this inference result for human scientific review?",
             "context": "Damped oscillation recovered as ẋ=v, v̇=−4x−0.5v (synthetic).",
@@ -115,8 +227,7 @@ def build_portal_router() -> APIRouter:
             "counter_evidence": ["fit degrades under noise", "polynomial library imposed"],
             "uncertainty": "coefficients are point estimates without calibrated intervals",
             "alternatives": ["system_identification only", "abstain"],
-            "cost": "low (local compute)",
-            "risk": "over-claiming a fit as a law",
+            "cost": "low (local compute)", "risk": "over-claiming a fit as a law",
             "learning_required": ["imposed_library", "identifiability"],
             "recommendation": "REQUIRE_EXTERNAL_REVIEW",
             "why_not_execute": "computational only; not experimental validation; "
@@ -126,30 +237,29 @@ def build_portal_router() -> APIRouter:
         }
 
     @r.post("/api/decision")
-    def record_decision(body: DecisionBody) -> dict[str, Any]:
+    def record_decision(body: DecisionBody, sess: Session = Depends(_require_session),
+                        x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
         valid = {"APPROVE", "REJECT", "REQUEST_CHANGES", "DEFER", "ABSTAIN",
                  "REQUIRE_EXTERNAL_REVIEW"}
         if body.decision not in valid:
             raise HTTPException(400, f"invalid decision; choose one of {sorted(valid)}")
         if body.decision == "APPROVE" and not body.reason.strip():
-            # UI-level guard mirrors the backend anti-rubber-stamp rule
             raise HTTPException(422, "APPROVE requires a stated reason")
-        return {"recorded": body.decision, "reason": body.reason,
+        return {"recorded": body.decision, "reason": body.reason, "by": sess.user,
                 "note": "recorded locally; ACERO never publishes or sends anything"}
 
     @r.get("/api/evaluation")
-    def evaluation() -> dict[str, Any]:
+    def evaluation(sess: Session = Depends(_require_session)) -> dict[str, Any]:
         from ..selfeval.engine import run_evaluation
         rep = run_evaluation()
         return {"verdict": rep["verdict"], "version": rep["version"],
-                "benchmarks": rep["benchmarks"],
-                "capabilities": rep["capabilities"],
-                "prompts": {"passed": rep["prompts"]["passed"],
-                            "n": rep["prompts"]["n_fixtures"]},
+                "benchmarks": rep["benchmarks"], "capabilities": rep["capabilities"],
+                "prompts": {"passed": rep["prompts"]["passed"], "n": rep["prompts"]["n_fixtures"]},
                 "regression": rep["regression"], "note": rep["note"]}
 
     @r.get("/api/collaboration")
-    def collaboration() -> dict[str, Any]:
+    def collaboration(sess: Session = Depends(_require_session)) -> dict[str, Any]:
         import tempfile
 
         from ..benchmarks.external_review_gauntlet import run_external_review_gauntlet
@@ -168,22 +278,145 @@ def build_portal_router() -> APIRouter:
                 "note": "preparing a review bundle is NOT external review; nothing is sent."}
 
     @r.get("/api/world/{project_id}")
-    def world(project_id: str) -> dict[str, Any]:
+    def world(project_id: str, sess: Session = Depends(_require_session)) -> dict[str, Any]:
         from ..ledger.db import default_session_factory
         from ..ledger.service import ResearchLedger
         from ..world_model.graph import WorldModel
         sf = default_session_factory()
+        return WorldModel(sf, ResearchLedger(sf), project_id).stats()
+
+    @r.get("/api/world/{project_id}/nodes")
+    def world_nodes(project_id: str, offset: int = 0, limit: int = 50,
+                    search: str | None = None, type: str | None = None,
+                    sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        """Paginated World Model explorer — never loads the full graph."""
+        from ..ledger.db import default_session_factory
+        from ..ledger.service import ResearchLedger
+        from ..world_model.graph import WorldModel
+        from ..world_model.nodes import NodeType
+        ntype = None
+        if type:
+            try:
+                ntype = NodeType(type)
+            except ValueError as exc:
+                raise HTTPException(400, f"unknown node type '{type}'") from exc
+        sf = default_session_factory()
         wm = WorldModel(sf, ResearchLedger(sf), project_id)
-        return wm.stats()
+        return wm.page_nodes(offset=offset, limit=limit, ntype=ntype, search=search)
+
+    # --- workspace actions (auth + CSRF) ----------------------------------
+    def _ws() -> Any:
+        from .workspace import WorkspaceService
+        return WorkspaceService()
+
+    @r.post("/api/workspace/program")
+    def ws_program(body: ProgramBody, sess: Session = Depends(_require_session),
+                   x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        if not body.mission.strip():
+            raise HTTPException(422, "mission is required")
+        return _ws().create_program(body.mission, body.domains)
+
+    @r.post("/api/workspace/project")
+    def ws_project(body: ProjectBody, sess: Session = Depends(_require_session),
+                   x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        if not body.title.strip():
+            raise HTTPException(422, "title is required")
+        return _ws().create_project(body.title, domain=body.domain, program_id=body.program_id)
+
+    @r.post("/api/workspace/question")
+    def ws_question(body: QuestionBody, sess: Session = Depends(_require_session),
+                    x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        if not body.text.strip():
+            raise HTTPException(422, "question text is required")
+        return _ws().add_question(body.program_id, body.text)
+
+    @r.post("/api/workspace/hypotheses")
+    def ws_hypotheses(body: HypothesesBody, sess: Session = Depends(_require_session),
+                      x_csrf_token: str | None = Header(default=None)) -> list[dict[str, Any]]:
+        _require_csrf(sess, x_csrf_token)
+        return _ws().generate_hypotheses(body.project_id, body.question)
+
+    @r.post("/api/workspace/approve")
+    def ws_approve(body: ApproveBody, sess: Session = Depends(_require_session),
+                   x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        try:
+            return _ws().approve_hypothesis(body.hypothesis_id, body.reason)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @r.post("/api/workspace/experiment")
+    def ws_experiment(body: ExperimentBody, sess: Session = Depends(_require_session),
+                      x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        return _ws().run_experiment(body.project_id, body.hypothesis_id)
+
+    @r.post("/api/workspace/gate")
+    def ws_gate(body: GateBody, sess: Session = Depends(_require_session),
+                x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        return _ws().gate_check(body.artifact)
+
+    @r.post("/api/workspace/world-update")
+    def ws_world(body: WorldUpdateBody, sess: Session = Depends(_require_session),
+                 x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        return _ws().update_world_model(body.project_id, body.label)
+
+    @r.post("/api/workspace/dossier")
+    def ws_dossier(body: DossierBody, sess: Session = Depends(_require_session),
+                   x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        return _ws().dossier(body.project_id, body.claim)
 
     return r
 
 
 SECTIONS = [
-    "Overview", "Research Programs", "Projects", "World Model", "Reliability",
-    "Red Team", "Runtime", "Self-Evaluation", "Review", "Collaboration",
-    "Publication Candidates", "Decision Center", "Settings",
+    "Overview", "Research Workspace", "Research Programs", "Projects", "World Model",
+    "Reliability", "Red Team", "Runtime", "Self-Evaluation", "Review", "Collaboration",
+    "Publication Candidates", "Decision Center", "Learning Center", "Settings",
 ]
+
+# Representative scientific result cards (epistemic metadata; never over-claimed).
+RESULT_CARDS = [
+    {
+        "title": "Damped oscillation structure recovered (synthetic)",
+        "result_type": "computational_inference", "epistemic_level": "MODEL_CONSISTENT",
+        "source": "inference engine (synthetic data)", "date": "2026-07-18",
+        "version": "2.1.0-rc1-dev", "evidence": ["clean recovery R²≈1.0", "energy invariant"],
+        "counter_evidence": ["degrades under noise", "polynomial library imposed"],
+        "calibration": "point estimates, no calibrated intervals",
+        "reproducibility": "deterministic (seeded)", "gate": "INFERENCE passed",
+        "domain": "dynamical systems", "limitations": ["synthetic only", "not experimental"],
+        "allowed_claims": ["structure consistent with a damped oscillator on this data"],
+        "prohibited_claims": ["discovered a law", "confirmed a physical mechanism"],
+    },
+    {
+        "title": "Solar cycle ~11.2 yr periodicity (SILSO, real data)",
+        "result_type": "timeseries_periodicity", "epistemic_level": "OBSERVED_PATTERN",
+        "source": "SILSO monthly sunspot number", "date": "2026-07-13",
+        "version": "sprint-17", "evidence": ["FFT peak 11.19 yr", "bootstrap CI [10.27,11.67]"],
+        "counter_evidence": ["red-noise surrogates reduce significance", "cycle length varies"],
+        "calibration": "AR(1) surrogate significance", "reproducibility": "reproducible from CSV",
+        "gate": "honesty gate blocks discovery claim", "domain": "heliophysics",
+        "limitations": ["known phenomenon, not novel", "single record"],
+        "allowed_claims": ["a ~11 yr periodicity is present in this record"],
+        "prohibited_claims": ["discovered the solar cycle", "predicts future cycles"],
+    },
+]
+
+
+def _redact_tasks(tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Strip anything token/secret-shaped from task rows before exposing them."""
+    out = []
+    for t in tasks:
+        out.append({k: v for k, v in t.items()
+                    if k.lower() not in {"token", "signature", "secret", "hmac"}})
+    return out
 
 
 def _count(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
@@ -201,12 +434,15 @@ def mount_portal(app: FastAPI) -> None:
 
     @app.middleware("http")
     async def _security_headers(request, call_next):  # type: ignore[no-untyped-def]
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except HTTPException as exc:  # pragma: no cover - defensive
+            response = JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
         if request.url.path.startswith("/portal"):
-            # local-first, no inline eval, no external origins; self-contained SPA
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Referrer-Policy"] = "no-referrer"
         return response

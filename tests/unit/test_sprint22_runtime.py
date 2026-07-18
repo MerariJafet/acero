@@ -145,9 +145,20 @@ def test_expired_lease_task_reclaimed_not_lost(tmp_path):
     assert q.claim("alive") is not None                 # reclaimable
 
 
-def test_metrics_endpoint_local_only():
+def test_metrics_endpoint_local_only(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
     from acero.api.app import create_app
-    r = TestClient(create_app()).get("/portal/api/metrics")
+    from acero.core.config import get_config
+    from acero.portal.auth import UserStore
+    monkeypatch.setenv("ACERO_PORTAL_USERS", str(tmp_path / "u.json"))
+    monkeypatch.setenv("ACERO_DB_URL", f"sqlite:///{tmp_path}/m.sqlite")
+    get_config.cache_clear()
+    UserStore().create_user("m", "metricspass1")
+    c = TestClient(create_app())
+    # metrics require auth (no unauthenticated leak of task labels/counts)
+    assert c.get("/portal/api/metrics").status_code == 401
+    c.post("/portal/api/login", json={"username": "m", "password": "metricspass1"})
+    r = c.get("/portal/api/metrics")
+    get_config.cache_clear()
     assert r.status_code == 200 and "acero_tasks_total" in r.text

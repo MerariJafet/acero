@@ -3,7 +3,7 @@ PY := ./.venv/bin/python
 RUFF := ./.venv/bin/ruff
 MYPY := ./.venv/bin/mypy
 
-.PHONY: help setup format lint typecheck test policy schemas verify doctor serve pilot clean
+.PHONY: help setup format lint typecheck test e2e policy schemas verify doctor serve pilot clean
 
 help:
 	@echo "ACERO make targets:"
@@ -11,7 +11,8 @@ help:
 	@echo "  format     ruff auto-format/fix"
 	@echo "  lint       ruff check"
 	@echo "  typecheck  mypy"
-	@echo "  test       pytest"
+	@echo "  test       pytest (includes portal browser E2E; skips if no browser)"
+	@echo "  e2e        run only the Playwright browser E2E"
 	@echo "  policy     validate policy files"
 	@echo "  schemas    validate JSON schemas export"
 	@echo "  verify     format-check + lint + typecheck + policy + schemas + test"
@@ -34,6 +35,9 @@ typecheck:
 
 test:
 	$(PY) -m pytest tests
+
+e2e:
+	$(PY) -m pytest tests/e2e -v
 
 policy:
 	$(PY) -m acero.cli.main policy

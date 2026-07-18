@@ -2016,8 +2016,46 @@ def portal(host: str = "127.0.0.1", port: int = 8000) -> None:
     """Serve the unified research portal (local web app at /portal)."""
     import uvicorn
 
+    from ..portal.auth import UserStore
+    if not UserStore().usernames():
+        typer.secho("No portal users yet. Create one first: acero portal-user add <name>",
+                    fg=typer.colors.YELLOW)
     typer.echo(f"ACERO portal → http://{host}:{port}/portal/  (local-first; never publishes)")
     uvicorn.run("acero.api.app:create_app", host=host, port=port, factory=True)
+
+
+@app.command("portal-user")
+def portal_user(action: str, username: str = "", overwrite: bool = False) -> None:
+    """Manage local portal users (add|list). Passwords are read from stdin, hashed."""
+    import getpass
+
+    from ..portal.auth import UserStore
+    store = UserStore()
+    if action == "list":
+        for u in store.usernames():
+            typer.echo(u)
+        if not store.usernames():
+            typer.echo("(no users)")
+        return
+    if action == "add":
+        if not username:
+            typer.secho("username required", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        pw = getpass.getpass("New password (min 8 chars): ")
+        pw2 = getpass.getpass("Confirm password: ")
+        if pw != pw2:
+            typer.secho("passwords do not match", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        try:
+            store.create_user(username, pw, overwrite=overwrite)
+        except ValueError as exc:
+            typer.secho(str(exc), fg=typer.colors.RED)
+            raise typer.Exit(1) from exc
+        typer.secho(f"user '{username}' created (password hashed, never stored plain)",
+                    fg=typer.colors.GREEN)
+        return
+    typer.secho("unknown action; use add|list", fg=typer.colors.RED)
+    raise typer.Exit(1)
 
 
 @app.command()

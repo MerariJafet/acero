@@ -39,3 +39,4 @@ research/datasets/*.csv
 node_modules/
 research/artifacts/*.html
 backups/
+scratch_*

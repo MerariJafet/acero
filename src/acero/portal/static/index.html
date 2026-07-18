@@ -1,20 +1,47 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ACERO — Research Portal</title>
-<link rel="stylesheet" href="/portal/static/style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ACERO — Research Portal</title>
+  <link rel="stylesheet" href="/portal/static/style.css">
 </head>
 <body>
-<header>
-  <h1>ACERO <span id="version"></span></h1>
-  <p class="tag">Personal Computational Research Institute — local-first · never auto-publishes</p>
-</header>
-<div class="layout">
-  <nav id="nav" aria-label="sections"></nav>
-  <main id="view" aria-live="polite"><p class="loading">Loading…</p></main>
-</div>
-<script src="/portal/static/app.js"></script>
+  <a class="skip-link" href="#view">Skip to main content</a>
+
+  <!-- Login gate -->
+  <main id="login" class="login" aria-labelledby="login-h" hidden>
+    <form id="login-form" class="login-card" aria-describedby="login-help">
+      <h1 id="login-h">ACERO Research Portal</h1>
+      <p id="login-help" class="muted">Local scientific control panel. Sign in to continue.</p>
+      <div class="field">
+        <label for="u">Username</label>
+        <input id="u" name="username" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="p">Password</label>
+        <input id="p" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="act">Sign in</button>
+      <p id="login-error" class="err" role="alert" aria-live="assertive"></p>
+    </form>
+  </main>
+
+  <!-- Application shell -->
+  <div id="app" hidden>
+    <header class="topbar" role="banner">
+      <strong>ACERO</strong>
+      <span id="version" class="pill">v?</span>
+      <span class="spacer"></span>
+      <span id="whoami" class="muted"></span>
+      <button id="logout" class="act ghost">Log out</button>
+    </header>
+    <div class="layout">
+      <nav id="nav" aria-label="Sections"></nav>
+      <main id="view" tabindex="-1" aria-live="polite" aria-busy="false"></main>
+    </div>
+  </div>
+
+  <script type="module" src="/portal/static/js/app.js"></script>
 </body>
 </html>

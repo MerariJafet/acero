@@ -79,6 +79,42 @@ class WorldModel:
                 stmt = stmt.where(WorldNodeRow.program_id == program_id)
             return [WorldNode(**r.payload) for r in s.execute(stmt).scalars().all()]
 
+    def page_nodes(self, *, offset: int = 0, limit: int = 50,
+                   ntype: NodeType | None = None, search: str | None = None,
+                   ) -> dict[str, Any]:
+        """SQL-level paginated node listing — never loads the full graph.
+
+        Uses ``LIMIT/OFFSET`` and a ``LIKE`` label filter at the database so a
+        10,000-node project returns one page (and a total count) without
+        materialising every node in Python. This is what the World Model Explorer
+        calls; the whole-graph :meth:`nodes` is only for small internal jobs.
+        """
+        from sqlalchemy import func
+
+        limit = max(1, min(int(limit), 200))
+        offset = max(0, int(offset))
+        with self._sf() as s:
+            base = select(WorldNodeRow).where(WorldNodeRow.project_id == self.project_id)
+            count_q = select(func.count()).select_from(WorldNodeRow).where(
+                WorldNodeRow.project_id == self.project_id)
+            if ntype is not None:
+                base = base.where(WorldNodeRow.type == ntype.value)
+                count_q = count_q.where(WorldNodeRow.type == ntype.value)
+            if search:
+                like = f"%{search.lower()}%"
+                base = base.where(func.lower(WorldNodeRow.label).like(like))
+                count_q = count_q.where(func.lower(WorldNodeRow.label).like(like))
+            total = int(s.execute(count_q).scalar_one())
+            rows = s.execute(
+                base.order_by(WorldNodeRow.confidence.desc(), WorldNodeRow.id)
+                .offset(offset).limit(limit)).scalars().all()
+            items = [{"id": r.id, "label": r.label, "type": r.type,
+                      "confidence": r.confidence, "version": r.version}
+                     for r in rows]
+        return {"total": total, "offset": offset, "limit": limit,
+                "returned": len(items), "items": items,
+                "has_more": offset + len(items) < total}
+
     def _save_node(self, s: Session, node: WorldNode) -> None:
         row = s.get(WorldNodeRow, node.id)
         if row is None:

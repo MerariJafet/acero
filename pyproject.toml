@@ -66,6 +66,12 @@ select = ["E", "F", "I", "UP", "B"]
 # JSON serialisation compatibility rather than switching to StrEnum.
 ignore = ["E501", "UP042"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency markers are the idiomatic default-argument pattern; B008 there
+# is a false positive (they are not mutable shared state).
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Cookie", "fastapi.Header",
+                          "fastapi.Query", "fastapi.Path", "fastapi.Body", "fastapi.Form"]
+
 [tool.mypy]
 python_version = "3.12"
 packages = ["acero"]
