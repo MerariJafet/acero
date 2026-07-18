@@ -64,15 +64,17 @@ def category_scores() -> dict[str, CategoryScore]:
         "A": CategoryScore("A", 8.5,
             "boundaries + write-surface arch test; Alembic migrations; idempotent "
             "multiprocess runtime; typed (mypy clean). Some coupling remains."),
-        "B": CategoryScore("B", 9.5,
-            "786 tests; REAL Playwright E2E; mutation + benchmarks; clean-install path. "
-            "Coverage not yet measured; some E2E gated on a browser binary."),
+        "B": CategoryScore("B", 8.5,
+            "795 tests; REAL Playwright E2E; mutation + benchmarks; clean-install path. "
+            "Coverage ~71% (independent audit) — not gated in CI; some E2E needs a "
+            "browser binary. [tightened -1.0 by independent audit for unmeasured coverage]"),
         "C": CategoryScore("C", 13.0,
             "auth(PBKDF2)+sessions+CSRF+rate-limit; strict CSP; secret redaction; bundle "
             "tamper detection; security_audit 10/10. NO dynamic tests on a real deploy."),
-        "D": CategoryScore("D", 8.0,
-            "workers+queue+leases; 120-task burn-in no-dup; backup+restore proven. "
-            "No deployed health/readiness/alerts/rollback yet."),
+        "D": CategoryScore("D", 7.0,
+            "workers+queue+leases; 120-task burn-in no-dup; backup+restore proven; "
+            "/health /ready routes added. Missing 3/4 ops pillars: deployed health, "
+            "alerts, rollback. [tightened -1.0 by independent audit]"),
         "E": CategoryScore("E", 6.5,
             "authenticated portal; WCAG basics verified in browser; result cards. "
             "Onboarding minimal; no second-user walkthrough; not deployed for real users."),
@@ -86,8 +88,9 @@ def category_scores() -> dict[str, CategoryScore]:
         "H": CategoryScore("H", 3.0,
             "CI workflow authored; local make verify green. NOT run by an independent CI "
             "(no remote/runner); no staged deploy pipeline."),
-        "I": CategoryScore("I", 4.5,
-            "extensive docs: ADRs, sprint reports, release docs, methodology, audits."),
+        "I": CategoryScore("I", 4.0,
+            "extensive docs: ADRs, sprint reports, release docs, methodology, audits. "
+            "Runbook completeness not independently reviewed. [tightened -0.5]"),
         "J": CategoryScore("J", 3.0,
             "review bundles + tamper detection + playbook + simulation fixtures. "
             "No real external human reviewer has reviewed a dossier."),
