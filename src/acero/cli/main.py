@@ -2088,6 +2088,30 @@ def acceptance() -> None:
                 fg=typer.colors.GREEN if m["all_pass"] else typer.colors.RED)
 
 
+@app.command("production")
+def production(action: str = typer.Argument("score")) -> None:
+    """Production readiness: `acero production score|audit|report` (evidence-based)."""
+    from ..production.audit import run_audit
+    r = run_audit()
+    s = r["score"]
+    if action in ("score", "audit", "report"):
+        typer.secho(f"ACERO PRODUCTION READINESS: {s['total']:.1f} / 100 "
+                    f"(goal {s['goal']})",
+                    fg=typer.colors.GREEN if s["total"] >= 95 else typer.colors.YELLOW)
+        for k in sorted(s["category_points"]):
+            typer.echo(f"  {k}: {s['category_points'][k]:.1f} / {s['max_by_category'][k]}"
+                       + (f"   — {r['category_evidence'][k]}" if action == "report" else ""))
+        if s["global_blockers"]:
+            typer.secho("blockers: " + "; ".join(s["global_blockers"]), fg=typer.colors.RED)
+        typer.secho(f"≥95 requires (still missing): {s['rule10_missing']}",
+                    fg=typer.colors.YELLOW)
+        for n in s["applied_notes"]:
+            typer.echo(f"  · {n}")
+    else:
+        typer.secho("actions: score|audit|report", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
 @app.command("security-audit")
 def security_audit_cmd() -> None:
     """Run the release security audit."""

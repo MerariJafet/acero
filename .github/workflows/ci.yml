@@ -1,0 +1,42 @@
+# ACERO CI — independent verification pipeline.
+# NOTE: as of iteration 0 the ACERO repo has NO git remote, so this workflow has
+# NOT yet been executed by an independent runner. The CI/CD rubric category is
+# honestly capped (rule 4) until a runner executes this on a hosted remote.
+name: acero-ci
+on:
+  push:
+    branches: ["integration/**", "main", "master"]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install (clean)
+        run: |
+          python -m venv .venv
+          ./.venv/bin/pip install -e '.[dev]'
+      - name: Lint
+        run: ./.venv/bin/ruff check src tests
+      - name: Typecheck
+        run: ./.venv/bin/mypy src/acero
+      - name: Policies
+        run: ./.venv/bin/python -m acero.cli.main policy
+      - name: Schemas
+        run: ./.venv/bin/python scripts/export_schemas.py --check
+      - name: Install Playwright browser
+        run: ./.venv/bin/python -m playwright install --with-deps chromium
+      - name: Tests (incl. real browser E2E)
+        run: ./.venv/bin/python -m pytest tests
+      - name: Release acceptance
+        run: ./.venv/bin/python -m acero.cli.main acceptance
+      - name: Security audit
+        run: ./.venv/bin/python -m acero.cli.main security-audit
+      - name: Production score (informational)
+        run: ./.venv/bin/python -m acero.cli.main production report

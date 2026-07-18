@@ -42,6 +42,20 @@ def create_app() -> FastAPI:
     def version() -> dict:
         return {"version": __version__}
 
+    @app.get("/ready")
+    def ready() -> dict:
+        """Readiness: the DB is reachable and at head migration. 503 if not ready."""
+        from fastapi import HTTPException
+        try:
+            from ..migrations import api as mig
+            at_head = mig.check()
+            current = mig.current()
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=503, detail=f"not ready: {exc}") from exc
+        if not at_head:
+            raise HTTPException(status_code=503, detail=f"db not at head (at {current})")
+        return {"ready": True, "migration": current, "version": __version__}
+
     @app.get("/domains")
     def domains() -> list[dict]:
         from ..domains.registry import all_plugins
