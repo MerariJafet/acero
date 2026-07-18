@@ -172,11 +172,46 @@ def reliability_requirements(project_id: str) -> list[ResearchLearningRequiremen
             for n, reason, crit, eqs, code, level, blocking in specs]
 
 
+def transit_requirements(project_id: str) -> list[ResearchLearningRequirement]:
+    """Exoplanet transits: recovery is not discovery; injection is not observation."""
+    g = base_concept_graph()
+    C, K = Criticality, KnowledgeStatus
+    code = ["studies/transit/pipelines.py"]
+    specs: list[_Spec] = [
+        ("photometry", "a transit is a small periodic dip in relative flux",
+         C.MEDIUM, [], code, K.PROCEDURALLY_COMPETENT, False),
+        ("period_folding", "folding at the true period stacks the transit; wrong periods blur it",
+         C.MEDIUM, [], code, K.PROCEDURALLY_COMPETENT, False),
+        ("bls_snr", "BLS box power / SNR can be inflated by red noise",
+         C.HIGH, [], code, K.CONCEPTUALLY_UNDERSTOOD, True),
+        ("red_noise", "correlated noise can manufacture transit-like dips",
+         C.HIGH, [], ["studies/transit/nulls.py"], K.CONCEPTUALLY_UNDERSTOOD, True),
+        ("multiple_testing", "scanning thousands of periods inflates false positives",
+         C.HIGH, [], ["studies/transit/nulls.py"], K.CONCEPTUALLY_UNDERSTOOD, True),
+        ("recovery_is_not_discovery",
+         "recovering a KNOWN transit (Kepler-8b) is not discovering a planet",
+         C.BLOCKING, [], code, K.CONCEPTUALLY_UNDERSTOOD, True),
+        ("injection_is_not_observation",
+         "recovering an INJECTED signal tests the pipeline; it is not an observation",
+         C.BLOCKING, [], ["studies/transit/injection.py"], K.CONCEPTUALLY_UNDERSTOOD, True),
+        ("same_data_not_independent",
+         "two pipelines over the SAME light curve are not independent replication",
+         C.BLOCKING, [], code, K.CONCEPTUALLY_UNDERSTOOD, True),
+        ("when_to_abstain",
+         "abstain when nulls are uncontrolled, pipelines disagree, or SNR is low",
+         C.HIGH, [], ["studies/transit/abstention.py"], K.PROCEDURALLY_COMPETENT, True),
+    ]
+    return [_req(project_id, n, reason, crit, g.prerequisites_of(n), eqs, code_,
+                 ["real Kepler photometry", "instrumental artifacts", "gaps"], level, blocking)
+            for n, reason, crit, eqs, code_, level, blocking in specs]
+
+
 CURRICULA = {
     "sindy": sindi_requirements,
     "analogy": analogy_requirements,
     "sunspots": sunspot_requirements,
     "reliability": reliability_requirements,
+    "transit": transit_requirements,
 }
 
 
