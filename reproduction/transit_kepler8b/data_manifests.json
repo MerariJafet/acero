@@ -1,0 +1,108 @@
+{
+  "license": "Public domain (NASA / Kepler mission data)",
+  "terms": "Kepler mission data are public domain; NASA requests acknowledgement of the mission and the MAST archive. No account or paid API used.",
+  "reference": "Jenkins et al. 2010, ApJL 724, 1108 (Kepler-8b discovery); Kepler Data Processing Handbook (KSCI-19081).",
+  "total_bytes": 1869120,
+  "manifests": [
+    {
+      "mission": "Kepler",
+      "target": "Kepler-8",
+      "kic": "006922244",
+      "role": "science",
+      "sector_or_quarter": "Q@2009259160929",
+      "cadence": "long (29.4 min)",
+      "pipeline": "PDCSAP (Kepler DR25)",
+      "time_column": "TIME",
+      "flux_column": "PDCSAP_FLUX",
+      "error_column": "PDCSAP_FLUX_ERR",
+      "quality_column": "SAP_QUALITY",
+      "license": "Public domain (NASA / Kepler mission data)",
+      "source_url": "https://archive.stsci.edu/pub/kepler/lightcurves/0069/006922244/kplr006922244-2009259160929_llc.fits",
+      "sha256": "28d2473a7dd0ccd135162d292436bd36a14f2c7763c6123bfd5c3b6200a86413",
+      "downloaded_at": "recorded",
+      "size_bytes": 466560,
+      "missingness": 0.0652,
+      "known_artifacts": [
+        "quarter boundaries / rolls",
+        "safe-mode gaps",
+        "thermal transients",
+        "cosmic rays flagged in SAP_QUALITY"
+      ]
+    },
+    {
+      "mission": "Kepler",
+      "target": "Kepler-8",
+      "kic": "006922244",
+      "role": "science",
+      "sector_or_quarter": "Q@2009350155506",
+      "cadence": "long (29.4 min)",
+      "pipeline": "PDCSAP (Kepler DR25)",
+      "time_column": "TIME",
+      "flux_column": "PDCSAP_FLUX",
+      "error_column": "PDCSAP_FLUX_ERR",
+      "quality_column": "SAP_QUALITY",
+      "license": "Public domain (NASA / Kepler mission data)",
+      "source_url": "https://archive.stsci.edu/pub/kepler/lightcurves/0069/006922244/kplr006922244-2009350155506_llc.fits",
+      "sha256": "f823e4a87418e0188ec479e35ed93c2513469fd7621a216d8309d188fd79e087",
+      "downloaded_at": "recorded",
+      "size_bytes": 466560,
+      "missingness": 0.054,
+      "known_artifacts": [
+        "quarter boundaries / rolls",
+        "safe-mode gaps",
+        "thermal transients",
+        "cosmic rays flagged in SAP_QUALITY"
+      ]
+    },
+    {
+      "mission": "Kepler",
+      "target": "Kepler-8",
+      "kic": "006922244",
+      "role": "science",
+      "sector_or_quarter": "Q@2010078095331",
+      "cadence": "long (29.4 min)",
+      "pipeline": "PDCSAP (Kepler DR25)",
+      "time_column": "TIME",
+      "flux_column": "PDCSAP_FLUX",
+      "error_column": "PDCSAP_FLUX_ERR",
+      "quality_column": "SAP_QUALITY",
+      "license": "Public domain (NASA / Kepler mission data)",
+      "source_url": "https://archive.stsci.edu/pub/kepler/lightcurves/0069/006922244/kplr006922244-2010078095331_llc.fits",
+      "sha256": "3dd9096da2753b01a1bbc2bd97b58da7526f4b98ea06c07b83c67d70abfe0224",
+      "downloaded_at": "recorded",
+      "size_bytes": 469440,
+      "missingness": 0.0657,
+      "known_artifacts": [
+        "quarter boundaries / rolls",
+        "safe-mode gaps",
+        "thermal transients",
+        "cosmic rays flagged in SAP_QUALITY"
+      ]
+    },
+    {
+      "mission": "Kepler",
+      "target": "KIC 6116048 (quiet control)",
+      "kic": "006116048",
+      "role": "control",
+      "sector_or_quarter": "Q@2009259160929",
+      "cadence": "long (29.4 min)",
+      "pipeline": "PDCSAP (Kepler DR25)",
+      "time_column": "TIME",
+      "flux_column": "PDCSAP_FLUX",
+      "error_column": "PDCSAP_FLUX_ERR",
+      "quality_column": "SAP_QUALITY",
+      "license": "Public domain (NASA / Kepler mission data)",
+      "source_url": "https://archive.stsci.edu/pub/kepler/lightcurves/0061/006116048/kplr006116048-2009259160929_llc.fits",
+      "sha256": "31a225164ff2b6b5eaa4816e29c4d6d7865b3f70d5b20fc4db54a51c32797f74",
+      "downloaded_at": "recorded",
+      "size_bytes": 466560,
+      "missingness": 0.0652,
+      "known_artifacts": [
+        "quarter boundaries / rolls",
+        "safe-mode gaps",
+        "thermal transients",
+        "cosmic rays flagged in SAP_QUALITY"
+      ]
+    }
+  ]
+}

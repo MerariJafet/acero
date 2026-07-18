@@ -1,0 +1,5 @@
+{
+  "expected_period_days": 3.52254,
+  "tolerance_days": 0.02,
+  "note": "Kepler-8b known period; recovery within tolerance is expected. Not a discovery."
+}

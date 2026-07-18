@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+title: "Standalone Reproduction — Kepler-8b Transit Recovery (ACERO Sprint 24)"
+message: "This package reproduces a KNOWN transit recovery; it is not a discovery."
+authors:
+  - family-names: Jafet
+    given-names: Merari
+version: "1.0.0"
+date-released: "2026-07-18"
+license: Apache-2.0
+references:
+  - type: article
+    authors: [{family-names: Jenkins}]
+    title: "Discovery and Rossiter-McLaughlin Effect of Exoplanet Kepler-8b"
+    year: 2010
+    journal: "ApJ Letters"
+    volume: "724"
+    start: "1108"

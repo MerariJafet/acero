@@ -1,0 +1,24 @@
+{
+  "reproduction_state": "INDEPENDENT_PROCESS_REPRODUCTION",
+  "note": "NOT external scientific replication.",
+  "hash_drift": [],
+  "no_hash_drift": true,
+  "analysis": {
+    "n_points": 10902,
+    "method_A_BLS": 3.52326,
+    "method_B_PDM": 3.52326,
+    "method_C_matched_box": 3.52221,
+    "frac_err_A": 0.0002,
+    "frac_err_B": 0.0002,
+    "frac_err_C": 9e-05,
+    "all_recover_known": true,
+    "shared_dependencies": [
+      "numpy",
+      "astropy(io.fits) for A/B; C is numpy-only"
+    ],
+    "is_discovery": false
+  },
+  "matches_expected": true,
+  "reproduced": true,
+  "is_discovery": false
+}
