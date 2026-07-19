@@ -166,6 +166,65 @@ def build_portal_router() -> APIRouter:
             "auto_publication": False, "sections": SECTIONS,
         }
 
+    @r.get("/api/projects")
+    def projects_list(sess: Session = Depends(_require_session)) -> list[dict[str, Any]]:
+        """Every research project with a live status/progress summary."""
+        from ..discovery.store import DiscoveryStore
+        from ..ledger.db import default_session_factory
+        from ..ledger.service import ResearchLedger
+        from ..world_model.graph import WorldModel
+        sf = default_session_factory()
+        lg = ResearchLedger(sf)
+        store = DiscoveryStore(sf, lg)
+        out: list[dict[str, Any]] = []
+        for p in lg.list_projects():
+            ev = lg.provenance_for_project(p.id)
+            hyps = store.list_objects(p.id, kind="candidate")
+            exps = store.list_objects(p.id, kind="experiment")
+            negs = store.list_objects(p.id, kind="negative")
+            wm = WorldModel(sf, lg, p.id).stats()
+            n_nodes = int(wm.get("n_nodes", 0))
+            last = max((str(e.get("at") or e.get("timestamp") or "") for e in ev), default="")
+            work = len(hyps) + len(exps) + n_nodes
+            out.append({
+                "id": p.id, "title": p.title, "domain": p.domain, "state": p.state.value,
+                "created_at": p.created_at, "hypotheses": len(hyps),
+                "experiments": len(exps), "negatives": len(negs), "world_nodes": n_nodes,
+                "events": len(ev), "last_activity": last[:19],
+                "status": "empty (created, no work yet)" if work == 0 else "in progress",
+            })
+        out.sort(key=lambda x: x["last_activity"], reverse=True)
+        return out
+
+    @r.get("/api/projects/{project_id}")
+    def project_detail(project_id: str, sess: Session = Depends(_require_session)
+                       ) -> dict[str, Any]:
+        """Full status + history for one project (progress, artifacts, events)."""
+        from ..discovery.store import DiscoveryStore
+        from ..ledger.db import default_session_factory
+        from ..ledger.service import ResearchLedger
+        from ..world_model.graph import WorldModel
+        sf = default_session_factory()
+        lg = ResearchLedger(sf)
+        p = lg.get_project(project_id)
+        if p is None:
+            raise HTTPException(404, "project not found")
+        store = DiscoveryStore(sf, lg)
+        ev = lg.provenance_for_project(project_id)
+        hist = [{"at": str(e.get("at") or e.get("timestamp") or "")[:19],
+                 "action": e.get("action"), "actor": e.get("actor"),
+                 "summary": (e.get("summary") or "")[:120]} for e in ev]
+        hist.sort(key=lambda h: str(h["at"]), reverse=True)
+        return {
+            "id": p.id, "title": p.title, "domain": p.domain, "state": p.state.value,
+            "created_at": p.created_at,
+            "hypotheses": store.list_objects(project_id, kind="candidate"),
+            "experiments": store.list_objects(project_id, kind="experiment"),
+            "negatives": store.list_objects(project_id, kind="negative"),
+            "world": WorldModel(sf, lg, project_id).stats(),
+            "history": hist,
+        }
+
     @r.get("/api/programs")
     def programs(sess: Session = Depends(_require_session)) -> list[dict[str, Any]]:
         from ..discovery.store import DiscoveryStore

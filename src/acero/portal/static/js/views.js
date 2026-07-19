@@ -181,8 +181,48 @@ export const VIEWS = {
   },
 
   "Projects": {
-    render: async () => panel("Projects",
-      "<p class='muted'>Create projects in the Research Workspace; project data reads via the API.</p>"),
+    render: async () => {
+      const { body } = await get("/portal/api/projects");
+      if (!Array.isArray(body) || !body.length)
+        return panel("Projects", "<p class='loading'>No projects yet — create one in the Research Workspace.</p>");
+      const rows = body.map((p) => [
+        p.title, p.domain, p.status,
+        `H:${p.hypotheses} E:${p.experiments} N:${p.world_nodes} ev:${p.events}`,
+        p.last_activity || "—", p.id,
+      ]);
+      const table = `<table><caption>All research projects (${body.length}) — click a row for detail</caption>` +
+        `<thead><tr><th>Title</th><th>Domain</th><th>Status</th><th>Progress</th><th>Last activity</th><th>ID</th></tr></thead><tbody>` +
+        body.map((p) =>
+          `<tr class="proj-row" data-pid="${esc(p.id)}" style="cursor:pointer">` +
+          `<td>${esc(p.title)}</td><td>${esc(p.domain)}</td>` +
+          `<td>${pill(p.status, p.status.startsWith("empty") ? "warn" : "ok")}</td>` +
+          `<td class="tag">H:${p.hypotheses} · E:${p.experiments} · WM:${p.world_nodes} · ev:${p.events}</td>` +
+          `<td class="tag">${esc(p.last_activity || "—")}</td>` +
+          `<td class="tag">${esc(p.id)}</td></tr>`).join("") +
+        `</tbody></table>`;
+      return panel("Projects", table + "<div id='proj-detail' aria-live='polite'></div>");
+    },
+    mount: (root) => {
+      root.querySelectorAll(".proj-row").forEach((tr) =>
+        tr.addEventListener("click", async () => {
+          const pid = tr.getAttribute("data-pid");
+          const out = root.querySelector("#proj-detail");
+          out.innerHTML = "<p class='loading'>Loading…</p>";
+          const { ok, body } = await get("/portal/api/projects/" + encodeURIComponent(pid));
+          if (!ok) { out.innerHTML = `<p class="err">error loading project</p>`; return; }
+          const hist = (body.history || []).map((h) =>
+            `<div class="kv"><span>${esc(h.at)} · ${esc(h.action)} · ${esc(h.actor)}</span>` +
+            `<b>${esc(h.summary || "")}</b></div>`).join("") || "<p class='muted'>no events</p>";
+          out.innerHTML = panel("Detail: " + body.title,
+            kv("id", body.id) + kv("domain", body.domain) + kv("state", body.state) +
+            kv("created", body.created_at) +
+            kv("hypotheses", (body.hypotheses || []).length) +
+            kv("experiments", (body.experiments || []).length) +
+            kv("negative results", (body.negatives || []).length) +
+            kv("world model nodes", (body.world || {}).n_nodes || 0)) +
+            panel("History (provenance)", hist);
+        }));
+    },
   },
 
   "Settings": {
