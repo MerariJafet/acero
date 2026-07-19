@@ -218,6 +218,10 @@ export const VIEWS = {
             "<textarea id='cop-msg' rows='3' style='width:100%' placeholder='p.ej.: propón hipótesis competidoras y qué datos públicos usar'></textarea>" +
             "<button class='act' id='cop-send'>Preguntar al copiloto</button>" +
             "<div id='cop-out' aria-live='polite'></div>");
+          const lit = panel("🔎 Buscar literatura científica REAL (Knowledge Mesh · Crossref)",
+            "<input id='lit-q' placeholder='p.ej.: cold dark matter dwarf galaxies'>" +
+            "<button class='act' id='lit-go'>Buscar</button>" +
+            "<div id='lit-out' aria-live='polite'></div>");
           const runner = panel("⚙️ Ejecutar ciclo de investigación real (gate-guardado)",
             "<input id='rc-q' placeholder='pregunta científica acotada'>" +
             "<button class='act' id='rc-go'>Lanzar ciclo</button>" +
@@ -231,7 +235,27 @@ export const VIEWS = {
             kv("experiments", (body.experiments || []).length) +
             kv("negative results", (body.negatives || []).length) +
             kv("world model nodes", (body.world || {}).n_nodes || 0)) +
-            copilot + runner + panel("History (provenance)", hist);
+            copilot + lit + runner + panel("History (provenance)", hist);
+
+          const litgo = out.querySelector("#lit-go");
+          litgo.addEventListener("click", async () => {
+            const q = out.querySelector("#lit-q").value.trim();
+            if (!q) return;
+            const lo = out.querySelector("#lit-out");
+            lo.innerHTML = "<p class='loading'>Buscando en fuentes reales…</p>";
+            litgo.disabled = true;
+            const { ok, body: b } = await get(`/portal/api/mesh/search?q=${encodeURIComponent(q)}&rows=6`);
+            litgo.disabled = false;
+            if (!ok) { lo.innerHTML = `<p class="err">error: ${esc((b && b.detail) || "search")}</p>`; return; }
+            const rows = (b.results || []).map((it) => {
+              const flag = it.integrity_status === "normal" ? "" : ` ${pill(it.integrity_status, "bad")}`;
+              const lic = it.license ? ` · lic` : "";
+              return `<div class="card"><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title || it.doi)}</a>${flag}` +
+                `<div class="tag">${esc(it.type)} · ${esc((it.authors || []).slice(0,3).join(", "))} · ${esc(it.doi)}${lic}</div></div>`;
+            }).join("");
+            lo.innerHTML = `<p class="muted">fuentes: ${esc((b.sources_consulted || []).join(", "))} · ${esc(b.n_results)} resultados</p>` +
+              rows + `<p class="tag">${esc(b.disclaimer || "")}</p>`;
+          });
 
           const csend = out.querySelector("#cop-send");
           csend.addEventListener("click", async () => {

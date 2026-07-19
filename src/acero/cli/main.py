@@ -2112,6 +2112,51 @@ def production(action: str = typer.Argument("score")) -> None:
         raise typer.Exit(1)
 
 
+@app.command("mesh")
+def mesh(action: str = typer.Argument("sources"), arg: str = typer.Argument("")) -> None:
+    """Scientific Knowledge Mesh: `acero mesh sources|health|lookup <doi>|search <query>`."""
+    from ..knowledge_mesh import mesh as m
+    if action == "sources":
+        for s in m.list_sources():
+            typer.echo(f"  {s['source_id']:14s} {s['authority_level']:20s} "
+                       f"{s['health_status']:8s} {s['canonical_domain']}")
+    elif action == "health":
+        r = m.health_report(live=True)
+        for x in r["results"]:
+            c = typer.colors.GREEN if x["ok"] else typer.colors.RED
+            typer.secho(f"  {x['source_id']:14s} {str(x['http_status']):5s} {x['health_status']}", fg=c)
+        typer.secho(f"verified {r['n_verified']}/{r['n_sources']}", fg=typer.colors.GREEN)
+    elif action == "lookup":
+        if not arg:
+            typer.secho("provide a DOI", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        r = m.lookup_doi(arg)
+        if not r["found"]:
+            typer.secho(f"not found in Crossref: {arg} (reported unverified, not invented)",
+                        fg=typer.colors.YELLOW)
+            return
+        o = r["object"]
+        typer.echo(f"  title:     {o['title']}")
+        typer.echo(f"  type:      {o['object_type']}  |  review: {o['review_status']}")
+        color = typer.colors.RED if o["integrity_status"] != "normal" else typer.colors.GREEN
+        typer.secho(f"  integrity: {o['integrity_status']}", fg=color)
+        typer.echo(f"  authors:   {', '.join(o['authors'][:5])}")
+        typer.echo(f"  license:   {(o['license'] or {}).get('url')}")
+        typer.echo(f"  url:       {o['canonical_url']}")
+    elif action == "search":
+        if not arg:
+            typer.secho("provide a query", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        r = m.search(arg, rows=5)
+        typer.echo(f"query: {r['query']}  ·  sources: {r['sources_consulted']}  ·  n={r['n_results']}")
+        for it in r["results"]:
+            flag = "" if it["integrity_status"] == "normal" else f" [{it['integrity_status'].upper()}]"
+            typer.echo(f"  - {it['type']}{flag} | {(it['title'] or '')[:64]} | {it['doi']}")
+    else:
+        typer.secho("actions: sources|health|lookup <doi>|search <query>", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
 @app.command("security-audit")
 def security_audit_cmd() -> None:
     """Run the release security audit."""

@@ -1,0 +1,10 @@
+source_id,name,canonical_domain,responsible_institution,authority_level,health_status,metadata_license,connector_status
+crossref,Crossref REST API,api.crossref.org,Crossref,official_aggregator,unknown,CC0 (Crossref metadata),tested
+openalex,OpenAlex API,api.openalex.org,OurResearch,official_aggregator,unknown,CC0,prototype
+arxiv,arXiv API,export.arxiv.org,Cornell University / arXiv,primary,unknown,arXiv metadata terms,prototype
+nasa_mast,MAST (Mikulski Archive for Space Telescopes),mast.stsci.edu,STScI / NASA,primary,unknown,public domain (NASA),prototype
+gwosc,GWOSC (Gravitational Wave Open Science Center),gwosc.org,LIGO/Virgo/KAGRA,primary,unknown,open,prototype
+ncbi_eutils,NCBI E-utilities,eutils.ncbi.nlm.nih.gov,NCBI / NIH,primary,unknown,US Gov public domain (most),prototype
+pubchem,PubChem PUG REST,pubchem.ncbi.nlm.nih.gov,NCBI / NIH,primary,unknown,public domain (most),prototype
+zenodo,Zenodo REST API,zenodo.org,CERN / OpenAIRE,official_aggregator,unknown,metadata often CC0; FILE license varies per record,prototype
+datacite,DataCite REST API,api.datacite.org,DataCite,official_aggregator,unknown,CC0,not_started

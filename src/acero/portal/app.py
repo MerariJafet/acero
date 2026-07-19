@@ -263,6 +263,23 @@ def build_portal_router() -> APIRouter:
         from .copilot import run_real_data_verification
         return run_real_data_verification(project_id)
 
+    @r.get("/api/mesh/search")
+    def mesh_search(q: str, rows: int = 5, sess: Session = Depends(_require_session)
+                    ) -> dict[str, Any]:
+        """Real literature search via the Scientific Knowledge Mesh (Crossref)."""
+        if not q.strip():
+            raise HTTPException(422, "q is required")
+        from ..knowledge_mesh import mesh
+        try:
+            return mesh.search(q, rows=max(1, min(rows, 15)))
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(502, f"mesh search error: {exc}") from exc
+
+    @r.get("/api/mesh/sources")
+    def mesh_sources(sess: Session = Depends(_require_session)) -> list[dict[str, Any]]:
+        from ..knowledge_mesh import mesh
+        return mesh.list_sources()
+
     @r.get("/api/programs")
     def programs(sess: Session = Depends(_require_session)) -> list[dict[str, Any]]:
         from ..discovery.store import DiscoveryStore
