@@ -117,6 +117,16 @@ nav#nav button.sys.active { color: var(--accent); }
 }
 .tabs button.active { background: #1b4066; border-color: var(--accent); color: #aadcff; font-weight: 600; }
 
+/* --- estado stepper -------------------------------------------------------- */
+.stepper { display: flex; flex-direction: column; gap: .3rem; margin-top: .4rem; }
+.stage { display: flex; align-items: baseline; gap: .6rem; padding: .3rem .4rem; border-radius: 8px; }
+.stage .stage-dot { width: 1.2rem; text-align: center; font-weight: 700; }
+.stage.done { color: #56d364; }
+.stage.done .stage-name { color: var(--fg); }
+.stage.now { background: #1b4066; }
+.stage.now .stage-dot, .stage.now .stage-name { color: #aadcff; font-weight: 700; }
+.stage.todo { color: var(--muted); }
+
 /* --- copilot chat thread --------------------------------------------------- */
 .chat-thread {
   display: flex; flex-direction: column; gap: .55rem; max-height: 52vh;

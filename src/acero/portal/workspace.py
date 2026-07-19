@@ -132,6 +132,12 @@ class WorkspaceService:
             counter=[DossierEvidence("c1", "single synthetic run", "counter")],
             limitations=["synthetic; not experimental validation; not a discovery"])
         dd = d.as_dict()
-        return {"id": dd.get("id"), "claim": claim,
-                "readiness": dd.get("readiness") or dd.get("readiness_level"),
-                "can_publish_automatically": False}
+        out = {"id": dd.get("id"), "claim": claim,
+               "readiness": dd.get("readiness") or dd.get("readiness_level"),
+               "can_publish_automatically": False}
+        # persist so the project's Estado tab can show it (requires human review)
+        self.store.put(project_id, "dossier", str(dd.get("id") or new_id("dossier")),
+                       {**out, "status": "AWAITING_HUMAN_REVIEW"},
+                       status="AWAITING_HUMAN_REVIEW", actor="system",
+                       summary=f"dossier generado: {claim[:60]}")
+        return out

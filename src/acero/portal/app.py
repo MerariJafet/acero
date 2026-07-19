@@ -233,6 +233,16 @@ def build_portal_router() -> APIRouter:
             "history": hist,
         }
 
+    @r.get("/api/projects/{project_id}/status")
+    def project_status(project_id: str, sess: Session = Depends(_require_session)
+                       ) -> dict[str, Any]:
+        """Narrative status: what's done, where we are, what's next, decisions."""
+        from .status import build_status
+        st = build_status(project_id)
+        if st is None:
+            raise HTTPException(404, "project not found")
+        return st
+
     @r.get("/api/projects/{project_id}/chat")
     def project_chat(project_id: str, sess: Session = Depends(_require_session)
                      ) -> list[dict[str, Any]]:

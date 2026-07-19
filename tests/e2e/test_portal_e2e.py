@@ -192,10 +192,12 @@ def test_flow_world_model_and_dossier(page):
 
 def test_flow_result_cards_show_prohibited_claims(page):
     _login(page)
-    page.click("#nav >> text=Publication Candidates")
-    page.wait_for_selector(".card")
-    body = page.inner_text("#view")
-    assert "PROHIBITED claims" in body
+    page.click('#nav button[data-view="Publication Candidates"]')
+    page.wait_for_function(
+        "() => document.querySelector('#view') && "
+        "document.querySelector('#view').innerText.includes('PROHIBITED claims')",
+        timeout=15000)
+    assert "PROHIBITED claims" in page.inner_text("#view")
 
 
 def test_flow_world_explorer_paginates(page):

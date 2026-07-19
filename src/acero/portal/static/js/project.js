@@ -19,7 +19,8 @@ export async function renderProjectWorkspace(view, pid) {
        <div class="tag" id="pw-stats">Hipótesis ${p.hypotheses.length} · Experimentos ${p.experiments.length} · Conocimiento ${(p.world || {}).n_nodes || 0} nodos · Eventos ${p.history.length}</div>
      </section>` +
     `<div class="tabs" role="tablist" aria-label="Herramientas del proyecto">
-       <button data-tab="chat" class="active">💬 Copiloto</button>
+       <button data-tab="status" class="active">📍 Estado</button>
+       <button data-tab="chat">💬 Copiloto</button>
        <button data-tab="research">🔬 Investigar</button>
        <button data-tab="lit">🔎 Literatura</button>
        <button data-tab="world">🧠 Conocimiento</button>
@@ -37,7 +38,7 @@ export async function renderProjectWorkspace(view, pid) {
     TABS[name](view.querySelector("#pw-tab"), pid, p);
   };
   tabs.forEach((b) => b.addEventListener("click", () => show(b.dataset.tab)));
-  show("chat");
+  show("status");
 }
 
 const CHIPS = [
@@ -48,6 +49,48 @@ const CHIPS = [
 ];
 
 const TABS = {
+  // --- 📍 Estado: what's done, where we are, what's next, decisions -------
+  status: async (el, pid) => {
+    el.innerHTML = "<p class='loading'>Calculando estado real…</p>";
+    const { ok, body: st } = await get(`/portal/api/projects/${encodeURIComponent(pid)}/status`);
+    if (!ok) { el.innerHTML = "<p class='err'>error cargando estado</p>"; return; }
+
+    const stepper = st.stages.map((s) =>
+      `<div class="stage ${s.done ? "done" : (s.stage === st.current_stage ? "now" : "todo")}">
+         <span class="stage-dot">${s.done ? "✓" : (s.stage === st.current_stage ? "●" : "○")}</span>
+         <span class="stage-name">${esc(s.stage)}</span>
+         <span class="tag">${esc(s.detail || "")}</span>
+       </div>`).join("");
+
+    const doneList = st.done_items.length
+      ? st.done_items.map((d) =>
+          `<div class="card"><b>[${esc(d.kind)}]</b> ${esc(d.title)}` +
+          `${d.status ? " " + pill(d.status, d.kind.includes("REAL") ? "ok" : "warn") : ""}` +
+          `${d.note ? `<div class="tag">${esc(d.note)}</div>` : ""}</div>`).join("")
+      : "<p class='muted'>Aún no se ha hecho trabajo en este proyecto.</p>";
+
+    const decisions = st.decisions.map((d) =>
+      `<div class="kv"><span>${esc(d.at)} · ${esc(d.actor)}</span><b>${esc(d.decision)}</b></div>`).join("");
+
+    const nexts = st.next_steps.map((n, i) =>
+      `<div class="kv"><span>${i + 1}. ${esc(n.text)}</span>` +
+      `<button class="chip" data-goto="${esc(n.tab)}">ir →</button></div>`).join("");
+
+    el.innerHTML =
+      `<div class="panel"><h3>🧭 Dónde estamos</h3>` +
+      `<p><b>Etapa actual: ${esc(st.current_stage)}</b></p><div class="stepper">${stepper}</div></div>` +
+      `<div class="panel"><h3>✅ Lo que ya se hizo (${st.n_done})</h3>${doneList}</div>` +
+      `<div class="panel"><h3>🗳️ Decisiones tomadas</h3>${decisions}</div>` +
+      `<div class="panel"><h3>➡️ Qué sigue (recomendado)</h3>${nexts}</div>` +
+      `<p class="tag">${esc(st.honesty)}</p>`;
+
+    el.querySelectorAll("[data-goto]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const t = el.parentElement.querySelector(`.tabs button[data-tab="${b.dataset.goto}"]`);
+        if (t) t.click();
+      }));
+  },
+
   // --- 💬 Copiloto: the persistent conversation thread --------------------
   chat: async (el, pid) => {
     el.innerHTML = `<div class="panel">
