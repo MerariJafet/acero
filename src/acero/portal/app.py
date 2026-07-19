@@ -89,6 +89,14 @@ class DossierBody(BaseModel):
     claim: str
 
 
+class CopilotBody(BaseModel):
+    message: str
+
+
+class RunCycleBody(BaseModel):
+    question: str
+
+
 def _cookie_secure() -> bool:
     return os.environ.get("ACERO_PORTAL_COOKIE_SECURE", "0") == "1"
 
@@ -224,6 +232,28 @@ def build_portal_router() -> APIRouter:
             "world": WorldModel(sf, lg, project_id).stats(),
             "history": hist,
         }
+
+    @r.post("/api/projects/{project_id}/copilot")
+    def project_copilot(project_id: str, body: CopilotBody,
+                        sess: Session = Depends(_require_session),
+                        x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Chat with the per-project Research Copilot (Codex-backed, methodology-guarded)."""
+        _require_csrf(sess, x_csrf_token)
+        if not body.message.strip():
+            raise HTTPException(422, "message is required")
+        from .copilot import ResearchCopilot
+        return ResearchCopilot().chat(project_id, body.message)
+
+    @r.post("/api/projects/{project_id}/run-cycle")
+    def project_run_cycle(project_id: str, body: RunCycleBody,
+                          sess: Session = Depends(_require_session),
+                          x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Execute one REAL ACERO research cycle on the project (gate-guarded)."""
+        _require_csrf(sess, x_csrf_token)
+        if not body.question.strip():
+            raise HTTPException(422, "question is required")
+        from .copilot import run_research_cycle
+        return run_research_cycle(project_id, body.question)
 
     @r.get("/api/programs")
     def programs(sess: Session = Depends(_require_session)) -> list[dict[str, Any]]:
