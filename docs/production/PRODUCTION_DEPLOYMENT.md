@@ -57,12 +57,18 @@ prebuilt `.next`. The final build + PM2 restart runs **in place on the shared
 production VM** (co-located with live Kronos/Nexus, ~300 MB RAM free) and was
 deliberately held for human review rather than executed by the agent.
 
-**Completion (run on the VM, or approve the agent to):**
+**Completion — run on the VM (Kronos has this access; the agent is guardrail-blocked
+from writing to the shared prod host).** The landing source (button + server-side
+login security fix + `scripts/deploy_acero.sh`) is already pushed (`67cd015`).
+
 ```bash
 cd /var/www/merari-landing
-cp -r .next .next.bak                                   # rollback snapshot (~27 MB)
-NODE_OPTIONS="--max-old-space-size=1024" ./node_modules/.bin/next build
-pm2 restart merari-landing
+# 1) REQUIRED first: set the dashboard credential (gitignored) or login returns 503.
+#    Keep your current password to avoid changing it, or set a rotated one.
+printf 'DASHBOARD_EMAIL=merari.jafet@gmail.com\nDASHBOARD_PASSWORD=YOUR_PASSWORD\n' > .env.local
+chmod 600 .env.local
+# 2) One safe command: build + restart + smoke test + auto-rollback on failure
+bash scripts/deploy_acero.sh
 ```
 **Verify:**
 ```bash
