@@ -255,6 +255,14 @@ def build_portal_router() -> APIRouter:
         from .copilot import run_research_cycle
         return run_research_cycle(project_id, body.question)
 
+    @r.post("/api/projects/{project_id}/verify-real-data")
+    def project_verify_real_data(project_id: str, sess: Session = Depends(_require_session),
+                                 x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Run a REAL data-backed verification (Kepler's 3rd law on public NASA data)."""
+        _require_csrf(sess, x_csrf_token)
+        from .copilot import run_real_data_verification
+        return run_real_data_verification(project_id)
+
     @r.get("/api/programs")
     def programs(sess: Session = Depends(_require_session)) -> list[dict[str, Any]]:
         from ..discovery.store import DiscoveryStore

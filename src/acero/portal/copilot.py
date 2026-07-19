@@ -94,6 +94,39 @@ class ResearchCopilot:
                 "disclaimer": "Salida de IA: ayuda de razonamiento, NO evidencia científica."}
 
 
+def run_real_data_verification(project_id: str, *, session_factory: Any | None = None
+                               ) -> dict[str, Any]:
+    """Run a REAL data-backed verification (Kepler's 3rd law on NASA data) and record it."""
+    from ..core.ids import new_id
+    from ..studies.kepler_law import verify
+    from ..world_model.graph import WorldModel
+    from ..world_model.nodes import NodeType
+
+    sf = session_factory or default_session_factory()
+    ledger = ResearchLedger(sf)
+    if ledger.get_project(project_id) is None:
+        return {"ok": False, "error": "project not found"}
+    res = verify()
+    if not res.get("ok"):
+        return {"ok": False, "error": res.get("reason", "verification failed")}
+
+    store = DiscoveryStore(sf, ledger)
+    eid = new_id("exp")
+    store.put(project_id, "experiment", eid, {
+        "id": eid, "kind": "real_data_verification", "synthetic": False,
+        "dataset": res["source"], "n_planets": res["n_planets"],
+        "fitted": res["fitted"], "earth_context": res["earth_context"],
+        "consistent_with_kepler": res["consistent_with_kepler"], "claim": res["claim"]},
+        status="COMPLETE", actor="copilot",
+        summary=f"real-data Kepler verification (n={res['n_planets']}, R2={res['fitted']['r_squared']})")
+    wm = WorldModel(sf, ledger, project_id)
+    node = wm.create(NodeType.CLAIM,
+                     f"Órbita de la Tierra consistente con Kepler (R²={res['fitted']['r_squared']})",
+                     confidence=0.6)
+    return {"ok": True, "experiment_id": eid, "world_node": node.id, "result": res,
+            "is_discovery": False}
+
+
 def run_research_cycle(project_id: str, question: str, *, session_factory: Any | None = None
                        ) -> dict[str, Any]:
     """Execute one REAL ACERO research cycle on an existing project (gate-guarded)."""

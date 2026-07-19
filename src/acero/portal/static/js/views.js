@@ -221,6 +221,8 @@ export const VIEWS = {
           const runner = panel("⚙️ Ejecutar ciclo de investigación real (gate-guardado)",
             "<input id='rc-q' placeholder='pregunta científica acotada'>" +
             "<button class='act' id='rc-go'>Lanzar ciclo</button>" +
+            "<p class='muted' style='margin-top:.8rem'>O una verificación con DATOS PÚBLICOS REALES (Ley de Kepler, catálogo NASA):</p>" +
+            "<button class='act' id='rd-go'>Verificar con datos reales</button>" +
             "<div id='rc-out' aria-live='polite'></div>");
           out.innerHTML = panel("Detail: " + body.title,
             kv("id", body.id) + kv("domain", body.domain) + kv("state", body.state) +
@@ -260,6 +262,26 @@ export const VIEWS = {
               `<div class="kv"><span>${esc(s.step)}</span><b>${esc(JSON.stringify(Object.fromEntries(Object.entries(s).filter(([k]) => k !== "step"))))}</b></div>`).join("");
             ro.innerHTML = `<div class="card">${steps}<div class="tag">${esc(b.note || "")}</div></div>` +
               `<p class="muted">Recarga el detalle para ver el avance actualizado.</p>`;
+          });
+
+          const rdgo = out.querySelector("#rd-go");
+          rdgo.addEventListener("click", async () => {
+            const ro = out.querySelector("#rc-out");
+            ro.innerHTML = "<p class='loading'>Descargando/analizando datos reales…</p>";
+            rdgo.disabled = true;
+            const { ok, body: b } = await post(`/portal/api/projects/${encodeURIComponent(pid)}/verify-real-data`, {});
+            rdgo.disabled = false;
+            if (!ok || !b.ok) { ro.innerHTML = `<p class="err">error: ${esc((b && b.detail) || (b && b.error) || "verify")}</p>`; return; }
+            const rs = b.result || {};
+            ro.innerHTML = `<div class="card">` +
+              kv("dataset", rs.source) + kv("planetas (n)", rs.n_planets) +
+              kv("exponente log(a)", (rs.fitted || {}).alpha_log_a + " (teoría 1.5)") +
+              kv("exponente log(M)", (rs.fitted || {}).beta_log_M + " (teoría -0.5)") +
+              kv("R²", (rs.fitted || {}).r_squared) +
+              kv("Tierra: periodo predicho (1 AU)", (rs.earth_context || {}).predicted_period_yr_at_1AU_1Msun + " años (real 1.0)") +
+              kv("consistente con Kepler", rs.consistent_with_kepler ? "sí" : "no") +
+              `<div class="tag">${esc(rs.claim || "")}</div></div>` +
+              `<p class="muted">Experimento REAL registrado (${esc(b.experiment_id || "")}). Recarga para ver el avance.</p>`;
           });
         }));
     },
