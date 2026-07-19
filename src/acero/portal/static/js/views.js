@@ -2,6 +2,7 @@
 import { get, post } from "./api.js";
 import { esc, kv, panel, pill, table, resultCard } from "./components.js";
 import { workspaceView } from "./workspace.js";
+import { renderProjectWorkspace } from "./project.js";
 
 // Each view: { render: async () => htmlString, mount?: (rootEl) => void }.
 // No inline event handlers (CSP forbids them); mount() wires listeners.
@@ -184,130 +185,29 @@ export const VIEWS = {
     render: async () => {
       const { body } = await get("/portal/api/projects");
       if (!Array.isArray(body) || !body.length)
-        return panel("Projects", "<p class='loading'>No projects yet — create one in the Research Workspace.</p>");
-      const rows = body.map((p) => [
-        p.title, p.domain, p.status,
-        `H:${p.hypotheses} E:${p.experiments} N:${p.world_nodes} ev:${p.events}`,
-        p.last_activity || "—", p.id,
-      ]);
-      const table = `<table><caption>All research projects (${body.length}) — click a row for detail</caption>` +
-        `<thead><tr><th>Title</th><th>Domain</th><th>Status</th><th>Progress</th><th>Last activity</th><th>ID</th></tr></thead><tbody>` +
-        body.map((p) =>
-          `<tr class="proj-row" data-pid="${esc(p.id)}" style="cursor:pointer">` +
-          `<td>${esc(p.title)}</td><td>${esc(p.domain)}</td>` +
-          `<td>${pill(p.status, p.status.startsWith("empty") ? "warn" : "ok")}</td>` +
-          `<td class="tag">H:${p.hypotheses} · E:${p.experiments} · WM:${p.world_nodes} · ev:${p.events}</td>` +
-          `<td class="tag">${esc(p.last_activity || "—")}</td>` +
-          `<td class="tag">${esc(p.id)}</td></tr>`).join("") +
-        `</tbody></table>`;
-      return panel("Projects", table + "<div id='proj-detail' aria-live='polite'></div>");
+        return panel("Proyectos", "<p class='loading'>No hay proyectos aún.</p>");
+      const cards = body.map((p) => {
+        const empty = (p.status || "").startsWith("empty");
+        return `<div class="proj-card" data-pid="${esc(p.id)}" role="button" tabindex="0" ` +
+          `aria-label="Abrir proyecto ${esc(p.title)}">` +
+          `<h3>${esc(p.title)}</h3>` +
+          `<div>${pill(p.domain)} ${pill(empty ? "vacío — sin trabajo" : "en progreso", empty ? "warn" : "ok")}</div>` +
+          `<div class="tag">Hipótesis ${p.hypotheses} · Experimentos ${p.experiments} · ` +
+          `Conocimiento ${p.world_nodes} · Eventos ${p.events}</div>` +
+          `<div class="tag">Última actividad: ${esc(p.last_activity || "—")}</div>` +
+          `<div class="proj-open">Entrar →</div></div>`;
+      }).join("");
+      return panel(`Proyectos (${body.length}) — entra a uno: todo (copiloto, literatura, ` +
+        `aprendizaje, historial) vive DENTRO del proyecto`, `<div class="proj-grid">${cards}</div>`);
     },
     mount: (root) => {
-      root.querySelectorAll(".proj-row").forEach((tr) =>
-        tr.addEventListener("click", async () => {
-          const pid = tr.getAttribute("data-pid");
-          const out = root.querySelector("#proj-detail");
-          out.innerHTML = "<p class='loading'>Loading…</p>";
-          const { ok, body } = await get("/portal/api/projects/" + encodeURIComponent(pid));
-          if (!ok) { out.innerHTML = `<p class="err">error loading project</p>`; return; }
-          const hist = (body.history || []).map((h) =>
-            `<div class="kv"><span>${esc(h.at)} · ${esc(h.action)} · ${esc(h.actor)}</span>` +
-            `<b>${esc(h.summary || "")}</b></div>`).join("") || "<p class='muted'>no events</p>";
-          const copilot = panel("🧠 Copiloto científico (Codex — ayuda de razonamiento, NO evidencia)",
-            "<p class='muted'>Pregúntale a ACERO sobre este proyecto, como hablarías con un asistente científico.</p>" +
-            "<textarea id='cop-msg' rows='3' style='width:100%' placeholder='p.ej.: propón hipótesis competidoras y qué datos públicos usar'></textarea>" +
-            "<button class='act' id='cop-send'>Preguntar al copiloto</button>" +
-            "<div id='cop-out' aria-live='polite'></div>");
-          const lit = panel("🔎 Buscar literatura científica REAL (Knowledge Mesh · Crossref)",
-            "<input id='lit-q' placeholder='p.ej.: cold dark matter dwarf galaxies'>" +
-            "<button class='act' id='lit-go'>Buscar</button>" +
-            "<div id='lit-out' aria-live='polite'></div>");
-          const runner = panel("⚙️ Ejecutar ciclo de investigación real (gate-guardado)",
-            "<input id='rc-q' placeholder='pregunta científica acotada'>" +
-            "<button class='act' id='rc-go'>Lanzar ciclo</button>" +
-            "<p class='muted' style='margin-top:.8rem'>O una verificación con DATOS PÚBLICOS REALES (Ley de Kepler, catálogo NASA):</p>" +
-            "<button class='act' id='rd-go'>Verificar con datos reales</button>" +
-            "<div id='rc-out' aria-live='polite'></div>");
-          out.innerHTML = panel("Detail: " + body.title,
-            kv("id", body.id) + kv("domain", body.domain) + kv("state", body.state) +
-            kv("created", body.created_at) +
-            kv("hypotheses", (body.hypotheses || []).length) +
-            kv("experiments", (body.experiments || []).length) +
-            kv("negative results", (body.negatives || []).length) +
-            kv("world model nodes", (body.world || {}).n_nodes || 0)) +
-            copilot + lit + runner + panel("History (provenance)", hist);
-
-          const litgo = out.querySelector("#lit-go");
-          litgo.addEventListener("click", async () => {
-            const q = out.querySelector("#lit-q").value.trim();
-            if (!q) return;
-            const lo = out.querySelector("#lit-out");
-            lo.innerHTML = "<p class='loading'>Buscando en fuentes reales…</p>";
-            litgo.disabled = true;
-            const { ok, body: b } = await get(`/portal/api/mesh/search?q=${encodeURIComponent(q)}&rows=6`);
-            litgo.disabled = false;
-            if (!ok) { lo.innerHTML = `<p class="err">error: ${esc((b && b.detail) || "search")}</p>`; return; }
-            const rows = (b.results || []).map((it) => {
-              const flag = it.integrity_status === "normal" ? "" : ` ${pill(it.integrity_status, "bad")}`;
-              const lic = it.license ? ` · lic` : "";
-              return `<div class="card"><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title || it.doi)}</a>${flag}` +
-                `<div class="tag">${esc(it.type)} · ${esc((it.authors || []).slice(0,3).join(", "))} · ${esc(it.doi)}${lic}</div></div>`;
-            }).join("");
-            lo.innerHTML = `<p class="muted">fuentes: ${esc((b.sources_consulted || []).join(", "))} · ${esc(b.n_results)} resultados</p>` +
-              rows + `<p class="tag">${esc(b.disclaimer || "")}</p>`;
-          });
-
-          const csend = out.querySelector("#cop-send");
-          csend.addEventListener("click", async () => {
-            const msg = out.querySelector("#cop-msg").value.trim();
-            if (!msg) return;
-            const co = out.querySelector("#cop-out");
-            co.innerHTML = "<p class='loading'>Pensando (Codex puede tardar hasta ~3 min)…</p>";
-            csend.disabled = true;
-            const { ok, body: b } = await post(`/portal/api/projects/${encodeURIComponent(pid)}/copilot`, { message: msg });
-            csend.disabled = false;
-            if (!ok) { co.innerHTML = `<p class="err">error: ${esc((b && b.detail) || "copilot")}</p>`; return; }
-            const reply = (b.reply || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-            co.innerHTML = `<div class="card"><div style="white-space:pre-wrap">${reply}</div>` +
-              `<div class="tag">${esc(b.disclaimer || "")} ${b.usage && b.usage.total_tokens ? "· tokens: " + esc(b.usage.total_tokens) : ""}</div></div>`;
-          });
-
-          const rgo = out.querySelector("#rc-go");
-          rgo.addEventListener("click", async () => {
-            const q = out.querySelector("#rc-q").value.trim();
-            if (!q) return;
-            const ro = out.querySelector("#rc-out");
-            ro.innerHTML = "<p class='loading'>Ejecutando ciclo real…</p>";
-            rgo.disabled = true;
-            const { ok, body: b } = await post(`/portal/api/projects/${encodeURIComponent(pid)}/run-cycle`, { question: q });
-            rgo.disabled = false;
-            if (!ok) { ro.innerHTML = `<p class="err">error: ${esc((b && b.detail) || "run")}</p>`; return; }
-            const steps = (b.steps || []).map((s) =>
-              `<div class="kv"><span>${esc(s.step)}</span><b>${esc(JSON.stringify(Object.fromEntries(Object.entries(s).filter(([k]) => k !== "step"))))}</b></div>`).join("");
-            ro.innerHTML = `<div class="card">${steps}<div class="tag">${esc(b.note || "")}</div></div>` +
-              `<p class="muted">Recarga el detalle para ver el avance actualizado.</p>`;
-          });
-
-          const rdgo = out.querySelector("#rd-go");
-          rdgo.addEventListener("click", async () => {
-            const ro = out.querySelector("#rc-out");
-            ro.innerHTML = "<p class='loading'>Descargando/analizando datos reales…</p>";
-            rdgo.disabled = true;
-            const { ok, body: b } = await post(`/portal/api/projects/${encodeURIComponent(pid)}/verify-real-data`, {});
-            rdgo.disabled = false;
-            if (!ok || !b.ok) { ro.innerHTML = `<p class="err">error: ${esc((b && b.detail) || (b && b.error) || "verify")}</p>`; return; }
-            const rs = b.result || {};
-            ro.innerHTML = `<div class="card">` +
-              kv("dataset", rs.source) + kv("planetas (n)", rs.n_planets) +
-              kv("exponente log(a)", (rs.fitted || {}).alpha_log_a + " (teoría 1.5)") +
-              kv("exponente log(M)", (rs.fitted || {}).beta_log_M + " (teoría -0.5)") +
-              kv("R²", (rs.fitted || {}).r_squared) +
-              kv("Tierra: periodo predicho (1 AU)", (rs.earth_context || {}).predicted_period_yr_at_1AU_1Msun + " años (real 1.0)") +
-              kv("consistente con Kepler", rs.consistent_with_kepler ? "sí" : "no") +
-              `<div class="tag">${esc(rs.claim || "")}</div></div>` +
-              `<p class="muted">Experimento REAL registrado (${esc(b.experiment_id || "")}). Recarga para ver el avance.</p>`;
-          });
-        }));
+      const open = (pid) => renderProjectWorkspace(document.querySelector("#view"), pid);
+      root.querySelectorAll(".proj-card").forEach((c) => {
+        c.addEventListener("click", () => open(c.dataset.pid));
+        c.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(c.dataset.pid); }
+        });
+      });
     },
   },
 

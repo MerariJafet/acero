@@ -233,6 +233,43 @@ def build_portal_router() -> APIRouter:
             "history": hist,
         }
 
+    @r.get("/api/projects/{project_id}/chat")
+    def project_chat(project_id: str, sess: Session = Depends(_require_session)
+                     ) -> list[dict[str, Any]]:
+        """Persistent copilot chat thread for the project."""
+        from .copilot import ResearchCopilot
+        return ResearchCopilot().get_chat(project_id)
+
+    @r.get("/api/projects/{project_id}/learning")
+    def project_learning(project_id: str, sess: Session = Depends(_require_session)
+                         ) -> dict[str, Any]:
+        """Learning Center scoped to THIS project (domain-matched curricula)."""
+        from ..ledger.db import default_session_factory
+        from ..ledger.service import ResearchLedger
+        from ..understanding.curriculum.research_curriculum import requirements_for
+        p = ResearchLedger(default_session_factory()).get_project(project_id)
+        if p is None:
+            raise HTTPException(404, "project not found")
+        domain_map = {
+            "astronomy": ["transit", "sunspots"],
+            "physics": ["sindy", "reliability"],
+        }
+        kinds = domain_map.get(p.domain, ["reliability"])
+        concepts: list[dict[str, Any]] = []
+        for kind in kinds:
+            for req in requirements_for(kind, project_id):
+                concepts.append({
+                    "curriculum": kind, "concept": req.concept,
+                    "reason": req.reason_required,
+                    "criticality": str(getattr(req.criticality, "value", req.criticality)),
+                    "blocking": bool(req.blocking),
+                })
+        return {"project_id": project_id, "domain": p.domain, "curricula": kinds,
+                "n_concepts": len(concepts), "concepts": concepts,
+                "note": ("Estos conceptos son el contexto de aprendizaje de ESTE proyecto; "
+                         "los marcados como bloqueantes deben comprenderse antes de aprobar "
+                         "un dossier.")}
+
     @r.post("/api/projects/{project_id}/copilot")
     def project_copilot(project_id: str, body: CopilotBody,
                         sess: Session = Depends(_require_session),

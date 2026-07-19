@@ -71,11 +71,32 @@ class ResearchCopilot:
                  f"{'VACÍO — aún sin trabajo.' if ctx.get('events',0)<=1 else ''}")
         return f"{SYSTEM}\n\n[CONTEXTO DEL PROYECTO]\n{state}\n\n[USUARIO]\n{message}\n\n[COPILOTO]"
 
+    # --- persistent chat thread (the project IS the conversation) ---------
+    def get_chat(self, project_id: str) -> list[dict[str, Any]]:
+        msgs = self.store.list_objects(project_id, kind="copilot_message")
+        msgs.sort(key=lambda m: str(m.get("at", "")))
+        return msgs
+
+    def _save_msg(self, project_id: str, role: str, text: str) -> None:
+        from ..core.clock import now_iso
+        from ..core.ids import new_id
+        mid = new_id("msg")
+        self.store.put(project_id, "copilot_message", mid,
+                       {"id": mid, "role": role, "text": text, "at": now_iso()},
+                       status="", actor="human" if role == "user" else "copilot",
+                       summary=f"chat: {role} message")
+
     def chat(self, project_id: str, message: str, *, timeout_sec: int = 180) -> dict[str, Any]:
         ctx = self.project_context(project_id)
         if not ctx:
             return {"ok": False, "error": "project not found"}
+        # thread continuity: include the last few messages in the prompt
+        history = self.get_chat(project_id)[-6:]
+        hist_txt = "\n".join(f"[{m.get('role','?').upper()}] {m.get('text','')[:600]}"
+                             for m in history)
         prompt = self._prompt(ctx, message)
+        if hist_txt:
+            prompt = prompt.replace("[USUARIO]", f"[HISTORIAL RECIENTE]\n{hist_txt}\n\n[USUARIO]")
         from ..llm.providers import CodexCliProvider
         prov = CodexCliProvider(timeout_sec=timeout_sec)
         if not prov.available():
@@ -88,6 +109,9 @@ class ResearchCopilot:
             reply = resp.text
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": f"copilot error: {exc}", "context": ctx}
+        # persist the thread (user turn + assistant turn)
+        self._save_msg(project_id, "user", message)
+        self._save_msg(project_id, "assistant", reply)
         return {"ok": True, "provider": "codex", "context": ctx, "reply": reply,
                 "usage": getattr(prov, "last_usage", {}),
                 "elapsed_sec": round(time.time() - t0, 1),
