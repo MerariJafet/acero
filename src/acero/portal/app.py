@@ -507,4 +507,7 @@ def mount_portal(app: FastAPI) -> None:
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
             response.headers["Referrer-Policy"] = "no-referrer"
+            # local-first portal: never let the browser serve stale JS/CSS/HTML
+            if request.url.path.startswith("/portal/static") or request.url.path == "/portal/":
+                response.headers["Cache-Control"] = "no-store, must-revalidate"
         return response
