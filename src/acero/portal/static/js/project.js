@@ -155,8 +155,31 @@ const TABS = {
           <input id="rc-q" value="${esc((p.title || "").slice(0, 80))}"></div>
         <button class="act" id="rc-go">⚙️ Lanzar ciclo de investigación</button>
         <button class="act" id="rd-go">🔭 Verificar con datos reales (NASA)</button>
+        <button class="act" id="deep-go">🌌 Investigación A FONDO (datos + papers + síntesis)</button>
         <div id="rc-out" aria-live="polite"></div>
       </div>`;
+    el.querySelector("#deep-go").addEventListener("click", async () => {
+      const ro = el.querySelector("#rc-out");
+      ro.innerHTML = "<p class='loading'>Investigando a fondo: datos reales + literatura (Crossref) + síntesis (Codex)… puede tardar 1–3 min.</p>";
+      const btn = el.querySelector("#deep-go");
+      btn.disabled = true;
+      const { ok, body: b } = await post(`/portal/api/projects/${encodeURIComponent(pid)}/deep-investigation`, {});
+      btn.disabled = false;
+      if (!ok || !b.ok) { ro.innerHTML = `<p class="err">error: ${esc((b && (b.detail || b.error)) || "deep")}</p>`; return; }
+      const angles = (b.findings || []).map((f) => {
+        const papers = (f.papers || []).map((p) =>
+          `<li><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc((p.title || p.doi).slice(0, 80))}</a>` +
+          `${p.integrity === "retracted" ? " " + pill("RETRACTADO", "bad") : ""} <span class="tag">${esc(p.doi)}</span></li>`).join("");
+        const dr = f.data_result ? `<div class="tag">DATOS: ${esc((f.data_result.claim || "").slice(0, 200))}</div>` : "";
+        return `<div class="card"><b>${esc(f.question)}</b>${dr}` +
+          `<div class="tag">${esc(f.n_papers)} papers reales:</div><ul>${papers}</ul></div>`;
+      }).join("");
+      const syn = (b.synthesis || {}).text || "";
+      ro.innerHTML = `<div class="card"><h4>Síntesis honesta (Codex — ayuda, NO evidencia)</h4>` +
+        `<div style="white-space:pre-wrap">${esc(syn)}</div></div>` + angles +
+        `<p class="tag">${esc(b.honesty || "")} · Dossier: ${esc(b.dossier_id || "")}</p>` +
+        `<p class="muted">Recarga 📍 Estado para ver el avance actualizado.</p>`;
+    });
     el.querySelector("#rc-go").addEventListener("click", async () => {
       const q = el.querySelector("#rc-q").value.trim();
       if (!q) return;

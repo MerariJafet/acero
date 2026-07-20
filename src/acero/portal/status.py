@@ -29,6 +29,7 @@ def build_status(project_id: str, session_factory: Any | None = None) -> dict[st
     exps = store.list_objects(project_id, kind="experiment")
     real_exps = [e for e in exps if e.get("synthetic") is False]
     dossiers = store.list_objects(project_id, kind="dossier")
+    literature = store.list_objects(project_id, kind="literature")
     negs = store.list_objects(project_id, kind="negative")
     wm = WorldModel(sf, ledger, project_id)
     nodes = wm.page_nodes(offset=0, limit=10)
@@ -44,6 +45,9 @@ def build_status(project_id: str, session_factory: Any | None = None) -> dict[st
                    or "pendiente"},
         {"stage": "Experimentos ejecutados", "done": bool(exps),
          "detail": f"{len(exps)} en total · {len(real_exps)} con datos reales"},
+        {"stage": "Literatura científica indexada", "done": bool(literature),
+         "detail": f"{len(literature)} papers reales (con DOI + chequeo de retracción)"
+                   if literature else "ninguna aún"},
         {"stage": "Conocimiento registrado (World Model)", "done": nodes["total"] > 0,
          "detail": f"{nodes['total']} nodos"},
         {"stage": "Dossier para revisión humana", "done": bool(dossiers),
@@ -78,8 +82,16 @@ def build_status(project_id: str, session_factory: Any | None = None) -> dict[st
         done_items.append({"kind": "conocimiento", "title": item.get("label", ""),
                            "status": f"confianza {item.get('confidence')}",
                            "note": "claim bajo revisión — no es un hecho confirmado"})
+    by_angle: dict[str, int] = {}
+    for lp in literature:
+        by_angle[lp.get("angle", "general")] = by_angle.get(lp.get("angle", "general"), 0) + 1
+    for angle, cnt in by_angle.items():
+        done_items.append({"kind": "literatura", "title": f"{cnt} papers reales sobre «{angle}»",
+                           "status": "INDEXADO", "note": "fuente real (Crossref) con DOI y procedencia"})
     for d in dossiers:
-        done_items.append({"kind": "dossier", "title": d.get("claim", d.get("id", "")),
+        title = d.get("claim") or ("investigación a fondo" if d.get("kind") == "deep_investigation"
+                                   else d.get("id", ""))
+        done_items.append({"kind": "dossier", "title": title,
                            "status": d.get("readiness", ""), "note": "requiere revisión humana"})
 
     # --- decisions taken (from provenance, human/gate actions) --------------

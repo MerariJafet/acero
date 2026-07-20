@@ -2014,9 +2014,13 @@ def studies_stellar_variability(
 @app.command("portal")
 def portal(host: str = "127.0.0.1", port: int = 8000) -> None:
     """Serve the unified research portal (local web app at /portal)."""
+    import os
+
     import uvicorn
 
     from ..portal.auth import UserStore
+    # honor the PORT env var (12-factor / preview harnesses) over the default
+    port = int(os.environ.get("PORT", port))
     if not UserStore().usernames():
         typer.secho("No portal users yet. Create one first: acero portal-user add <name>",
                     fg=typer.colors.YELLOW)

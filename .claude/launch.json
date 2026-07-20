@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "acero-portal",
+      "runtimeExecutable": "./.venv/bin/python",
+      "runtimeArgs": ["-m", "acero.cli.main", "portal", "--host", "127.0.0.1"],
+      "autoPort": true
+    }
+  ]
+}
