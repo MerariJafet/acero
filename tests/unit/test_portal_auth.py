@@ -64,6 +64,28 @@ def test_session_csrf_is_separate_from_sid():
     assert s.csrf and s.csrf != s.sid
 
 
+def test_sessions_persist_across_restart(tmp_path):
+    path = tmp_path / "sessions.json"
+    sm = SessionManager(persist_path=path)
+    s = sm.create("merari")
+    # a NEW manager (simulating a portal restart) loads the same session
+    sm2 = SessionManager(persist_path=path)
+    assert sm2.get(s.sid) is not None
+    assert sm2.get(s.sid).user == "merari"
+    # invalidation persists too
+    sm2.invalidate(s.sid)
+    sm3 = SessionManager(persist_path=path)
+    assert sm3.get(s.sid) is None
+
+
+def test_expired_sessions_not_loaded(tmp_path):
+    path = tmp_path / "s.json"
+    sm = SessionManager(ttl_s=0.0, persist_path=path)
+    s = sm.create("bob", now=0.0)
+    sm2 = SessionManager(persist_path=path)
+    assert sm2.get(s.sid, now=100.0) is None
+
+
 def test_rate_limiter_locks_after_failures():
     rl = RateLimiter(max_attempts=3, window_s=100, lockout_s=100)
     for _ in range(3):

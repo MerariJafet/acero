@@ -164,15 +164,48 @@ class Session:
 
 @dataclass
 class SessionManager:
-    """In-memory server-side sessions (local single-process portal).
+    """Server-side sessions for the local portal.
 
     The session id is a 256-bit random token; the client only ever holds it in an
     httponly cookie, so client JS cannot read it. CSRF uses a separate token that
     the client DOES read and echoes back in a header (double-submit).
+
+    If ``persist_path`` is set, sessions are stored on disk so a portal restart does
+    NOT log the user out (local-first convenience). Without it, sessions are purely
+    in-memory (used by tests).
     """
 
     ttl_s: float = 8 * 3600.0
+    persist_path: Path | None = None
     _sessions: dict[str, Session] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.persist_path:
+            self._load()
+
+    def _load(self) -> None:
+        try:
+            if self.persist_path and self.persist_path.exists():
+                data = json.loads(self.persist_path.read_text() or "{}")
+                now = time.time()
+                for sid, s in data.items():
+                    if float(s.get("expires_at", 0)) > now:
+                        self._sessions[sid] = Session(**s)
+        except Exception:  # noqa: BLE001 - a corrupt file just means "no sessions"
+            self._sessions = {}
+
+    def _save(self) -> None:
+        if not self.persist_path:
+            return
+        try:
+            self.persist_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {sid: vars(s) for sid, s in self._sessions.items()}
+            tmp = self.persist_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload))
+            tmp.replace(self.persist_path)
+            os.chmod(self.persist_path, 0o600)
+        except Exception:  # noqa: BLE001 - persistence is best-effort
+            pass
 
     def create(self, user: str, *, now: float | None = None) -> Session:
         now = time.time() if now is None else now
@@ -180,6 +213,7 @@ class SessionManager:
         sess = Session(sid=sid, user=user, csrf=_secrets.token_urlsafe(24),
                        created_at=now, expires_at=now + self.ttl_s)
         self._sessions[sid] = sess
+        self._save()
         return sess
 
     def get(self, sid: str | None, *, now: float | None = None) -> Session | None:
@@ -190,16 +224,20 @@ class SessionManager:
             return None
         if not sess.valid(now=now):
             self._sessions.pop(sid, None)
+            self._save()
             return None
         return sess
 
     def invalidate(self, sid: str | None) -> None:
-        if sid:
+        if sid and sid in self._sessions:
             self._sessions.pop(sid, None)
+            self._save()
 
     def cleanup(self, *, now: float | None = None) -> int:
         now = time.time() if now is None else now
         dead = [s for s, v in self._sessions.items() if not v.valid(now=now)]
         for s in dead:
             self._sessions.pop(s, None)
+        if dead:
+            self._save()
         return len(dead)

@@ -217,6 +217,8 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
   if (!ok) { view.innerHTML = "<p class='err'>error</p>"; return; }
   const f = ph.phases.find((x) => x.key === phaseKey);
   if (!f) { view.innerHTML = "<p class='err'>fase desconocida</p>"; return; }
+  const m = f.methodology || {};
+
   const items = (f.items || []).map((i) => {
     const link = i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a>`
                        : esc(i.title);
@@ -224,12 +226,40 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
       ${i.flag ? " " + pill(i.flag, "bad") : ""}
       <div class="tag">${esc(i.meta || "")}</div></div>`;
   }).join("");
+
+  // KPI mini-strip contextual a la fase
+  const k = ph.kpis || {};
+  const kpiByPhase = {
+    hipotesis: [["hipótesis", f.count], ["aprobadas", k.approved]],
+    literatura: [["papers reales", f.count], ["con retracción", 0]],
+    teorias: [["nodos", f.count]],
+    experimentos: [["experimentos", f.count], ["con datos reales", k.real_experiments]],
+    resultados: [["resultados", f.count], ["negativos", k.negatives]],
+    conclusiones: [["dossiers", f.count]],
+  }[phaseKey] || [["items", f.count]];
+  const kstrip = kpiByPhase.map(([lb, v]) =>
+    `<div class="kpi"><div class="kpi-big">${v ?? 0}</div><div><b>${esc(lb)}</b></div></div>`).join("");
+
   view.innerHTML =
     `<button class="act ghost" id="ph-back">← ${esc(ph.title)}</button>
-     <div class="proj-head"><h1>${esc(f.icon)} ${esc(f.title)}</h1>
-       <div>${pill(f.state === "done" ? "con trabajo" : "pendiente", f.state === "done" ? "ok" : "warn")}
-        <span class="tag">${f.count} items · ${esc(f.note)}</span></div></div>
-     ${items || "<p class='muted'>Sin items en esta fase todavía.</p>"}`;
+     <p class="eyebrow">Dashboard de fase</p>
+     <div class="pulse-head"><h1>${esc(f.icon)} ${esc(f.title)}</h1>
+       <span class="tag">${pill(f.state === "done" ? "con trabajo" : "pendiente", f.state === "done" ? "ok" : "warn")}
+         · ${f.count} items · ${esc(f.note)}</span></div>
+
+     <section class="panel method-panel">
+       <p class="eyebrow">ℹ️ Cómo entender esta fase</p>
+       <div class="method-grid">
+         <div><b>¿Qué es?</b><p>${esc(m.que_es || "")}</p></div>
+         <div><b>¿De dónde sale?</b><p>${esc(m.de_donde || "")}</p></div>
+         <div><b>¿Qué significa su calificación?</b><p>${esc(m.calificacion || "")}</p></div>
+       </div>
+     </section>
+
+     <div class="kpi-strip">${kstrip}</div>
+     <h3 style="margin:.4rem 0 .6rem">Detalle (${(f.items || []).length})</h3>
+     ${items || "<p class='muted'>Sin items en esta fase todavía.</p>"}
+     <p class="tag" style="margin-top:.6rem">${esc(ph.honesty)}</p>`;
   view.querySelector("#ph-back").addEventListener("click", () => cb.openProject(pid));
 }
 

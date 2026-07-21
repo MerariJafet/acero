@@ -218,6 +218,12 @@ body {
 .prio.high { background: #3a1420; color: #ff7b9c; border: 1px solid #712537; }
 .prio.medium { background: #33280c; color: #e3b341; border: 1px solid #6b5716; }
 
+/* phase methodology explainer */
+.method-panel { background: #10151d; }
+.method-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem; }
+.method-grid > div b { color: var(--accent); font-size: .82rem; }
+.method-grid > div p { margin: .3rem 0 0; font-size: .86rem; color: var(--fg); line-height: 1.5; }
+
 /* home dashboard */
 .stat-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .7rem; margin-bottom: 1rem; }
 .stat {

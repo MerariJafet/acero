@@ -26,6 +26,57 @@ _TITLES = {
 _ICONS = {"hipotesis": "🧪", "literatura": "📚", "teorias": "🧠",
           "experimentos": "⚗️", "resultados": "📊", "conclusiones": "📜"}
 
+# Explicación honesta por fase: qué es, de dónde sale, y qué significa su "calificación".
+_METHODOLOGY = {
+    "hipotesis": {
+        "que_es": "Marcos competidores que explican el fenómeno, INCLUIDA la nula (H0).",
+        "de_donde": "Generadas como plantilla del ciclo de investigación o propuestas por "
+                    "el copiloto (Codex CLI local). No son afirmaciones, son candidatos a probar.",
+        "calificacion": "El estado APPROVED significa que un humano la marcó con una razón "
+                        "explícita; PROPOSED = aún sin aprobar. Aprobar ≠ que sea verdadera.",
+    },
+    "literatura": {
+        "que_es": "Publicaciones científicas reales relacionadas con la pregunta.",
+        "de_donde": "Recuperadas EN VIVO de Crossref (agregador oficial de metadatos) por el "
+                    "Knowledge Mesh. Cada una trae DOI, autores y licencia reales.",
+        "calificacion": "Cada paper se verifica contra RETRACCIÓN con una consulta inversa a "
+                        "Crossref (¿algún trabajo lo retracta?). «RETRACTADO» = sí; se conserva "
+                        "y se marca, nunca se borra.",
+    },
+    "teorias": {
+        "que_es": "Nodos del World Model: creencias/claims bajo revisión (no hechos).",
+        "de_donde": "Se crean al registrar un resultado o una relación durante la investigación, "
+                    "con procedencia (quién y cuándo).",
+        "calificacion": "La CONFIANZA (0–1) es un valor de creencia INICIAL asignado al crear el "
+                        "nodo — NO es una probabilidad de verdad ni evidencia. Solo sube con "
+                        "evidencia independiente y replicación; aquí no se ha calibrado, por eso "
+                        "es baja. Un claim con confianza alta seguiría necesitando revisión humana.",
+    },
+    "experimentos": {
+        "que_es": "Análisis ejecutados sobre datos.",
+        "de_donde": "Los REALES usan datos públicos verificables (p.ej. catálogo NASA de "
+                    "exoplanetas, mediciones de H0); los SINTÉTICOS son demostración del flujo "
+                    "y no son observaciones.",
+        "calificacion": "Métricas como R² (bondad de ajuste) o σ (nivel de tensión) se calculan "
+                        "sobre los datos reales; un R² alto indica consistencia con un modelo "
+                        "conocido, NO un descubrimiento.",
+    },
+    "resultados": {
+        "que_es": "Salidas de los experimentos (claims con métricas) y resultados negativos.",
+        "de_donde": "Derivados directamente de los experimentos; los negativos se PRESERVAN "
+                    "(nunca se ocultan) porque son parte del método honesto.",
+        "calificacion": "«datos reales» vs «sintético» indica el origen; un negativo preservado "
+                        "es tan valioso como uno positivo.",
+    },
+    "conclusiones": {
+        "que_es": "Dossiers: síntesis para revisión humana.",
+        "de_donde": "Compilan hipótesis, literatura, experimentos y sus límites. La síntesis IA "
+                    "(Codex) es ayuda de razonamiento, NO evidencia.",
+        "calificacion": "Readiness EXPLORATORY = preliminar; el techo SIEMPRE es la revisión "
+                        "humana externa. Nunca se publica automáticamente.",
+    },
+}
+
 
 def build_phases(project_id: str, session_factory: Any | None = None) -> dict[str, Any] | None:
     from ..world_model.graph import WorldModel
@@ -144,10 +195,22 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
         by_ready[d.get("readiness") or "?"] = by_ready.get(d.get("readiness") or "?", 0) + 1
     phases["conclusiones"]["bars"] = _bars([(k, v, f"{v}") for k, v in by_ready.items()])
 
+    # dedup the theory items for display (repeated runs can create identical claims)
+    seen_labels: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for it in phases["teorias"]["items"]:
+        if it["title"] not in seen_labels:
+            seen_labels.add(it["title"])
+            deduped.append(it)
+    if len(deduped) < len(phases["teorias"]["items"]):
+        phases["teorias"]["note"] += f" · {len(deduped)} únicos de {int(nodes['total'])}"
+    phases["teorias"]["items"] = deduped
+
     for key, ph in phases.items():
         ph["key"] = key
         ph["title"] = _TITLES[key]
         ph["icon"] = _ICONS[key]
+        ph["methodology"] = _METHODOLOGY.get(key, {})
 
     # KPIs for the top strip
     kpis = {

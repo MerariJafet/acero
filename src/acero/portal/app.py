@@ -24,8 +24,14 @@ from .auth import RateLimiter, Session, SessionManager, UserStore
 _STATIC = Path(__file__).parent / "static"
 _COOKIE = "acero_session"
 
-# process-level auth singletons (local single-process portal)
-_SESSIONS = SessionManager()
+def _session_store_path():
+    from ..core.config import repo_root
+    return repo_root() / "acero_data" / "portal_sessions.json"
+
+
+# process-level auth singletons (local single-process portal). Sessions persist to
+# disk so a portal restart does NOT log the user out.
+_SESSIONS = SessionManager(persist_path=_session_store_path())
 _LIMITER = RateLimiter()
 
 
