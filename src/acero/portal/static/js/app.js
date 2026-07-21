@@ -2,63 +2,202 @@
 import { get, post, setCsrf } from "./api.js";
 import { esc } from "./components.js";
 import { VIEWS } from "./views.js";
+import {
+  eduPlanFlow, renderCourse, renderCourses, renderHome,
+  renderPhaseDetail, renderProjectDash,
+} from "./dashboard.js";
 
 const $ = (s) => document.querySelector(s);
-let current = "Overview";
 
-async function renderView(name) {
-  if (!VIEWS[name]) return;
-  current = name;
-  document.querySelectorAll("#nav button").forEach((b) =>
-    b.setAttribute("aria-current", b.dataset.view === name ? "page" : "false"));
-  document.querySelectorAll("#nav button").forEach((b) =>
-    b.classList.toggle("active", b.dataset.view === name));
-  const view = $("#view");
-  view.setAttribute("aria-busy", "true");
-  view.innerHTML = "<p class='loading'>Loading…</p>";
-  try {
-    const v = VIEWS[name];
-    view.innerHTML = await v.render();
-    if (v.mount) v.mount(view);
-  } catch (e) {
-    view.innerHTML = `<p class="err">failed to load ${esc(name)}: ${esc(e.message)}</p>`;
+// ---- app state -------------------------------------------------------------
+const state = {
+  project: null,          // current project id (null = home/global)
+  context: { scope: "global", label: "Chat general — todas las investigaciones" },
+};
+
+const SUGGESTIONS = {
+  global: ["¿Qué investigaciones tenemos y cómo van?",
+           "Resume los hallazgos más importantes hasta hoy",
+           "¿Qué investigación necesita mi decisión?"],
+  project: ["¿En qué fase vamos y qué sigue?",
+            "Propón el siguiente experimento",
+            "¿Qué contraevidencia deberíamos buscar?"],
+  course: ["Explícame esta lección con una analogía",
+           "¿Por qué importa este tema para la investigación?",
+           "Hazme una pregunta para comprobar que entendí"],
+};
+
+// ---- callbacks passed to dashboards ---------------------------------------
+const cb = {
+  openHome: () => { state.project = null; syncSelect(); setContext({ scope: "global" }); renderHome($("#view"), cb); },
+  openProject: (pid) => {
+    state.project = pid; syncSelect();
+    setContext({ scope: "project", project_id: pid });
+    renderProjectDash($("#view"), pid, cb);
+  },
+  openPhase: (pid, key) => {
+    state.project = pid;
+    setContext({ scope: "phase", project_id: pid, phase: key,
+                 label: `Fase: ${key} — pregunta scoped en la tarjeta` });
+    renderPhaseDetail($("#view"), pid, key, cb);
+  },
+  openCourses: () => { setContext({ scope: "global", label: "Cursos — chat general" }); renderCourses($("#view"), cb); },
+  openCourse: (id) => renderCourse($("#view"), id, cb),
+  setContext,
+  refreshProjects: loadProjects,
+};
+
+// ---- chat context ----------------------------------------------------------
+function setContext(ctx) {
+  state.context = { ...ctx };
+  const label = ctx.label
+    || (ctx.scope === "global" ? "Chat general — todas las investigaciones"
+        : ctx.scope === "project" ? "Chat de la investigación activa"
+        : ctx.scope === "course" ? "Chat del curso"
+        : "Chat");
+  $("#chat-context").textContent = "📍 " + label;
+  const sugg = SUGGESTIONS[ctx.scope === "phase" ? "project" : ctx.scope] || SUGGESTIONS.global;
+  $("#suggestions").innerHTML = sugg.map((s) =>
+    `<li><button type="button" class="suggestion-btn">${esc(s)}</button></li>`).join("");
+  document.querySelectorAll(".suggestion-btn").forEach((b) =>
+    b.addEventListener("click", () => { $("#question").value = b.textContent; $("#question").focus(); }));
+  $("#edu-plan-btn").hidden = !(ctx.scope === "project" || ctx.scope === "phase");
+  loadThread();
+}
+
+async function loadThread() {
+  const box = $("#messages");
+  box.innerHTML = "";
+  if (state.context.scope === "global") {
+    box.innerHTML = "<div class='msg assistant'>Hola — pregunta lo que quieras sobre TODAS tus investigaciones, o entra a una para trabajarla a fondo.</div>";
+    return;
   }
-  view.setAttribute("aria-busy", "false");
+  const pid = state.context.project_id || state.project;
+  if (!pid) return;
+  const { ok, body } = await get(`/portal/api/projects/${encodeURIComponent(pid)}/chat`);
+  if (ok && Array.isArray(body) && body.length) {
+    box.innerHTML = body.map((m) =>
+      `<div class="msg ${m.role === "user" ? "user" : "assistant"}">${esc(m.text)}</div>`).join("");
+  } else {
+    box.innerHTML = "<div class='msg assistant'>Este es el hilo de la investigación. Todo lo que hablemos aquí queda guardado con el proyecto.</div>";
+  }
+  box.scrollTop = box.scrollHeight;
 }
 
-async function buildNav() {
-  const { body } = await get("/portal/api/overview");
-  $("#version").textContent = "v" + (body.version || "?");
-  $("#whoami").textContent = body.user ? `signed in as ${body.user}` : "";
-  // Project-centric nav: Proyectos is THE primary entry; everything else is
-  // secondary system tooling (still available, visually de-emphasized).
-  const sections = (body.sections || Object.keys(VIEWS)).filter((s) => s !== "Projects");
-  $("#nav").innerHTML =
-    `<button class="primary-nav" data-view="Projects">📁 Proyectos</button>` +
-    `<div class="nav-label">Sistema</div>` +
-    sections.map((s) =>
-      `<button class="sys" data-view="${esc(s)}" ${VIEWS[s] ? "" : "disabled"}>${esc(s)}</button>`).join("");
+async function sendChat(text) {
+  const box = $("#messages");
+  box.insertAdjacentHTML("beforeend", `<div class="msg user">${esc(text)}</div>` +
+    `<div class="msg assistant loading" id="chat-wait">Pensando… (Codex puede tardar 1–3 min)</div>`);
+  box.scrollTop = box.scrollHeight;
+  const loc = { scope: state.context.scope, phase: state.context.phase,
+                course_id: state.context.course_id };
+  let res;
+  if (state.context.scope === "global") {
+    res = await post("/portal/api/copilot/global", { message: text, location: loc });
+  } else {
+    const pid = state.context.project_id || state.project;
+    res = await post(`/portal/api/projects/${encodeURIComponent(pid)}/copilot`,
+                     { message: text, location: loc });
+  }
+  const wait = $("#chat-wait");
+  if (!wait) return;
+  wait.removeAttribute("id");
+  if (res.ok && res.body && res.body.reply) {
+    wait.classList.remove("loading");
+    wait.textContent = res.body.reply;
+  } else {
+    wait.classList.add("err");
+    wait.textContent = "Error: " + ((res.body && (res.body.detail || res.body.error)) || "copiloto");
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+// ---- topbar ----------------------------------------------------------------
+async function loadProjects() {
+  const { body } = await get("/portal/api/projects");
+  const list = Array.isArray(body) ? body : [];
+  const sel = $("#proj-select");
+  sel.innerHTML = `<option value="">— Vista general —</option>` +
+    list.map((p) => `<option value="${esc(p.id)}">${esc(p.title.slice(0, 48))}</option>`).join("");
+  sel.value = state.project || "";
+  return list;
+}
+
+function syncSelect() { const sel = $("#proj-select"); if (sel) sel.value = state.project || ""; }
+
+function newProjectFlow() {
+  const panel = $("#float-panel");
+  $("#float-title").textContent = "＋ Nueva investigación";
+  $("#float-body").innerHTML =
+    `<div class="field"><label for="np-title">Título de la investigación</label>
+       <input id="np-title" placeholder="p.ej.: Origen de los rayos cósmicos ultraenergéticos"></div>
+     <div class="field"><label for="np-domain">Dominio</label>
+       <select id="np-domain">
+         <option value="astronomy">astronomy</option><option value="physics">physics</option>
+         <option value="chemistry">chemistry</option><option value="genetics">genetics</option>
+         <option value="general">general</option>
+       </select></div>
+     <button class="act" id="np-create">Crear investigación</button>
+     <span id="np-out" class="tag" aria-live="polite"></span>`;
+  panel.hidden = false;
+  $("#np-create").addEventListener("click", async () => {
+    const title = $("#np-title").value.trim();
+    if (!title) { $("#np-out").textContent = "Escribe un título."; return; }
+    $("#np-out").textContent = "Creando…";
+    const { ok, body } = await post("/portal/api/workspace/project",
+      { title, domain: $("#np-domain").value });
+    if (!ok) { $("#np-out").textContent = "Error: " + esc(body.detail || ""); return; }
+    panel.hidden = true;
+    await loadProjects();
+    cb.openProject(body.id);
+  });
+}
+
+function buildSysMenu(sections) {
+  $("#nav").innerHTML = sections.map((s) =>
+    `<button data-view="${esc(s)}" ${VIEWS[s] ? "" : "disabled"}>${esc(s)}</button>`).join("");
   document.querySelectorAll("#nav button").forEach((b) =>
-    b.addEventListener("click", () => VIEWS[b.dataset.view] && renderView(b.dataset.view)));
+    b.addEventListener("click", async () => {
+      $("#sys-menu").removeAttribute("open");
+      const name = b.dataset.view;
+      if (!VIEWS[name]) return;
+      document.querySelectorAll("#nav button").forEach((x) =>
+        x.classList.toggle("active", x === b));
+      const view = $("#view");
+      view.innerHTML = "<p class='loading'>Cargando…</p>";
+      try {
+        view.innerHTML = await VIEWS[name].render();
+        if (VIEWS[name].mount) VIEWS[name].mount(view);
+      } catch (e) {
+        view.innerHTML = `<p class="err">error cargando ${esc(name)}: ${esc(e.message)}</p>`;
+      }
+    }));
 }
 
+// ---- auth + boot -----------------------------------------------------------
 function showApp() { $("#login").hidden = true; $("#app").hidden = false; }
 function showLogin() { $("#app").hidden = true; $("#login").hidden = false; }
 
 async function enterApp() {
   showApp();
-  await buildNav();
-  await renderView("Projects");   // the project IS the center of the app
+  const { body } = await get("/portal/api/overview");
+  $("#version").textContent = "v" + (body.version || "?");
+  $("#whoami").textContent = body.user ? `sesión: ${body.user}` : "";
+  buildSysMenu(body.sections || Object.keys(VIEWS));
+  const projs = await loadProjects();
+  // arranque: si hay una sola investigación real, entra directo; si no, home
+  if (projs.length === 1) cb.openProject(projs[0].id);
+  else cb.openHome();
 }
 
 async function doLogin(ev) {
   ev.preventDefault();
-  const username = $("#u").value, password = $("#p").value;
-  const { ok, status, body } = await post("/portal/api/login", { username, password });
+  const { ok, status, body } = await post("/portal/api/login",
+    { username: $("#u").value, password: $("#p").value });
   const err = $("#login-error");
   if (!ok) {
-    err.textContent = status === 429 ? "Too many attempts. Try again later."
-      : "Invalid credentials.";
+    err.textContent = status === 429 ? "Demasiados intentos. Espera un momento."
+      : "Credenciales incorrectas.";
     return;
   }
   err.textContent = "";
@@ -75,9 +214,30 @@ async function doLogout() {
 async function boot() {
   $("#login-form").addEventListener("submit", doLogin);
   $("#logout").addEventListener("click", doLogout);
-  // in-app navigation events (e.g. "← Proyectos" from a project workspace)
-  window.addEventListener("acero:navigate", (e) => renderView(e.detail));
-  // resume an existing session if the cookie is still valid
+  $("#home-btn").addEventListener("click", () => cb.openHome());
+  $("#new-project").addEventListener("click", newProjectFlow);
+  $("#courses-btn").addEventListener("click", () => cb.openCourses());
+  $("#float-close").addEventListener("click", () => { $("#float-panel").hidden = true; });
+  $("#edu-plan-btn").addEventListener("click", () => {
+    const pid = state.context.project_id || state.project;
+    if (pid) eduPlanFlow(pid, cb);
+  });
+  $("#proj-select").addEventListener("change", (e) => {
+    const v = e.target.value;
+    if (v) cb.openProject(v); else cb.openHome();
+  });
+  $("#ask-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const q = $("#question").value.trim();
+    if (!q) return;
+    $("#question").value = "";
+    sendChat(q);
+  });
+  window.addEventListener("acero:navigate", (e) => {
+    // legacy hook used by old views ("← Proyectos")
+    if (e.detail === "Projects") cb.openHome();
+  });
+  // resume session if the cookie is still valid
   const { ok, body } = await get("/portal/api/session");
   if (ok && body.csrf) { setCsrf(body.csrf); await enterApp(); }
   else showLogin();

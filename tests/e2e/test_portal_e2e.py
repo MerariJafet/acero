@@ -103,7 +103,14 @@ def _login(pg):
     pg.fill("#u", "tester")
     pg.fill("#p", "testpass123")
     pg.click("#login-form button[type=submit]")
-    pg.wait_for_selector("#nav button", state="visible", timeout=10000)
+    # the CIO-style shell always shows the chat panel once inside
+    pg.wait_for_selector("#ask-form", state="visible", timeout=10000)
+
+
+def _goto_sys(pg, name):
+    """Open the Sistema menu (topbar) and click one of the legacy system views."""
+    pg.click("#sys-menu-btn")
+    pg.click(f'#nav button[data-view="{name}"]')
 
 
 # --- flow 1: login (and negative) -----------------------------------------
@@ -111,7 +118,7 @@ def _login(pg):
 def test_flow_login_success(page):
     _login(page)
     assert page.is_hidden("#login")
-    assert "signed in as tester" in page.inner_text("#whoami")
+    assert "tester" in page.inner_text("#whoami")
 
 
 def test_negative_invalid_login_shows_error(page):
@@ -121,7 +128,7 @@ def test_negative_invalid_login_shows_error(page):
     page.fill("#p", "wrongpass")
     page.click("#login-form button[type=submit]")
     page.wait_for_selector("#login-error:not(:empty)")
-    assert "Invalid credentials" in page.inner_text("#login-error")
+    assert "incorrectas" in page.inner_text("#login-error")
 
 
 def test_negative_api_without_login_is_401(page):
@@ -133,7 +140,7 @@ def test_negative_api_without_login_is_401(page):
 
 def test_flow_nav_and_workspace_program_project_question(page):
     _login(page)
-    page.click("#nav >> text=Research Workspace")
+    _goto_sys(page, "Research Workspace")
     page.wait_for_selector("#ws-mk-program")
     page.fill("#ws-mission", "transit robustness")
     page.click("#ws-mk-program")
@@ -151,7 +158,7 @@ def test_flow_nav_and_workspace_program_project_question(page):
 
 def test_flow_hypotheses_approve_experiment_and_gate(page):
     _login(page)
-    page.click("#nav >> text=Research Workspace")
+    _goto_sys(page, "Research Workspace")
     page.wait_for_selector("#ws-mk-program")
     page.fill("#ws-mission", "m")
     page.click("#ws-mk-program")
@@ -175,7 +182,7 @@ def test_flow_hypotheses_approve_experiment_and_gate(page):
 
 def test_flow_world_model_and_dossier(page):
     _login(page)
-    page.click("#nav >> text=Research Workspace")
+    _goto_sys(page, "Research Workspace")
     page.wait_for_selector("#ws-mk-project")
     page.fill("#ws-title", "wm-proj")
     page.click("#ws-mk-project")
@@ -192,7 +199,7 @@ def test_flow_world_model_and_dossier(page):
 
 def test_flow_result_cards_show_prohibited_claims(page):
     _login(page)
-    page.click('#nav button[data-view="Publication Candidates"]')
+    _goto_sys(page, "Publication Candidates")
     page.wait_for_function(
         "() => document.querySelector('#view') && "
         "document.querySelector('#view').innerText.includes('PROHIBITED claims')",
@@ -203,7 +210,7 @@ def test_flow_result_cards_show_prohibited_claims(page):
 def test_flow_world_explorer_paginates(page):
     _login(page)
     # create a project with one node via workspace, then explore it
-    page.click("#nav >> text=Research Workspace")
+    _goto_sys(page, "Research Workspace")
     page.wait_for_selector("#ws-mk-project")
     page.fill("#ws-title", "explore-proj")
     page.click("#ws-mk-project")
@@ -211,7 +218,7 @@ def test_flow_world_explorer_paginates(page):
     pid = page.inner_text("#ws-project-out").replace("project ", "").strip()
     page.click("#ws-wm")
     page.wait_for_selector("#ws-final-out .pill")
-    page.click("#nav >> text=World Model")
+    _goto_sys(page, "World Model")
     page.wait_for_selector("#wm-pid")
     page.fill("#wm-pid", pid)
     page.click("#wm-go")

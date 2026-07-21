@@ -91,6 +91,20 @@ class DossierBody(BaseModel):
 
 class CopilotBody(BaseModel):
     message: str
+    location: dict[str, Any] | None = None   # {scope: global|project|phase|course, ...}
+
+
+class EduPlanBody(BaseModel):
+    use_ai: bool = True
+
+
+class CourseBody(BaseModel):
+    topic_ids: list[str] | None = None
+    use_ai: bool = True
+
+
+class ProgressBody(BaseModel):
+    lesson_key: str
 
 
 class RunCycleBody(BaseModel):
@@ -233,6 +247,83 @@ def build_portal_router() -> APIRouter:
             "history": hist,
         }
 
+    @r.get("/api/projects/{project_id}/phases")
+    def project_phases(project_id: str, sess: Session = Depends(_require_session)
+                       ) -> dict[str, Any]:
+        """The 6-phase research flow view of a project (from real artifacts)."""
+        from .phases import build_phases
+        ph = build_phases(project_id)
+        if ph is None:
+            raise HTTPException(404, "project not found")
+        return ph
+
+    @r.post("/api/copilot/global")
+    def global_copilot(body: CopilotBody, sess: Session = Depends(_require_session),
+                       x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """General chat across ALL investigations (not tied to one project)."""
+        _require_csrf(sess, x_csrf_token)
+        if not body.message.strip():
+            raise HTTPException(422, "message is required")
+        from .copilot import ResearchCopilot
+        return ResearchCopilot().chat("", body.message,
+                                      location={"scope": "global"})
+
+    @r.post("/api/projects/{project_id}/edu-plan")
+    def project_edu_plan(project_id: str, body: EduPlanBody,
+                         sess: Session = Depends(_require_session),
+                         x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Generate an educational study plan (toggleable topics) for the project."""
+        _require_csrf(sess, x_csrf_token)
+        from .education import EducationService
+        return EducationService().build_edu_plan(project_id, use_ai=body.use_ai)
+
+    @r.get("/api/projects/{project_id}/edu-plan")
+    def project_edu_plan_get(project_id: str, sess: Session = Depends(_require_session)
+                             ) -> dict[str, Any]:
+        from .education import EducationService
+        plan = EducationService().latest_plan(project_id)
+        return {"found": plan is not None, "plan": plan}
+
+    @r.post("/api/projects/{project_id}/course")
+    def project_course(project_id: str, body: CourseBody,
+                       sess: Session = Depends(_require_session),
+                       x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Generate an LMS course from the selected plan topics."""
+        _require_csrf(sess, x_csrf_token)
+        from .education import EducationService
+        return EducationService().generate_course(project_id, topic_ids=body.topic_ids,
+                                                  use_ai=body.use_ai)
+
+    @r.get("/api/courses")
+    def courses_list(sess: Session = Depends(_require_session)) -> list[dict[str, Any]]:
+        from .education import EducationService
+        return EducationService().list_courses()
+
+    @r.get("/api/courses/{course_id}")
+    def course_get(course_id: str, sess: Session = Depends(_require_session)
+                   ) -> dict[str, Any]:
+        from .education import EducationService
+        c = EducationService().get_course(course_id)
+        if not c:
+            raise HTTPException(404, "course not found")
+        return c
+
+    @r.post("/api/courses/{course_id}/progress")
+    def course_progress(course_id: str, body: ProgressBody,
+                        sess: Session = Depends(_require_session),
+                        x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .education import EducationService
+        return EducationService().mark_lesson(course_id, body.lesson_key)
+
+    @r.post("/api/courses/{course_id}/sync")
+    def course_sync(course_id: str, sess: Session = Depends(_require_session),
+                    x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Add topics for investigation angles not yet covered by the course."""
+        _require_csrf(sess, x_csrf_token)
+        from .education import EducationService
+        return EducationService().sync_course(course_id)
+
     @r.get("/api/projects/{project_id}/status")
     def project_status(project_id: str, sess: Session = Depends(_require_session)
                        ) -> dict[str, Any]:
@@ -289,7 +380,7 @@ def build_portal_router() -> APIRouter:
         if not body.message.strip():
             raise HTTPException(422, "message is required")
         from .copilot import ResearchCopilot
-        return ResearchCopilot().chat(project_id, body.message)
+        return ResearchCopilot().chat(project_id, body.message, location=body.location)
 
     @r.post("/api/projects/{project_id}/run-cycle")
     def project_run_cycle(project_id: str, body: RunCycleBody,

@@ -86,15 +86,55 @@ class ResearchCopilot:
                        status="", actor="human" if role == "user" else "copilot",
                        summary=f"chat: {role} message")
 
-    def chat(self, project_id: str, message: str, *, timeout_sec: int = 180) -> dict[str, Any]:
+    def _location_context(self, project_id: str, location: dict[str, Any] | None) -> str:
+        """Extra grounding for WHERE the user is (global/project/phase/course)."""
+        if not location:
+            return ""
+        scope = location.get("scope", "project")
+        if scope == "global":
+            rows = []
+            for p in self.ledger.list_projects():
+                c = self.project_context(p.id)
+                rows.append(f"- {c.get('title')} [{c.get('domain')}]: "
+                            f"{c.get('hypotheses',0)} hip, {c.get('experiments',0)} exp, "
+                            f"{c.get('world_nodes',0)} nodos")
+            return ("[UBICACIÓN] Chat GENERAL sobre TODAS las investigaciones:\n"
+                    + "\n".join(rows))
+        if scope == "phase":
+            from .phases import build_phases
+            ph = build_phases(project_id, self._sf) or {}
+            key = location.get("phase", "")
+            match = next((x for x in ph.get("phases", []) if x["key"] == key), None)
+            if match:
+                items = "\n".join(f"  · {i['title'][:90]} ({i.get('meta','')})"
+                                  for i in match["items"][:10])
+                return (f"[UBICACIÓN] El usuario está en la fase «{match['title']}» "
+                        f"({match['count']} items, {match['note']}). SOLO responde sobre "
+                        f"esta fase.\nItems reales:\n{items}")
+        if scope == "course":
+            cid = location.get("course_id", "")
+            course = self.store.get(cid) or {}
+            lessons = [ls.get("title", "") for m in course.get("modules", [])
+                       for ls in m.get("lessons", [])]
+            return (f"[UBICACIÓN] El usuario está DENTRO del curso «{course.get('title','')}». "
+                    f"Lecciones: {', '.join(lessons[:12])}. Responde didácticamente sobre "
+                    "el contenido del curso y su investigación de origen.")
+        return ""
+
+    def chat(self, project_id: str, message: str, *, timeout_sec: int = 180,
+             location: dict[str, Any] | None = None) -> dict[str, Any]:
         ctx = self.project_context(project_id)
-        if not ctx:
+        if not ctx and (location or {}).get("scope") != "global":
             return {"ok": False, "error": "project not found"}
         # thread continuity: include the last few messages in the prompt
-        history = self.get_chat(project_id)[-6:]
+        history = self.get_chat(project_id)[-6:] if ctx else []
         hist_txt = "\n".join(f"[{m.get('role','?').upper()}] {m.get('text','')[:600]}"
                              for m in history)
-        prompt = self._prompt(ctx, message)
+        prompt = self._prompt(ctx or {"title": "TODAS las investigaciones", "domain": "-"},
+                              message)
+        loc = self._location_context(project_id, location)
+        if loc:
+            prompt = prompt.replace("[USUARIO]", f"{loc}\n\n[USUARIO]")
         if hist_txt:
             prompt = prompt.replace("[USUARIO]", f"[HISTORIAL RECIENTE]\n{hist_txt}\n\n[USUARIO]")
         from ..llm.providers import CodexCliProvider
@@ -109,9 +149,10 @@ class ResearchCopilot:
             reply = resp.text
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": f"copilot error: {exc}", "context": ctx}
-        # persist the thread (user turn + assistant turn)
-        self._save_msg(project_id, "user", message)
-        self._save_msg(project_id, "assistant", reply)
+        # persist the thread (user turn + assistant turn); global chat is ephemeral
+        if ctx:
+            self._save_msg(project_id, "user", message)
+            self._save_msg(project_id, "assistant", reply)
         return {"ok": True, "provider": "codex", "context": ctx, "reply": reply,
                 "usage": getattr(prov, "last_usage", {}),
                 "elapsed_sec": round(time.time() - t0, 1),

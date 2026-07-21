@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,38 +7,78 @@
   <link rel="stylesheet" href="/portal/static/style.css">
 </head>
 <body>
-  <a class="skip-link" href="#view">Skip to main content</a>
+  <a class="skip-link" href="#view">Saltar al contenido principal</a>
 
   <!-- Login gate -->
   <main id="login" class="login" aria-labelledby="login-h" hidden>
     <form id="login-form" class="login-card" aria-describedby="login-help">
       <h1 id="login-h">ACERO Research Portal</h1>
-      <p id="login-help" class="muted">Local scientific control panel. Sign in to continue.</p>
+      <p id="login-help" class="muted">Panel científico local. Inicia sesión para continuar.</p>
       <div class="field">
-        <label for="u">Username</label>
+        <label for="u">Usuario</label>
         <input id="u" name="username" autocomplete="username" required>
       </div>
       <div class="field">
-        <label for="p">Password</label>
+        <label for="p">Contraseña</label>
         <input id="p" name="password" type="password" autocomplete="current-password" required>
       </div>
-      <button type="submit" class="act">Sign in</button>
+      <button type="submit" class="act">Entrar</button>
       <p id="login-error" class="err" role="alert" aria-live="assertive"></p>
     </form>
   </main>
 
-  <!-- Application shell -->
-  <div id="app" hidden>
+  <!-- Application shell (CIO-style: chat left + dashboard center) -->
+  <div id="app" class="app" hidden>
     <header class="topbar" role="banner">
-      <strong>ACERO</strong>
+      <button id="home-btn" class="brand" title="Inicio">ACERO</button>
       <span id="version" class="pill">v?</span>
+
+      <div class="tenant-picker">
+        <label for="proj-select">Investigación activa</label>
+        <select id="proj-select" aria-label="Seleccionar investigación activa"></select>
+      </div>
+      <button id="new-project" class="act ghost topbar-btn">＋ Nuevo proyecto</button>
+      <button id="courses-btn" class="act ghost topbar-btn">🎓 Cursos</button>
+
+      <details id="sys-menu" class="sys-menu">
+        <summary id="sys-menu-btn">Sistema ▾</summary>
+        <nav id="nav" aria-label="Secciones del sistema"></nav>
+      </details>
+
       <span class="spacer"></span>
       <span id="whoami" class="muted"></span>
-      <button id="logout" class="act ghost">Log out</button>
+      <button id="logout" class="act ghost">Salir</button>
     </header>
+
     <div class="layout">
-      <nav id="nav" aria-label="Sections"></nav>
-      <main id="view" tabindex="-1" aria-live="polite" aria-busy="false"></main>
+      <aside class="chat-panel" aria-label="Copiloto científico">
+        <div id="chat-context" class="chat-context" aria-live="polite"></div>
+        <ul id="suggestions" class="suggestions" aria-label="Sugerencias"></ul>
+        <div id="messages" class="messages" aria-live="polite"></div>
+        <div class="chat-actions">
+          <button id="edu-plan-btn" class="act ghost" hidden>🎓 Plan educativo</button>
+        </div>
+        <form id="ask-form" class="ask-form">
+          <label for="question" class="sr-only">Pregunta al copiloto</label>
+          <input id="question" type="text" autocomplete="off"
+                 placeholder="Pregunta al copiloto científico…">
+          <button type="submit" class="act">Enviar</button>
+        </form>
+        <p class="chat-disclaimer">Copiloto (Codex): ayuda de razonamiento, NO evidencia. Sin descubrimientos.</p>
+      </aside>
+
+      <main id="view" class="dashboard-panel" tabindex="-1" aria-live="polite"></main>
+    </div>
+  </div>
+
+  <!-- Floating panel (plan educativo, etc.) -->
+  <div id="float-panel" class="float-panel" hidden>
+    <div class="float-card" role="dialog" aria-modal="true" aria-labelledby="float-title">
+      <div class="float-head">
+        <h2 id="float-title"></h2>
+        <button id="float-close" class="act ghost" aria-label="Cerrar panel">✕</button>
+      </div>
+      <div id="float-body"></div>
     </div>
   </div>
 
