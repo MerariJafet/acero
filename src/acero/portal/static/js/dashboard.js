@@ -55,51 +55,117 @@ export async function renderHome(view, cb) {
 }
 
 /* --------------------------------------------------------- project phases -- */
+function ring(pct, color = "var(--accent)") {
+  const p = Math.max(0, Math.min(100, pct || 0));
+  return `<div class="ring" style="background:conic-gradient(${color} ${p * 3.6}deg, #222b36 0)">
+            <span>${p}%</span></div>`;
+}
+
+function barRows(bars) {
+  if (!bars || !bars.length) return "<p class='muted tag'>sin datos aún</p>";
+  return bars.map((b) =>
+    `<div class="bar-row"><span class="bar-label">${esc(b.label)}</span>
+       <span class="bar-track"><span class="bar-fill" style="width:${b.pct}%"></span></span>
+       <span class="bar-right">${esc(b.right || b.value)}</span></div>`).join("");
+}
+
 export async function renderProjectDash(view, pid, cb) {
   view.innerHTML = "<p class='loading'>Cargando investigación…</p>";
-  const { ok, body: ph } = await get(`/portal/api/projects/${encodeURIComponent(pid)}/phases`);
+  const [{ ok, body: ph }, { body: st }] = await Promise.all([
+    get(`/portal/api/projects/${encodeURIComponent(pid)}/phases`),
+    get(`/portal/api/projects/${encodeURIComponent(pid)}/status`)]);
   if (!ok) { view.innerHTML = "<p class='err'>No se pudo cargar la investigación.</p>"; return; }
+  const k = ph.kpis || {};
+  const today = (ph.created_at || "").slice(0, 10);
 
-  const phaseCards = ph.phases.map((f) => {
-    const items = (f.items || []).slice(0, 5).map((i) =>
-      `<div class="kv"><span>${esc((i.title || "").slice(0, 76))}</span>` +
+  // --- full-width horizontal phase sections (read top → bottom) ------------
+  const phaseRows = ph.phases.map((f) => {
+    const items = (f.items || []).slice(0, 4).map((i) =>
+      `<div class="kv"><span>${esc((i.title || "").slice(0, 70))}</span>` +
       `<b class="tag">${esc(i.meta || "")}${i.flag ? " · " + esc(i.flag) : ""}</b></div>`).join("");
-    return `<div class="phase-card" data-phase="${esc(f.key)}">
+    return `<section class="phase-row" data-phase="${esc(f.key)}" aria-label="${esc(f.title)}">
       <button class="phase-head" aria-expanded="true" data-toggle="${esc(f.key)}">
         <span class="phase-state ${esc(f.state)}" aria-hidden="true"></span>
-        <span>${esc(f.icon)} ${esc(f.title)}</span>
-        <span class="ph-count">${f.count}</span><span class="chev">▾</span>
+        <span class="ph-title">${esc(f.icon)} ${esc(f.title)}</span>
+        <span class="ph-note">${esc(f.note)}</span>
+        <span class="ph-count">${f.count}</span>
+        <span class="chev">▾</span>
       </button>
       <div class="phase-body" data-body="${esc(f.key)}">
-        <p class="phase-note">${esc(f.note)}</p>
-        <div class="phase-items">${items || "<p class='muted tag'>sin items</p>"}</div>
-        <button class="phase-open" data-open="${esc(f.key)}">Abrir dashboard de ${esc(f.title)} →</button>
+        <div class="phase-cols">
+          <div class="phase-viz">${barRows(f.bars)}</div>
+          <div class="phase-items">${items || "<p class='muted tag'>sin items</p>"}
+            <button class="phase-open" data-open="${esc(f.key)}">Ver dashboard completo →</button>
+          </div>
+        </div>
+        <div class="phase-comment">
+          <input placeholder="Pregunta SOLO sobre ${esc(f.title.toLowerCase())}…"
+                 aria-label="Pregunta sobre ${esc(f.title)}" data-q="${esc(f.key)}">
+          <button class="act" data-ask="${esc(f.key)}">Preguntar</button>
+        </div>
+        <div class="phase-answer" data-answer="${esc(f.key)}" aria-live="polite"></div>
       </div>
-      <div class="phase-comment">
-        <input placeholder="Pregunta SOLO sobre ${esc(f.title.toLowerCase())}…"
-               aria-label="Pregunta sobre ${esc(f.title)}" data-q="${esc(f.key)}">
-        <button class="act" data-ask="${esc(f.key)}">Preguntar</button>
-      </div>
-      <div class="phase-answer" data-answer="${esc(f.key)}" aria-live="polite"></div>
-    </div>`;
+    </section>`;
   }).join("");
 
+  // --- acciones recomendadas (from real next steps) -------------------------
+  const steps = ((st || {}).next_steps || []).slice(0, 3);
+  const prio = ["high", "high", "medium"];
+  const actions = steps.map((s, i) =>
+    `<div class="action-card">
+       <div><span class="prio ${prio[i] || "medium"}">prioridad ${prio[i] === "high" ? "HIGH" : "MEDIUM"}</span></div>
+       <p>${esc(s.text)}</p>
+       <button class="act ghost" data-goto-tabx="${esc(s.tab || "")}" data-pidx="${esc(pid)}">Ir →</button>
+     </div>`).join("");
+
   view.innerHTML =
-    `<div class="proj-head">
+    `<p class="eyebrow">Pulso de la investigación</p>
+     <div class="pulse-head">
        <h1>${esc(ph.title)}</h1>
-       <div>${pill(ph.domain)} ${pill(ph.state, "ok")}
-         <span class="tag">${esc(ph.project_id)} · creado ${esc((ph.created_at || "").slice(0, 10))}</span></div>
-       <div class="progressbar" role="progressbar" aria-valuenow="${ph.progress_pct}"
-            aria-valuemin="0" aria-valuemax="100" aria-label="Progreso de fases">
-         <div style="width:${ph.progress_pct}%"></div></div>
-       <div class="tag">${ph.n_phases_done}/${ph.n_phases} fases con trabajo · ${ph.progress_pct}%</div>
-       <div style="margin-top:.5rem">
+       <span class="tag">${pill(ph.domain)} ${pill(ph.state, "ok")} · creado ${esc(today)}</span>
+     </div>
+
+     <div class="kpi-strip">
+       <div class="kpi">${ring(ph.progress_pct, "#4aa3ff")}
+         <div><b>${ph.n_phases_done}/${ph.n_phases}</b><span>fases con trabajo</span>
+         <span class="tag">flujo completo de investigación</span></div></div>
+       <div class="kpi">${ring(k.real_pct, "#2ea043")}
+         <div><b>${k.experiments || 0}</b><span>experimentos</span>
+         <span class="tag">${k.real_experiments || 0} con datos reales</span></div></div>
+       <div class="kpi"><div class="kpi-big">${k.papers || 0}</div>
+         <div><b>papers reales</b><span>con DOI + chequeo de retracción</span></div></div>
+       <div class="kpi">${ring(k.approved_pct, "#d29922")}
+         <div><b>${k.hypotheses || 0}</b><span>hipótesis</span>
+         <span class="tag">${k.approved || 0} aprobadas</span></div></div>
+       <div class="kpi"><div class="kpi-big">${k.dossiers || 0}</div>
+         <div><b>dossiers</b><span>esperan revisión humana</span></div></div>
+     </div>
+
+     <div class="narrative-row">
+       <p class="narrative">${esc(ph.narrative || "")}</p>
+       <div class="narrative-actions">
          <button class="act" id="deep-run">🌌 Investigación a fondo</button>
          <button class="act ghost" id="dash-refresh">↻ Actualizar</button>
        </div>
      </div>
-     <div class="phase-grid">${phaseCards}</div>
-     <p class="tag" style="margin-top:.8rem">${esc(ph.honesty)}</p>`;
+
+     ${phaseRows}
+
+     <section class="panel actions-panel" aria-label="Acciones recomendadas">
+       <p class="eyebrow">★ Acciones recomendadas</p>
+       <div class="actions-grid">${actions || "<p class='muted'>sin recomendaciones</p>"}</div>
+     </section>
+     <p class="tag">${esc(ph.honesty)}</p>`;
+
+  // acciones "Ir →": navegan a la parte correspondiente
+  view.querySelectorAll("[data-goto-tabx]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const t = b.dataset.gotoTabx;
+      if (t === "lit") cb.openPhase(pid, "literatura");
+      else if (t === "learn") cb.openPhase(pid, "conclusiones");
+      else if (t === "chat") document.querySelector("#question").focus();
+      else cb.openPhase(pid, "experimentos");
+    }));
 
   // minimize/expand
   view.querySelectorAll("[data-toggle]").forEach((b) =>

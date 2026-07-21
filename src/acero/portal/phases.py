@@ -112,18 +112,73 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
             "items": conclusions_items,
         },
     }
+    # --- horizontal bar data per phase (real distributions, CIO-style) ------
+    def _bars(pairs: list[tuple[str, float, str]]) -> list[dict[str, Any]]:
+        mx = max((v for _, v, _ in pairs), default=0) or 1
+        return [{"label": lb, "value": v, "pct": round(100 * v / mx),
+                 "right": rt or str(int(v))} for lb, v, rt in pairs if v > 0]
+
+    by_angle: dict[str, int] = {}
+    for li in lit:
+        a = li.get("angle") or "general"
+        by_angle[a] = by_angle.get(a, 0) + 1
+    phases["hipotesis"]["bars"] = _bars([
+        ("Aprobadas", len(approved), f"{len(approved)}"),
+        ("Propuestas", len(hyps) - len(approved), f"{len(hyps) - len(approved)}")])
+    phases["literatura"]["bars"] = _bars([
+        (a.replace("_", " "), n, f"{n} papers")
+        for a, n in sorted(by_angle.items(), key=lambda x: -x[1])[:6]])
+    phases["teorias"]["bars"] = [
+        {"label": (n.get("label") or "")[:52], "value": n.get("confidence") or 0,
+         "pct": round(100 * float(n.get("confidence") or 0)),
+         "right": f"confianza {n.get('confidence')}"}
+        for n in nodes["items"][:6]]
+    phases["experimentos"]["bars"] = _bars([
+        ("Con datos reales", len(real_exps), f"{len(real_exps)}"),
+        ("Sintéticos (flujo)", len(exps) - len(real_exps), f"{len(exps) - len(real_exps)}")])
+    phases["resultados"]["bars"] = _bars([
+        ("Resultados con claim", len(results_items) - len(negs), ""),
+        ("Negativos preservados", len(negs), "")])
+    by_ready: dict[str, int] = {}
+    for d in dossiers:
+        by_ready[d.get("readiness") or "?"] = by_ready.get(d.get("readiness") or "?", 0) + 1
+    phases["conclusiones"]["bars"] = _bars([(k, v, f"{v}") for k, v in by_ready.items()])
+
     for key, ph in phases.items():
         ph["key"] = key
         ph["title"] = _TITLES[key]
         ph["icon"] = _ICONS[key]
 
+    # KPIs for the top strip
+    kpis = {
+        "papers": len(lit), "experiments": len(exps), "real_experiments": len(real_exps),
+        "hypotheses": len(hyps), "approved": len(approved),
+        "nodes": int(nodes["total"]), "dossiers": len(dossiers), "negatives": len(negs),
+        "real_pct": round(100 * len(real_exps) / len(exps)) if exps else 0,
+        "approved_pct": round(100 * len(approved) / len(hyps)) if hyps else 0,
+    }
+
     n_done = sum(1 for ph in phases.values() if ph["state"] == "done")
+    # one-line narrative (CIO-style summary sentence), from real state
+    if n_done == 0:
+        narrative = "Investigación creada, sin trabajo aún — empieza generando hipótesis."
+    else:
+        parts = []
+        if real_exps:
+            parts.append(f"{len(real_exps)} experimento(s) con datos reales")
+        if lit:
+            parts.append(f"{len(lit)} papers reales indexados")
+        if dossiers:
+            parts.append(f"{len(dossiers)} dossier(s) esperando tu revisión")
+        narrative = ("La investigación avanza: " + ", ".join(parts) +
+                     ". Nada es un descubrimiento; el techo es la revisión humana.")
     return {
         "project_id": project_id, "title": p.title, "domain": p.domain,
         "state": p.state.value, "created_at": p.created_at,
         "phases": [phases[k] for k in PHASES],
         "n_phases_done": n_done, "n_phases": len(PHASES),
         "progress_pct": round(100 * n_done / len(PHASES)),
+        "kpis": kpis, "narrative": narrative,
         "honesty": ("Fases derivadas de artefactos reales; nada es un descubrimiento; "
                     "el techo es la revisión humana."),
     }
