@@ -191,7 +191,12 @@ _CODE_RULES = (
     "- Al FINAL imprime EXACTAMENTE una línea:\n"
     "  RESULT_JSON: {\"metrics\": {..números..}, \"null_test\": {\"description\": str, "
     "\"statistic\": num, \"threshold\": num, \"passed\": bool}, "
-    "\"verdict\": \"supports|refutes|inconclusive\", \"verdict_reason\": str}\n"
+    "\"verdict\": \"supports|refutes|inconclusive\", \"verdict_reason\": str, "
+    "\"anomalies\": [str]}\n"
+    "- anomalies: lista (puede ir vacía) de DISCREPANCIAS INESPERADAS que el "
+    "cómputo reveló — residuos raros, outliers, ventanas/subconjuntos que se "
+    "comportan distinto, tensiones entre subconjuntos. Solo lo que los NÚMEROS "
+    "muestran, con el valor concreto.\n"
     "- verdict se decide por el discriminador contra los nulos; si los datos no "
     "alcanzan, verdict=inconclusive y dilo en verdict_reason. NUNCA inventes "
     "números: todo métrico debe salir del cómputo.\n"
@@ -243,6 +248,8 @@ def _parse_result(stdout: str) -> tuple[dict[str, Any] | None, str]:
         return None, f"verdict inválido: {res.get('verdict')!r}"
     if not str(res.get("verdict_reason", "")).strip():
         return None, "falta verdict_reason"
+    an = res.get("anomalies")
+    res["anomalies"] = [str(a)[:250] for a in an[:5]] if isinstance(an, list) else []
     nt = res.get("null_test")
     if not isinstance(nt, dict) or "passed" not in nt:
         # honesty rule: no null controls ⇒ the result cannot claim support

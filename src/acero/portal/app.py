@@ -403,6 +403,7 @@ def build_portal_router() -> APIRouter:
                 "lit_count": h.get("lit_count", 0),
                 "confrontation": h.get("confrontation"),
                 "critique": crits.get(h["id"]),
+                "new_evidence_count": int(h.get("new_evidence_count") or 0),
                 "experiments": exps,
             })
         return {"project_id": project_id, "approved": out, "n": len(out)}
@@ -414,6 +415,73 @@ def build_portal_router() -> APIRouter:
         _require_csrf(sess, x_csrf_token)
         from .hypothesis_flow import HypothesisFlow
         return HypothesisFlow().investigate(project_id, hyp_id)
+
+    @r.post("/api/projects/{project_id}/anomalies/harvest")
+    def anomalies_harvest(project_id: str, sess: Session = Depends(_require_session),
+                          x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Turn measured discrepancies from executed experiments into new hypotheses."""
+        _require_csrf(sess, x_csrf_token)
+        from .anomalies import AnomalyEngine
+        return AnomalyEngine().harvest(project_id)
+
+    @r.post("/api/projects/{project_id}/watch/scan")
+    def watch_scan(project_id: str, sess: Session = Depends(_require_session),
+                   x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Scan the live literature indexes for NEW papers on active hypotheses."""
+        _require_csrf(sess, x_csrf_token)
+        from .watchdog import Watchdog
+        return Watchdog().scan_project(project_id)
+
+    @r.get("/api/projects/{project_id}/watch/last")
+    def watch_last(project_id: str, sess: Session = Depends(_require_session)
+                   ) -> dict[str, Any]:
+        from .watchdog import Watchdog
+        return {"last": Watchdog().last_scan(project_id)}
+
+    @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/critic/to-experiments")
+    def critic_to_exps(project_id: str, hyp_id: str,
+                       sess: Session = Depends(_require_session),
+                       x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Convert the critic's suggestions into proposed experiments."""
+        _require_csrf(sess, x_csrf_token)
+        from .critic import CriticAgent
+        return CriticAgent().suggestions_to_experiments(project_id, hyp_id)
+
+    @r.get("/api/projects/{project_id}/rigor")
+    def project_rigor(project_id: str, sess: Session = Depends(_require_session)
+                      ) -> dict[str, Any]:
+        """Rigor score: critic objections resolved with evidence / total."""
+        from .critic import CriticAgent
+        return CriticAgent().rigor_score(project_id)
+
+    @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/mission")
+    def mission_start(project_id: str, hyp_id: str,
+                      sess: Session = Depends(_require_session),
+                      x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Launch the full autonomous research mission for one approved hypothesis."""
+        _require_csrf(sess, x_csrf_token)
+        from .missions import MissionEngine
+        return MissionEngine().start(project_id, hyp_id)
+
+    @r.post("/api/projects/{project_id}/missions/start-all")
+    def mission_start_all(project_id: str, sess: Session = Depends(_require_session),
+                          x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .missions import MissionEngine
+        return MissionEngine().start_all(project_id)
+
+    @r.get("/api/projects/{project_id}/missions")
+    def missions_list(project_id: str, sess: Session = Depends(_require_session)
+                      ) -> dict[str, Any]:
+        from .missions import MissionEngine
+        return {"missions": MissionEngine().list_missions(project_id)[:12]}
+
+    @r.post("/api/missions/{mission_id}/retry")
+    def mission_retry(mission_id: str, sess: Session = Depends(_require_session),
+                      x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .missions import MissionEngine
+        return MissionEngine().retry(mission_id)
 
     @r.post("/api/projects/{project_id}/obsidian/sync")
     def obsidian_sync(project_id: str, sess: Session = Depends(_require_session),
@@ -842,6 +910,13 @@ def mount_portal(app: FastAPI) -> None:
     app.include_router(build_portal_router())
     if _STATIC.exists():
         app.mount("/portal/static", StaticFiles(directory=str(_STATIC)), name="portal-static")
+
+    # missions interrupted by a restart resume themselves (checkpointed steps)
+    from .missions import resume_on_startup
+    resume_on_startup()
+    # daily literature watchdog (push: new papers find YOU)
+    from .watchdog import watchdog_on_startup
+    watchdog_on_startup()
 
     @app.middleware("http")
     async def _security_headers(request, call_next):  # type: ignore[no-untyped-def]

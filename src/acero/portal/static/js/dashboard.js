@@ -255,14 +255,17 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
             : `<button class="act" data-happrove="${esc(i.id)}" data-tag="${esc(i.tag)}">✓ Aprobar</button>
                <button class="act ghost" data-hstatus="${esc(i.id)}" data-to="REJECTED">Rechazar</button>`}
         </div>`;
+      const anom = i.origin === "anomaly" ? `<span class="pill bad">🔥 nacida de anomalía</span>` : "";
+      const anomProv = i.anomaly_provenance
+        ? `<p class="tag">🔥 Origen: discrepancia medida en «${esc(i.anomaly_provenance.exp_title || "")}» — ${esc((i.anomaly_provenance.anomaly || "").slice(0, 140))}</p>` : "";
       return `<div class="card hyp-card">
         <div class="hyp-head">
           <b>${esc(i.tag)}: ${esc(i.title)}</b>
-          ${klabel ? " " + pill(klabel, kcolor) : ""}
+          ${klabel ? " " + pill(klabel, kcolor) : ""} ${anom}
           ${pill(i.meta || "", approved ? "ok" : "warn")}
           ${i.flag ? " " + pill(i.flag, "bad") : ""}
           ${reasoning ? `<button class="hyp-toggle" data-htoggle="${ix}">ver razonamiento ▾</button>` : ""}
-        </div>${actions}${reasoning}${criticFoot(i.critique)}</div>`;
+        </div>${anomProv}${actions}${reasoning}${criticFoot(i.critique, i.id)}</div>`;
     }).join("");
   } else {
     items = (f.items || []).map((i) => {
@@ -309,6 +312,7 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
          <input id="hyp-focus" placeholder="(opcional) enfoca: p.ej. movimiento del Sol, sesgos de selección…">
          <button class="act" id="hyp-gen-btn">🧠 Generar hipótesis (crítica y creativa)</button>
          <button class="act ghost" id="hyp-gen-one">＋ Generar nueva hipótesis</button>
+         <button class="act ghost" id="anom-harvest">🔥 Anomalías → hipótesis</button>
          <span id="hyp-gen-out" class="tag" aria-live="polite"></span>
        </div>
        <p class="tag">El copiloto CUESTIONA (no repite): propone hipótesis ya probadas, teorizadas, nuevas y preguntas abiertas, cada una con su pregunta detonante, argumento, duda y cómo probarla.</p>` : ""}
@@ -360,6 +364,21 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
   if (genBtn) genBtn.addEventListener("click", () => genHyp(6, genBtn));
   const genOne = view.querySelector("#hyp-gen-one");
   if (genOne) genOne.addEventListener("click", () => genHyp(1, genOne));
+  const anomBtn = view.querySelector("#anom-harvest");
+  if (anomBtn) anomBtn.addEventListener("click", async () => {
+    const out = view.querySelector("#hyp-gen-out");
+    anomBtn.disabled = true;
+    out.textContent = "🔥 Buscando discrepancias medidas en los experimentos…";
+    const { ok, body } = await post(
+      `/portal/api/projects/${encodeURIComponent(pid)}/anomalies/harvest`, {});
+    anomBtn.disabled = false;
+    if (ok && body.ok) {
+      out.textContent = body.created.length
+        ? `🔥 ${body.created.length} hipótesis nacidas de anomalías — apruébalas si valen.`
+        : (body.note || "sin anomalías nuevas");
+      if (body.created.length) cb.openPhase(pid, "hipotesis");
+    } else out.textContent = "Error en la cosecha.";
+  });
 
   // approve / reject / unapprove
   view.querySelectorAll("[data-happrove]").forEach((b) =>
@@ -385,25 +404,48 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
 
 /* ---------- hypothesis-centric literature + experiments dashboards -------- */
 /* Footer with the resident critic's ("El Revisor") latest take on a card. */
-function criticFoot(c) {
+function criticFoot(c, targetId) {
   if (!c) return "";
   const COLOR = { solido: "ok", prometedor: "warn", debil: "warn",
                   defectuoso: "bad", sin_revision: "warn" };
   const list = (arr, label) => (arr && arr.length)
     ? `<div class="hyp-field"><b>${label}</b><ul>${arr.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+  // objections carry their resolution status (C3 closed loop)
+  const sts = c.objections_status || [];
+  const objList = (c.objections || []).length ? `
+    <div class="hyp-field"><b>⚠️ Objeciones</b><ul>${(c.objections || []).map((x, i) =>
+      `<li>${sts[i] === "resolved" ? "✅" : "⏳"} ${esc(x)}</li>`).join("")}</ul></div>` : "";
+  const convertBtn = targetId && (c.suggestions || []).length
+    ? `<button class="act ghost" data-c2e="${esc(targetId)}">🧪 Convertir sugerencias en experimentos</button>` : "";
   const details = (c.objections || []).length || (c.alternatives || []).length ||
                   (c.suggestions || []).length || c.hard_question ? `
     <details><summary class="tag">ver crítica completa</summary>
-      ${list(c.objections, "⚠️ Objeciones")}
+      ${objList}
       ${list(c.alternatives, "🔀 Explicaciones alternativas no descartadas")}
       ${list(c.suggestions, "🛠 Sugerencias ejecutables")}
       ${c.hard_question ? `<div class="hyp-field"><b>🎯 La pregunta incómoda</b><p>${esc(c.hard_question)}</p></div>` : ""}
+      ${convertBtn}
     </details>` : "";
+  const resolved = sts.filter((s) => s === "resolved").length;
+  const objChip = (c.objections || []).length
+    ? `<span class="tag">${resolved}/${c.objections.length} objeciones resueltas</span>` : "";
   return `<div class="critic-note">
     <div class="critic-head">🧐 <b>El Revisor</b> ${pill(c.verdict || "", COLOR[c.verdict] || "warn")}
-      <span class="tag">${esc(c.task || "")}</span></div>
+      <span class="tag">${esc(c.task || "")}</span> ${objChip}</div>
     <p>${esc(c.summary || "")}</p>${details}
   </div>`;
+}
+
+function wireCriticConvert(view, pid, cb, phaseKey) {
+  view.querySelectorAll("[data-c2e]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      b.textContent = "Convirtiendo…";
+      const { ok, body } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.c2e}/critic/to-experiments`, {});
+      if (ok && body.ok) cb.openPhase(pid, "experimentos");
+      else { b.disabled = false; b.textContent = "Error: " + esc((body && body.error) || "conversión"); }
+    }));
 }
 
 /* Poll a parallel run (one subagent per item) and paint live progress. */
@@ -486,23 +528,30 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
           ${ideasBlock}
           <div class="hyp-field"><b>📎 Literatura leída (${(c.citations || []).length})</b><ul class="cites">${cites}</ul></div>
         </div>` : (done ? `<div class="confront">${qUsed}<p class="tag">Se indexaron ${h.lit_count} papers (confrontación IA no disponible).</p><ul class="cites">${cites}</ul></div>` : "");
+      const newEv = (h.new_evidence_count || 0) > 0
+        ? `<span class="pill warn">📡 ${h.new_evidence_count} papers nuevos</span>` : "";
       return `<div class="card hyp-card">
-        <div class="hyp-head"><b>${esc(h.tag)}: ${esc(h.title)}</b> ${ver}
+        <div class="hyp-head"><b>${esc(h.tag)}: ${esc(h.title)}</b> ${ver} ${newEv}
           ${pill(done ? `${h.lit_count} papers ✓` : (h.lit_status === "STALE" ? "re-investigar" : "sin investigar"), done ? "ok" : "warn")}</div>
         <p class="tag">Literatura real multi-fuente (OpenAlex + arXiv + Crossref) sobre: ${esc(h.trigger_question || h.title)}</p>
         ${stale}
         <button class="act" data-invest="${esc(h.id)}">${done ? "↻ Re-investigar" : "🔎 Investigar"}</button>
+        <button class="act mission-btn" data-mission="${esc(h.id)}">🚀 Misión completa</button>
         <div class="confront-out" data-invout="${esc(h.id)}">${confrontHtml}</div>
-        ${criticFoot(h.critique)}
+        ${criticFoot(h.critique, h.id)}
       </div>`;
     }).join("");
     view.innerHTML = back +
       `<p class="eyebrow">Dashboard de fase · por hipótesis</p>
        <div class="pulse-head"><h1>📚 Investigación de literatura</h1>
-         <span class="tag">${approved.length} hipótesis aprobadas</span></div>
+         <span class="tag">${approved.length} hipótesis aprobadas</span>
+         <span class="tag" id="rigor-chip"></span></div>
        <div class="run-all"><button class="act" id="lit-run-all">▶▶ Correr TODAS las investigaciones</button>
+         <button class="act" id="msn-all">🚀 Misiones para TODAS</button>
+         <button class="act ghost" id="watch-scan">📡 Buscar novedades</button>
          <button class="act ghost" id="obs-sync">🧠 Sync Obsidian</button>
          <span id="lit-run-out" class="tag" aria-live="polite"></span></div>
+       <div id="missions-strip" aria-live="polite"></div>
        ${cards}
        <p class="tag">Cada tarjeta confronta su hipótesis con citas reales y propone una versión mejorada. La síntesis IA es ayuda, no evidencia.</p>`;
     view.querySelectorAll("[data-invest]").forEach((b) =>
@@ -541,6 +590,75 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         btn.disabled = false;
         cb.openPhase(pid, "literatura");
       });
+    });
+    // --- missions: autonomous per-hypothesis research cycle -----------------
+    const strip = view.querySelector("#missions-strip");
+    const S_ICON = { PENDING: "⏳", RUNNING: "🚀", DONE: "✅", FAILED: "❌" };
+    async function paintMissions() {
+      const { ok: mok, body: mb } = await get(`/portal/api/projects/${encodeURIComponent(pid)}/missions`);
+      if (!mok || !strip) return false;
+      const ms = (mb.missions || []);
+      strip.innerHTML = ms.length ? ms.map((mn) => {
+        const steps = (mn.steps || []).map((s2) =>
+          `<span class="mstep ${s2.status.toLowerCase()}" title="${esc(s2.error || s2.info || "")}">${S_ICON[s2.status] || "⏳"} ${esc(s2.name.replace("experiments_", "exp:"))}</span>`).join(" → ");
+        const retry = mn.status === "FAILED" ? ` <button class="act ghost" data-mretry="${esc(mn.id)}">↻ Reintentar</button>` : "";
+        return `<div class="mission-line">${S_ICON[mn.status] || "⏳"} <b>${esc(mn.hyp_tag)}</b> ${steps}${retry}</div>`;
+      }).join("") : "";
+      strip.querySelectorAll("[data-mretry]").forEach((b) =>
+        b.addEventListener("click", async () => {
+          b.disabled = true;
+          await post(`/portal/api/missions/${b.dataset.mretry}/retry`, {});
+        }));
+      return ms.some((mn) => mn.status === "RUNNING" || mn.status === "PENDING");
+    }
+    paintMissions().then((live) => {
+      if (!live) return;
+      const t = setInterval(async () => {
+        if (!document.body.contains(strip)) { clearInterval(t); return; }
+        const still = await paintMissions();
+        if (!still) { clearInterval(t); cb.openPhase(pid, "literatura"); }
+      }, 4000);
+    });
+    view.querySelectorAll("[data-mission]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        b.textContent = "🚀 Misión lanzada…";
+        const { ok: sok, body: sb } = await post(
+          `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.mission}/mission`, {});
+        if (!sok || !sb.ok) { b.disabled = false; b.textContent = "Error: " + esc((sb && sb.error) || "misión"); return; }
+        paintMissions();
+      }));
+    view.querySelector("#msn-all").addEventListener("click", async () => {
+      const btn = view.querySelector("#msn-all");
+      btn.disabled = true;
+      await post(`/portal/api/projects/${encodeURIComponent(pid)}/missions/start-all`, {});
+      btn.disabled = false;
+      paintMissions();
+    });
+
+    wireCriticConvert(view, pid, cb, phaseKey);
+    get(`/portal/api/projects/${encodeURIComponent(pid)}/rigor`).then(({ ok: rk, body: rg }) => {
+      const chip = view.querySelector("#rigor-chip");
+      if (chip && rk) {
+        chip.textContent = rg.score === null
+          ? "rigor: sin objeciones aún"
+          : `⚖️ rigor ${rg.score}/10 (${rg.resolved}/${rg.total} objeciones resueltas)`;
+      }
+    });
+    view.querySelector("#watch-scan").addEventListener("click", async () => {
+      const out = view.querySelector("#lit-run-out");
+      const btn = view.querySelector("#watch-scan");
+      btn.disabled = true;
+      out.textContent = "📡 Consultando OpenAlex/arXiv por novedades…";
+      const { ok: wok, body: w } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/watch/scan`, {});
+      btn.disabled = false;
+      if (wok && w.ok) {
+        out.textContent = w.total_new
+          ? `📡 ${w.total_new} papers NUEVOS encontrados — El Revisor los está evaluando`
+          : "📡 Sin novedades en las fuentes (hoy)";
+        if (w.total_new) setTimeout(() => cb.openPhase(pid, "literatura"), 1500);
+      } else out.textContent = "Error en la vigilancia.";
     });
     view.querySelector("#obs-sync").addEventListener("click", async () => {
       const out = view.querySelector("#lit-run-out");

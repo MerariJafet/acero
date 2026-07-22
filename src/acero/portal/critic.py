@@ -123,6 +123,100 @@ class CriticAgent:
                 "hard_question": "¿Buscaste evidencia en contra con la misma energía "
                                  "que a favor?"}
 
+    # --- C3: close the loop ------------------------------------------------------
+    def suggestions_to_experiments(self, project_id: str, hyp_id: str
+                                   ) -> dict[str, Any]:
+        """Turn the critic's executable suggestions into PROPOSED experiments."""
+        crit = self.latest_by_target(project_id).get(hyp_id)
+        if not crit or not crit.get("suggestions"):
+            return {"ok": False, "error": "no hay sugerencias del Revisor para convertir"}
+        h = self.store.get(hyp_id) or {}
+        created = []
+        for s in crit["suggestions"][:3]:
+            eid = new_id("exp")
+            rec = {"id": eid, "hyp_id": hyp_id, "hyp_tag": h.get("tag", ""),
+                   "title": f"[Revisor] {str(s)[:90]}",
+                   "what": f"Responder la objeción del Revisor: {str(s)[:200]}",
+                   "how": str(s), "data_source": "según sugerencia",
+                   "method_type": "math_analysis",
+                   "controls": "los que exige la sugerencia",
+                   "discriminator": "resuelve o no la objeción planteada",
+                   "from_critique": crit.get("id", ""),
+                   "status": "PROPOSED", "synthetic": None, "created_at": now_iso()}
+            self.store.put(project_id, "experiment", eid, rec, status="PROPOSED",
+                           actor="critic_agent",
+                           summary=f"experimento desde crítica para {h.get('tag')}")
+            created.append(rec)
+        return {"ok": True, "created": created, "critique_id": crit.get("id", "")}
+
+    def resolve_objections(self, project_id: str, hyp_id: str, *,
+                           use_ai: bool = True) -> dict[str, Any]:
+        """Re-review: given the NEW evidence, which objections stand resolved?"""
+        crit = self.latest_by_target(project_id).get(hyp_id)
+        if not crit or not crit.get("objections"):
+            return {"ok": True, "resolved": 0, "pending": 0, "note": "sin objeciones"}
+        objections = list(crit["objections"])
+        exps = [e for e in self.store.list_objects(project_id, kind="experiment")
+                if e.get("hyp_id") == hyp_id and e.get("status") == "COMPLETE"]
+        evidence = "\n".join(
+            f"- {e.get('title','')}: {(e.get('result') or {}).get('verdict','')} — "
+            f"{((e.get('result') or {}).get('verdict_reason') or '')[:180]}"
+            for e in exps) or "(sin experimentos completados)"
+        # keep previous resolutions: an objection resolved with evidence STAYS resolved
+        prev = list(crit.get("objections_status") or [])
+        statuses = [(prev[i] if i < len(prev) and prev[i] == "resolved" else "pending")
+                    for i in range(len(objections))]
+        if use_ai and exps:
+            try:
+                from ..llm.providers import CodexCliProvider
+                prov = CodexCliProvider(timeout_sec=150)
+                if prov.available():
+                    schema = {"type": "object", "properties": {
+                        "resolutions": {"type": "array", "items": {
+                            "type": "object", "properties": {
+                                "idx": {"type": "integer"},
+                                "status": {"type": "string"},
+                                "why": {"type": "string"}},
+                            "required": ["idx", "status", "why"],
+                            "additionalProperties": False}}},
+                        "required": ["resolutions"], "additionalProperties": False}
+                    objs = "\n".join(f"[{i}] {o}" for i, o in enumerate(objections))
+                    out = prov.complete_json(
+                        "Eres El Revisor. Estas eran TUS objeciones:\n" + objs +
+                        f"\n\nEvidencia NUEVA ejecutada:\n{evidence}\n\n"
+                        "Para cada objeción: status resolved SOLO si la evidencia la "
+                        "responde de verdad, si no pending. Sé duro: en la duda, "
+                        "pending. En español.", schema, temperature=0.2)
+                    for r in out.get("resolutions", []):
+                        i = int(r.get("idx", -1))
+                        if 0 <= i < len(statuses) and r.get("status") == "resolved":
+                            statuses[i] = "resolved"
+            except Exception:  # noqa: BLE001
+                pass
+        self.store.update_payload(crit["id"], {
+            "objections_status": statuses,
+            "resolved_count": statuses.count("resolved"),
+            "re_reviewed_at": now_iso()})
+        return {"ok": True, "resolved": statuses.count("resolved"),
+                "pending": statuses.count("pending"), "statuses": statuses}
+
+    def rigor_score(self, project_id: str) -> dict[str, Any]:
+        """Project rigor: objections resolved WITH EVIDENCE / total objections."""
+        total = resolved = n_crit = 0
+        for c in self.latest_by_target(project_id).values():
+            objs = c.get("objections") or []
+            if not objs:
+                continue
+            n_crit += 1
+            total += len(objs)
+            sts = c.get("objections_status") or []
+            resolved += sum(1 for s in sts if s == "resolved")
+        if total == 0:
+            return {"score": None, "note": "sin objeciones registradas aún",
+                    "resolved": 0, "total": 0}
+        return {"score": round(10 * resolved / total, 1), "resolved": resolved,
+                "total": total, "critiques": n_crit}
+
     # --- queries ---------------------------------------------------------------
     def latest_by_target(self, project_id: str) -> dict[str, dict[str, Any]]:
         """Newest critique per target entity (hypothesis/experiment id)."""

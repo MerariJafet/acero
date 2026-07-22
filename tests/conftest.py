@@ -23,6 +23,8 @@ def _isolated_obsidian_vault(tmp_path, monkeypatch):
     monkeypatch.setenv("ACERO_OBSIDIAN_VAULT", str(tmp_path / "_test_vault"))
     monkeypatch.setenv("ACERO_CRITIC_DISABLED", "1")
     monkeypatch.setenv("ACERO_EXPERIMENT_ARTIFACTS", str(tmp_path / "_test_artifacts"))
+    monkeypatch.setenv("ACERO_MISSIONS_DISABLED", "1")
+    monkeypatch.setenv("ACERO_WATCHDOG_DISABLED", "1")
 
 
 @pytest.fixture()
