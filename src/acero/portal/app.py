@@ -113,6 +113,12 @@ class ProgressBody(BaseModel):
     lesson_key: str
 
 
+class HypoBody(BaseModel):
+    n: int = 6
+    use_ai: bool = True
+    focus: str = ""
+
+
 class RunCycleBody(BaseModel):
     question: str
 
@@ -329,6 +335,33 @@ def build_portal_router() -> APIRouter:
         _require_csrf(sess, x_csrf_token)
         from .education import EducationService
         return EducationService().sync_course(course_id)
+
+    @r.post("/api/courses/{course_id}/delete")
+    def course_delete(course_id: str, sess: Session = Depends(_require_session),
+                      x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Delete a course (e.g. a duplicate)."""
+        _require_csrf(sess, x_csrf_token)
+        from .education import EducationService
+        return EducationService().delete_course(course_id)
+
+    @r.post("/api/projects/{project_id}/hypotheses/generate")
+    def project_gen_hypotheses(project_id: str, body: HypoBody,
+                               sess: Session = Depends(_require_session),
+                               x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Generate critical + creative competing hypotheses (Codex CLI local)."""
+        _require_csrf(sess, x_csrf_token)
+        from .hypotheses import HypothesisService
+        return HypothesisService().generate(project_id, n=body.n, use_ai=body.use_ai,
+                                            focus=body.focus)
+
+    @r.get("/api/projects/{project_id}/hypothesis/{hyp_id}")
+    def project_hypothesis(project_id: str, hyp_id: str,
+                           sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        from .hypotheses import HypothesisService
+        h = HypothesisService().get(hyp_id)
+        if not h:
+            raise HTTPException(404, "hypothesis not found")
+        return h
 
     @r.get("/api/projects/{project_id}/status")
     def project_status(project_id: str, sess: Session = Depends(_require_session)

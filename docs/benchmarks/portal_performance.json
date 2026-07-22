@@ -1,7 +1,7 @@
 {
-  "domContentLoaded": 13.700000047683716,
-  "loadComplete": 13.700000047683716,
-  "responseStart": 1.2000000476837158,
-  "overviewApiMs": 6,
+  "domContentLoaded": 13,
+  "loadComplete": 13,
+  "responseStart": 1.5,
+  "overviewApiMs": 7,
   "jsHeapBytes": 10000000
 }

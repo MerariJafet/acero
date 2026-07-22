@@ -218,6 +218,20 @@ body {
 .prio.high { background: #3a1420; color: #ff7b9c; border: 1px solid #712537; }
 .prio.medium { background: #33280c; color: #e3b341; border: 1px solid #6b5716; }
 
+/* hypothesis cards */
+.hyp-gen { display: flex; gap: .5rem; flex-wrap: wrap; margin: .3rem 0 .3rem; }
+.hyp-gen input { flex: 1; min-width: 240px; }
+.hyp-card .hyp-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.hyp-card .hyp-head b { flex: 1; min-width: 200px; }
+.hyp-toggle { background: none; border: 0; color: var(--accent); cursor: pointer; font-size: .82rem; }
+.hyp-reason { margin-top: .7rem; border-top: 1px dashed #232b36; padding-top: .6rem; }
+.hyp-field { margin-bottom: .5rem; }
+.hyp-field b { color: var(--accent); font-size: .82rem; }
+.hyp-field p { margin: .2rem 0 0; font-size: .88rem; line-height: 1.5; }
+.hyp-ask { display: flex; gap: .4rem; margin-top: .5rem; }
+.hyp-ask input { flex: 1; font-size: .84rem; }
+.hyp-answer { margin-top: .4rem; }
+
 /* phase methodology explainer */
 .method-panel { background: #10151d; }
 .method-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem; }

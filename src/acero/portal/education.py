@@ -240,6 +240,13 @@ class EducationService:
     def get_course(self, course_id: str) -> dict[str, Any] | None:
         return self.store.get(course_id)
 
+    def delete_course(self, course_id: str) -> dict[str, Any]:
+        c = self.store.get(course_id)
+        if not c:
+            return {"ok": False, "error": "course not found"}
+        self.store.delete(course_id)
+        return {"ok": True, "deleted": course_id, "title": c.get("title", "")}
+
     def mark_lesson(self, course_id: str, lesson_key: str) -> dict[str, Any]:
         c = self.store.get(course_id)
         if not c:

@@ -210,6 +210,11 @@ export async function renderProjectDash(view, pid, cb) {
   });
 }
 
+const KIND_STYLE = {
+  established: ["Ya probado", "warn"], theorized: ["Ya teorizado", "warn"],
+  novel: ["Nuevo", "ok"], open_question: ["Pregunta abierta", "bad"],
+};
+
 /* ------------------------------------------------------------ phase detail -- */
 export async function renderPhaseDetail(view, pid, phaseKey, cb) {
   view.innerHTML = "<p class='loading'>Cargando fase…</p>";
@@ -219,13 +224,42 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
   if (!f) { view.innerHTML = "<p class='err'>fase desconocida</p>"; return; }
   const m = f.methodology || {};
 
-  const items = (f.items || []).map((i) => {
-    const link = i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a>`
-                       : esc(i.title);
-    return `<div class="card">${link}
-      ${i.flag ? " " + pill(i.flag, "bad") : ""}
-      <div class="tag">${esc(i.meta || "")}</div></div>`;
-  }).join("");
+  // rich, interactive hypothesis cards
+  let items;
+  if (phaseKey === "hipotesis") {
+    items = (f.items || []).map((i, ix) => {
+      const [klabel, kcolor] = KIND_STYLE[i.kind] || ["", "warn"];
+      const reasoning = (i.trigger_question || i.argument || i.doubt) ? `
+        <div class="hyp-reason" data-reason="${ix}" hidden>
+          ${i.trigger_question ? `<div class="hyp-field"><b>❓ Pregunta detonante</b><p>${esc(i.trigger_question)}</p></div>` : ""}
+          ${i.argument ? `<div class="hyp-field"><b>➕ Argumento a favor</b><p>${esc(i.argument)}</p></div>` : ""}
+          ${i.doubt ? `<div class="hyp-field"><b>➖ La duda / qué la falsaría</b><p>${esc(i.doubt)}</p></div>` : ""}
+          ${i.competes_with ? `<div class="hyp-field"><b>⚔️ Compite con</b><p>${esc(i.competes_with)}</p></div>` : ""}
+          ${i.test_idea ? `<div class="hyp-field"><b>🔬 Cómo probarla</b><p>${esc(i.test_idea)}</p></div>` : ""}
+          <div class="hyp-ask">
+            <input placeholder="Cuestiona o pregunta sobre ${esc(i.tag)}…" data-hq="${ix}">
+            <button class="act" data-hask="${ix}">Preguntar al copiloto</button>
+          </div>
+          <div class="hyp-answer" data-hans="${ix}" aria-live="polite"></div>
+        </div>` : "";
+      return `<div class="card hyp-card">
+        <div class="hyp-head">
+          <b>${esc(i.tag)}: ${esc(i.title)}</b>
+          ${klabel ? " " + pill(klabel, kcolor) : ""}
+          ${pill(i.meta || "", i.meta === "APPROVED" ? "ok" : "warn")}
+          ${i.flag ? " " + pill(i.flag, "bad") : ""}
+          ${reasoning ? `<button class="hyp-toggle" data-htoggle="${ix}">ver razonamiento ▾</button>` : ""}
+        </div>${reasoning}</div>`;
+    }).join("");
+  } else {
+    items = (f.items || []).map((i) => {
+      const link = i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a>`
+                         : esc(i.title);
+      return `<div class="card">${link}
+        ${i.flag ? " " + pill(i.flag, "bad") : ""}
+        <div class="tag">${esc(i.meta || "")}</div></div>`;
+    }).join("");
+  }
 
   // KPI mini-strip contextual a la fase
   const k = ph.kpis || {};
@@ -257,10 +291,58 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
      </section>
 
      <div class="kpi-strip">${kstrip}</div>
+     ${phaseKey === "hipotesis" ? `
+       <div class="hyp-gen">
+         <input id="hyp-focus" placeholder="(opcional) enfoca: p.ej. movimiento del Sol, sesgos de selección…">
+         <button class="act" id="hyp-gen-btn">🧠 Generar hipótesis (crítica y creativa)</button>
+         <span id="hyp-gen-out" class="tag" aria-live="polite"></span>
+       </div>
+       <p class="tag">El copiloto CUESTIONA (no repite): propone hipótesis ya probadas, teorizadas, nuevas y preguntas abiertas, cada una con su pregunta detonante, argumento, duda y cómo probarla.</p>` : ""}
      <h3 style="margin:.4rem 0 .6rem">Detalle (${(f.items || []).length})</h3>
      ${items || "<p class='muted'>Sin items en esta fase todavía.</p>"}
      <p class="tag" style="margin-top:.6rem">${esc(ph.honesty)}</p>`;
   view.querySelector("#ph-back").addEventListener("click", () => cb.openProject(pid));
+
+  // hypothesis interactions
+  view.querySelectorAll("[data-htoggle]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const r = view.querySelector(`[data-reason="${b.dataset.htoggle}"]`);
+      const open = !r.hidden;
+      r.hidden = open;
+      b.textContent = open ? "ver razonamiento ▾" : "ocultar razonamiento ▴";
+    }));
+  view.querySelectorAll("[data-hask]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const ix = b.dataset.hask;
+      const input = view.querySelector(`[data-hq="${ix}"]`);
+      const out = view.querySelector(`[data-hans="${ix}"]`);
+      const q = input.value.trim();
+      if (!q) return;
+      out.innerHTML = "<span class='loading'>Pensando…</span>";
+      b.disabled = true;
+      const { ok: aok, body: ans } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/copilot`,
+        { message: q, location: { scope: "phase", phase: "hipotesis" } });
+      b.disabled = false;
+      out.innerHTML = aok && ans.reply
+        ? `<div class="card">${esc(ans.reply)}<div class="tag">${esc(ans.disclaimer || "")}</div></div>`
+        : `<span class="err">error</span>`;
+      input.value = "";
+    }));
+  const genBtn = view.querySelector("#hyp-gen-btn");
+  if (genBtn) genBtn.addEventListener("click", async () => {
+    const focus = view.querySelector("#hyp-focus").value.trim();
+    const out = view.querySelector("#hyp-gen-out");
+    genBtn.disabled = true;
+    out.textContent = "Generando (Codex cuestiona… hasta ~3 min)…";
+    const { ok: gok, body: g } = await post(
+      `/portal/api/projects/${encodeURIComponent(pid)}/hypotheses/generate`,
+      { n: 6, use_ai: true, focus });
+    genBtn.disabled = false;
+    if (!gok || !g.ok) { out.textContent = "Error: " + ((g && (g.detail || g.error)) || "gen"); return; }
+    out.textContent = `${g.created.length} hipótesis nuevas (${g.provider}).`;
+    cb.openPhase(pid, "hipotesis");   // recarga para verlas
+  });
 }
 
 /* --------------------------------------------------------- educational plan -- */
@@ -340,10 +422,12 @@ export async function renderCourses(view, cb) {
       <div class="progressbar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0"
            aria-valuemax="100"><div style="width:${pct}%"></div></div>
       <div class="tag">${pct}% completado</div>
-      <div style="margin-top:.5rem; display:flex; gap:.5rem">
+      <div style="margin-top:.5rem; display:flex; gap:.5rem; flex-wrap:wrap">
         <button class="act" data-go="${esc(c.id)}">▶ ${done ? "Repasar curso" : "Ir a curso"}</button>
         <button class="act ghost" data-sync="${esc(c.id)}"
           title="Agregar temas nuevos si la investigación creció">↻ Sync con investigación</button>
+        <button class="act danger" data-del="${esc(c.id)}"
+          title="Borrar este curso">🗑 Borrar</button>
       </div>
       <div class="tag" data-syncout="${esc(c.id)}" aria-live="polite"></div>
     </div>`;
@@ -362,6 +446,13 @@ export async function renderCourses(view, cb) {
       const { ok, body: s } = await post(`/portal/api/courses/${b.dataset.sync}/sync`, {});
       out.textContent = ok && s.ok ? s.note : "error de sync";
       if (ok && s.ok && s.added) cb.openCourses();
+    }));
+  view.querySelectorAll("[data-del]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm("¿Borrar este curso? No se puede deshacer.")) return;
+      const { ok, body: d } = await post(`/portal/api/courses/${b.dataset.del}/delete`, {});
+      if (ok && d.ok) cb.openCourses();
+      else alert("Error al borrar: " + ((d && (d.detail || d.error)) || ""));
     }));
 }
 

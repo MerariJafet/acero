@@ -127,9 +127,16 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
         "hipotesis": {
             **_status(len(hyps), f"{len(approved)} aprobada(s) de {len(hyps)}",
                       "sin hipótesis aún"),
-            "items": [{"title": f"{h.get('tag','H?')}: {h.get('description','')}",
+            "items": [{"id": h.get("id", ""), "tag": h.get("tag", "H?"),
+                       "title": h.get("title") or h.get("description", ""),
                        "meta": h.get("status", ""),
-                       "flag": "sintética" if h.get("synthetic") else ""} for h in hyps],
+                       "kind": h.get("kind", ""),
+                       "trigger_question": h.get("trigger_question", ""),
+                       "argument": h.get("argument", ""), "doubt": h.get("doubt", ""),
+                       "test_idea": h.get("test_idea", ""),
+                       "competes_with": h.get("competes_with", ""),
+                       "provider": h.get("provider", ""),
+                       "flag": "plantilla" if h.get("synthetic") else ""} for h in hyps],
         },
         "literatura": {
             **_status(len(lit), "papers reales con DOI + chequeo de retracción",
