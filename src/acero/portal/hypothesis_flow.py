@@ -31,9 +31,22 @@ CONFRONT_SCHEMA = {
         "argument_against": {"type": "string"},
         "improved_hypothesis": {"type": "string"},
         "citation_idx": {"type": "array", "items": {"type": "integer"}},
+        "experiment_ideas": {"type": "array", "items": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "approach": {"type": "string"},      # qué haríamos, breve
+                "data_source": {"type": "string"},   # dataset público real, o teórico
+                "method_type": {"type": "string"},   # download_data|math_analysis|
+                                                     # theoretical|simulation
+                "feasible_local": {"type": "boolean"},  # ¿corre en nuestra máquina?
+            },
+            "required": ["title", "approach", "data_source", "method_type",
+                         "feasible_local"],
+            "additionalProperties": False}},
     },
     "required": ["stance", "argument_for", "argument_against", "improved_hypothesis",
-                 "citation_idx"],
+                 "citation_idx", "experiment_ideas"],
     "additionalProperties": False,
 }
 
@@ -47,11 +60,13 @@ EXP_SCHEMA = {
                 "what": {"type": "string"},
                 "how": {"type": "string"},
                 "data_source": {"type": "string"},
+                "method_type": {"type": "string"},   # download_data|math_analysis|
+                                                     # theoretical|simulation
                 "controls": {"type": "string"},
                 "discriminator": {"type": "string"},
             },
-            "required": ["title", "what", "how", "data_source", "controls",
-                         "discriminator"],
+            "required": ["title", "what", "how", "data_source", "method_type",
+                         "controls", "discriminator"],
             "additionalProperties": False}},
     },
     "required": ["experiments"],
@@ -88,9 +103,32 @@ class HypothesisFlow:
                 if (h.get("status") or "").upper() == "APPROVED"]
 
     # --- literature per hypothesis ----------------------------------------
-    def _query(self, h: dict[str, Any], domain: str) -> str:
-        base = h.get("title") or h.get("description", "")
-        return f"{domain} {base}".strip()[:220]
+    def _english_query(self, h: dict[str, Any], domain: str, *, use_ai: bool) -> str:
+        """Turn the (Spanish) hypothesis into an English scientific search query."""
+        base = f"{h.get('title','')} {h.get('trigger_question','')}".strip()
+        if use_ai:
+            try:
+                from ..llm.providers import CodexCliProvider
+                prov = CodexCliProvider(timeout_sec=90)
+                if prov.available():
+                    schema = {"type": "object",
+                              "properties": {"query": {"type": "string"},
+                                             "keywords": {"type": "array",
+                                                          "items": {"type": "string"}}},
+                              "required": ["query", "keywords"],
+                              "additionalProperties": False}
+                    out = prov.complete_json(
+                        f"Dominio: {domain}. Convierte esta hipótesis en una CONSULTA de "
+                        "búsqueda académica EN INGLÉS con los términos técnicos correctos "
+                        f"(no traducción literal): «{base}». Devuelve query (una línea de "
+                        "6-12 términos clave en inglés) y keywords (lista). Sin comillas.",
+                        schema, temperature=0.1)
+                    q = (out.get("query") or "").strip()
+                    if q:
+                        return q[:240]
+            except Exception:  # noqa: BLE001
+                pass
+        return base[:240]
 
     def investigate(self, project_id: str, hyp_id: str, *, use_ai: bool = True
                     ) -> dict[str, Any]:
@@ -99,32 +137,53 @@ class HypothesisFlow:
             return {"ok": False, "error": "hypothesis not found"}
         p = self.ledger.get_project(project_id)
         domain = p.domain if p else ""
-        from ..knowledge_mesh.connectors import crossref
+        query = self._english_query(h, domain, use_ai=use_ai)
+        from ..knowledge_mesh import mesh
         try:
-            objs = crossref.search(self._query(h, domain), rows=5)
+            found = mesh.topical_search(query, domain=domain, rows=6)
         except Exception:  # noqa: BLE001
-            objs = []
+            found = []
         papers = []
-        for o in objs:
-            doi = (o.identifiers.get("doi") or [""])[0]
-            if not doi:
-                continue
+        for o in found:
             lid = new_id("lit")
             rec = {"id": lid, "angle": h.get("tag", ""), "hyp_id": hyp_id,
-                   "title": o.title, "doi": doi, "type": o.object_type.value,
-                   "integrity": o.integrity_status, "url": o.canonical_url,
-                   "authors": o.authors[:4]}
+                   "title": o["title"], "doi": o.get("doi", ""),
+                   "type": o["type"], "integrity": o["integrity"],
+                   "url": o["url"], "authors": o["authors"],
+                   "abstract": o.get("abstract", ""), "source": o.get("source", ""),
+                   "topics": o.get("topics", []), "relevance": o.get("relevance"),
+                   "query_used": query}
             self.store.put(project_id, "literature", lid, rec, status="INDEXED",
                            actor="knowledge_mesh",
-                           summary=f"paper para {h.get('tag')}: {o.title[:50]}")
+                           summary=f"paper para {h.get('tag')}: {(o['title'] or '')[:50]}")
             papers.append(rec)
 
         confront = self._confront(h, papers, use_ai=use_ai)
+        confront["query_used"] = query
         self.store.update_payload(hyp_id, {
             "lit_status": "DONE", "lit_count": len(papers),
             "confrontation": confront})
+        from .obsidian_sync import sync_project_best_effort
+        sync_project_best_effort(project_id, self._sf)
+        from .critic import critique_async
+        critique_async(project_id, hyp_id, "literatura",
+                       f"Hipótesis: {h.get('title','')}\n"
+                       f"Postura: {confront.get('stance','')}\n"
+                       f"A favor: {confront.get('argument_for','')}\n"
+                       f"En contra: {confront.get('argument_against','')}\n"
+                       f"Mejorada: {confront.get('improved_hypothesis','')}\n"
+                       f"Papers: " + "; ".join(p['title'] for p in papers[:6]),
+                       self._sf)
         return {"ok": True, "hyp_id": hyp_id, "tag": h.get("tag"),
                 "n_papers": len(papers), "papers": papers, "confrontation": confront}
+
+    @staticmethod
+    def _cite(p: dict[str, Any]) -> dict[str, Any]:
+        return {"title": p["title"], "doi": p.get("doi", ""),
+                "source": p.get("source", ""), "url": p.get("url", ""),
+                "relevance": p.get("relevance"),
+                "abstract": (p.get("abstract") or "")[:280],
+                "integrity": p.get("integrity", "")}
 
     def _confront(self, h: dict[str, Any], papers: list[dict[str, Any]], *, use_ai: bool
                   ) -> dict[str, Any]:
@@ -132,36 +191,90 @@ class HypothesisFlow:
             return {"provider": "none",
                     "argument_for": "", "argument_against": "",
                     "improved_hypothesis": h.get("title", ""), "stance": "unassessed",
-                    "citations": [{"title": p["title"], "doi": p["doi"]} for p in papers[:3]]}
+                    "experiment_ideas": [],
+                    "citations": [self._cite(p) for p in papers[:3]]}
         try:
             from ..llm.providers import CodexCliProvider
             prov = CodexCliProvider(timeout_sec=200)
             if not prov.available():
                 raise RuntimeError("codex unavailable")
-            plist = "\n".join(f"[{i}] {p['title']} ({p['doi']}) "
-                              f"{'[RETRACTADO]' if p['integrity']=='retracted' else ''}"
-                              for i, p in enumerate(papers))
+            plist = "\n\n".join(
+                f"[{i}] {p['title']} ({p.get('source','')}, {p['doi']}) "
+                f"{'[RETRACTADO]' if p['integrity']=='retracted' else ''}\n"
+                f"    ABSTRACT: {(p.get('abstract') or 'sin abstract')[:700]}"
+                for i, p in enumerate(papers))
             prompt = (
-                f"Confronta esta HIPÓTESIS con la literatura real encontrada. Hipótesis: "
-                f"«{h.get('title','')}». Pregunta detonante: {h.get('trigger_question','')}. "
-                f"Papers reales (referéncialos SOLO por índice, no inventes citas):\n{plist}\n\n"
-                "Devuelve: stance (supports|challenges|mixed), argument_for, "
-                "argument_against, improved_hypothesis (una versión mejorada/afinada por la "
-                "evidencia) y citation_idx (índices de los papers que respaldan tu análisis). "
-                "Sé escéptico y honesto; nada es un descubrimiento. En español.")
+                "Confronta esta HIPÓTESIS LEYENDO los abstracts reales de la literatura. "
+                f"Hipótesis: «{h.get('title','')}». Pregunta detonante: "
+                f"{h.get('trigger_question','')}.\n\nPapers reales (con abstract; "
+                f"referéncialos SOLO por índice, no inventes citas):\n{plist}\n\n"
+                "Analiza el CONTENIDO de los abstracts. Devuelve: stance "
+                "(supports|challenges|mixed), argument_for (qué de la evidencia la apoya, "
+                "citando hallazgos concretos de los abstracts), argument_against (qué la "
+                "debilita o contradice), improved_hypothesis (versión afinada por lo leído), "
+                "citation_idx (índices de los papers RELEVANTES que realmente usaste), y "
+                "experiment_ideas (2-4 formas CONCRETAS de comprobar la hipótesis que "
+                "PODAMOS EJECUTAR EN UNA COMPUTADORA: bajar datasets públicos reales — NASA, "
+                "ESA, MAST, arXiv data, Planck/WMAP, catálogos abiertos —, correr análisis "
+                "matemático/estadístico o simulaciones teóricas en nuestra máquina, o "
+                "formular un experimento numérico propio. Cada idea: title, approach (pasos "
+                "breves), data_source (dataset PÚBLICO real y accesible, o 'teórico'/"
+                "'simulación'), method_type (download_data|math_analysis|theoretical|"
+                "simulation), feasible_local (true si corre en una laptop). "
+                "Si los papers NO son relevantes, dilo y baja tu confianza. Sé escéptico y "
+                "honesto; nada es un descubrimiento. En español.")
             out = prov.complete_json(prompt, CONFRONT_SCHEMA, temperature=0.3)
             idxs = [i for i in out.get("citation_idx", []) if 0 <= i < len(papers)]
             return {"provider": "codex", "stance": out.get("stance", ""),
                     "argument_for": out.get("argument_for", ""),
                     "argument_against": out.get("argument_against", ""),
                     "improved_hypothesis": out.get("improved_hypothesis", ""),
-                    "citations": [{"title": papers[i]["title"], "doi": papers[i]["doi"]}
-                                  for i in idxs] or
-                                 [{"title": p["title"], "doi": p["doi"]} for p in papers[:3]]}
+                    "experiment_ideas": out.get("experiment_ideas", []),
+                    "citations": [self._cite(papers[i]) for i in idxs] or
+                                 [self._cite(p) for p in papers[:3]]}
         except Exception:  # noqa: BLE001
             return {"provider": "none", "argument_for": "", "argument_against": "",
                     "improved_hypothesis": h.get("title", ""), "stance": "unassessed",
-                    "citations": [{"title": p["title"], "doi": p["doi"]} for p in papers[:3]]}
+                    "experiment_ideas": [],
+                    "citations": [self._cite(p) for p in papers[:3]]}
+
+    def adopt_improved(self, project_id: str, hyp_id: str) -> dict[str, Any]:
+        """Take the confrontation's improved hypothesis → bump the original to a new
+        version, archiving the previous wording (and its confrontation) in history."""
+        h = self.store.get(hyp_id)
+        if not h:
+            return {"ok": False, "error": "hypothesis not found"}
+        conf = h.get("confrontation") or {}
+        improved = (conf.get("improved_hypothesis") or "").strip()
+        if not improved:
+            return {"ok": False, "error": "no hay hipótesis mejorada que tomar"}
+        old_title = h.get("title", "")
+        if improved == old_title:
+            return {"ok": False, "error": "la hipótesis mejorada es idéntica a la actual"}
+        cur_ver = int(h.get("version", 1))
+        new_ver = cur_ver + 1
+        history = list(h.get("history", []))
+        history.append({"version": cur_ver, "title": old_title,
+                        "trigger_question": h.get("trigger_question", ""),
+                        "confrontation": conf, "archived_at": now_iso()})
+        self.store.update_payload(hyp_id, {
+            "title": improved, "version": new_ver, "history": history,
+            # the archived confrontation belongs to v(cur_ver); the new version starts
+            # unassessed until it is re-investigated against the literature.
+            "lit_status": "STALE"})
+        self.ledger.record_event(
+            project_id, ProvenanceAction.UPDATE, "human",
+            f"hipótesis {h.get('tag')} tomada mejorada → v{new_ver}"[:150],
+            {"version": new_ver}, entity_id=hyp_id)
+        from .obsidian_sync import sync_project_best_effort
+        sync_project_best_effort(project_id, self._sf)
+        from .critic import critique_async
+        critique_async(project_id, hyp_id, "nueva_version",
+                       f"El equipo ADOPTÓ esta nueva versión (v{new_ver}): «{improved}». "
+                       f"Versión anterior: «{old_title}». ¿La nueva formulación es "
+                       "realmente mejor, o solo más cómoda/vaga?", self._sf)
+        return {"ok": True, "hyp_id": hyp_id, "version": new_ver,
+                "title": improved, "previous": old_title}
 
     def investigate_all(self, project_id: str, *, use_ai: bool = True) -> dict[str, Any]:
         results = [self.investigate(project_id, h["id"], use_ai=use_ai)
@@ -184,6 +297,7 @@ class HypothesisFlow:
             rec = {"id": eid, "hyp_id": hyp_id, "hyp_tag": h.get("tag", ""),
                    "title": e.get("title", ""), "what": e.get("what", ""),
                    "how": e.get("how", ""), "data_source": e.get("data_source", ""),
+                   "method_type": e.get("method_type", ""),
                    "controls": e.get("controls", ""),
                    "discriminator": e.get("discriminator", ""),
                    "status": "PROPOSED", "synthetic": None, "created_at": now_iso()}
@@ -191,9 +305,27 @@ class HypothesisFlow:
                            actor="experiment_engine",
                            summary=f"experimento propuesto para {h.get('tag')}")
             created.append(rec)
+        from .obsidian_sync import sync_project_best_effort
+        sync_project_best_effort(project_id, self._sf)
+        from .critic import critique_async
+        for rec in created:
+            critique_async(project_id, rec["id"], "experimento_propuesto",
+                           f"Hipótesis: {h.get('title','')}\nExperimento: {rec['title']}\n"
+                           f"Qué: {rec['what']}\nCómo: {rec['how']}\n"
+                           f"Datos: {rec['data_source']}\nControles: {rec['controls']}\n"
+                           f"Discriminador: {rec['discriminator']}", self._sf)
         return {"ok": True, "created": created}
 
     def _experiment_specs(self, h: dict[str, Any], *, use_ai: bool) -> list[dict[str, Any]]:
+        # seeds: the computer-doable ideas surfaced during the literature confrontation
+        ideas = ((h.get("confrontation") or {}).get("experiment_ideas") or [])
+        seed_txt = ""
+        if ideas:
+            seed_txt = "\nParte de estas IDEAS ya sugeridas al leer la literatura " \
+                       "(conviértelas en experimentos completos y ejecutables):\n" + \
+                       "\n".join(f"- {i.get('title','')} [{i.get('method_type','')}] "
+                                 f"datos: {i.get('data_source','')} — {i.get('approach','')}"
+                                 for i in ideas[:4])
         if use_ai:
             try:
                 from ..llm.providers import CodexCliProvider
@@ -201,20 +333,33 @@ class HypothesisFlow:
                 if prov.available():
                     prompt = (
                         f"Propón 2-3 EXPERIMENTOS COMPUTACIONALES concretos para probar la "
-                        f"hipótesis «{h.get('title','')}» (duda: {h.get('doubt','')}). Cada uno: "
+                        f"hipótesis «{h.get('title','')}» (duda: {h.get('doubt','')}).{seed_txt}\n"
+                        "Prioriza cosas EJECUTABLES EN NUESTRA MÁQUINA: bajar datasets públicos "
+                        "reales (NASA/ESA/MAST/Planck/catálogos abiertos), correr análisis "
+                        "matemático/estadístico o simulaciones teóricas locales. Cada uno: "
                         "title, what (qué mide), how (método paso a paso), data_source (dataset "
-                        "PÚBLICO real y accesible), controls (nulos/controles), discriminator "
-                        "(qué resultado la apoyaría vs la falsaría). En español. Reproducible; "
-                        "nada es un descubrimiento.")
+                        "PÚBLICO real y accesible, con nombre concreto), method_type "
+                        "(download_data|math_analysis|theoretical|simulation), controls "
+                        "(nulos/controles), discriminator (qué resultado la apoyaría vs la "
+                        "falsaría). En español. Reproducible; nada es un descubrimiento.")
                     out = prov.complete_json(prompt, EXP_SCHEMA, temperature=0.4)
                     if out.get("experiments"):
                         return out["experiments"]
             except Exception:  # noqa: BLE001
                 pass
+        # offline fallback: derive from confrontation ideas if present, else a null test
+        if ideas:
+            return [{"title": i.get("title", ""), "what": i.get("approach", ""),
+                     "how": i.get("approach", ""), "data_source": i.get("data_source", ""),
+                     "method_type": i.get("method_type", ""),
+                     "controls": "nulos/surrogatos del dominio",
+                     "discriminator": "efecto estable y significativo vs nulos"}
+                    for i in ideas[:3]]
         return [{"title": f"Prueba nula para «{h.get('title','')[:40]}»",
                  "what": "Verifica que la señal no es ruido/artefacto",
                  "how": "Comparar contra surrogatos de ruido y datos barajados",
                  "data_source": "dataset público del dominio",
+                 "method_type": "math_analysis",
                  "controls": "ruido rojo AR(1), shuffle, estrella/muestra de control",
                  "discriminator": "SNR y estabilidad del efecto bajo nulos"}]
 
@@ -239,16 +384,26 @@ class HypothesisFlow:
             return {"ok": False, "error": "experiment not found"}
         runner = self._real_runner(f"{e.get('title','')} {e.get('data_source','')} "
                                    f"{e.get('what','')}")
+        from .critic import critique_async
+        from .obsidian_sync import sync_project_best_effort
         if runner is not None:
             res = runner()
             self.store.update_payload(exp_id, {
                 "status": "COMPLETE", "synthetic": False, "result": res,
                 "claim": res.get("claim", "")}, status="COMPLETE")
+            sync_project_best_effort(project_id, self._sf)
+            critique_async(project_id, exp_id, "experimento_resultado",
+                           f"Experimento: {e.get('title','')}\n"
+                           f"Resultado real: {str(res.get('claim',''))[:600]}", self._sf)
             return {"ok": True, "mode": "real_analysis", "result": res}
         # no code to run this yet → reproducible PLAN, honestly not a result
         plan = self._plan(e, use_ai=use_ai)
         self.store.update_payload(exp_id, {
             "status": "PLANNED", "synthetic": None, "plan": plan}, status="PLANNED")
+        sync_project_best_effort(project_id, self._sf)
+        critique_async(project_id, exp_id, "experimento_resultado",
+                       f"Experimento: {e.get('title','')}\nPLAN (sin ejecutar aún): "
+                       f"{plan[:600]}", self._sf)
         return {"ok": True, "mode": "plan_only", "plan": plan,
                 "note": ("ACERO aún no tiene código para ejecutar este experimento con datos "
                          "reales; se generó un PLAN reproducible (pendiente). No es un resultado.")}

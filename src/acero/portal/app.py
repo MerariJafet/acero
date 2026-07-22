@@ -384,18 +384,26 @@ def build_portal_router() -> APIRouter:
     def hyp_flow(project_id: str, sess: Session = Depends(_require_session)
                  ) -> dict[str, Any]:
         """Approved hypotheses with their literature/confrontation and experiments."""
+        from .critic import CriticAgent
         from .hypothesis_flow import HypothesisFlow
         fl = HypothesisFlow()
+        crits = CriticAgent().latest_by_target(project_id)
         out = []
         for h in fl.approved(project_id):
+            exps = fl.experiments_for(project_id, h["id"])
+            for e in exps:
+                e["critique"] = crits.get(e.get("id", ""))
             out.append({
                 "id": h["id"], "tag": h.get("tag"), "title": h.get("title", ""),
                 "trigger_question": h.get("trigger_question", ""),
                 "kind": h.get("kind", ""),
+                "version": int(h.get("version", 1)),
+                "history": h.get("history", []),
                 "lit_status": h.get("lit_status", "PENDING"),
                 "lit_count": h.get("lit_count", 0),
                 "confrontation": h.get("confrontation"),
-                "experiments": fl.experiments_for(project_id, h["id"]),
+                "critique": crits.get(h["id"]),
+                "experiments": exps,
             })
         return {"project_id": project_id, "approved": out, "n": len(out)}
 
@@ -407,12 +415,39 @@ def build_portal_router() -> APIRouter:
         from .hypothesis_flow import HypothesisFlow
         return HypothesisFlow().investigate(project_id, hyp_id)
 
+    @r.post("/api/projects/{project_id}/obsidian/sync")
+    def obsidian_sync(project_id: str, sess: Session = Depends(_require_session),
+                      x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Export the project's research memory to the ACERO-Research Obsidian vault."""
+        _require_csrf(sess, x_csrf_token)
+        from .obsidian_sync import ObsidianExporter
+        return ObsidianExporter().sync_project(project_id)
+
+    @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/adopt-improved")
+    def hyp_adopt_improved(project_id: str, hyp_id: str,
+                           sess: Session = Depends(_require_session),
+                           x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .hypothesis_flow import HypothesisFlow
+        return HypothesisFlow().adopt_improved(project_id, hyp_id)
+
     @r.post("/api/projects/{project_id}/investigate-all")
     def hyp_investigate_all(project_id: str, sess: Session = Depends(_require_session),
                             x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Launch PARALLEL literature subagents (one per approved hypothesis)."""
         _require_csrf(sess, x_csrf_token)
-        from .hypothesis_flow import HypothesisFlow
-        return HypothesisFlow().investigate_all(project_id)
+        from .parallel_runs import start_investigate_all
+        return {"ok": True, "run": start_investigate_all(project_id)}
+
+    @r.get("/api/runs/{run_id}")
+    def run_status(run_id: str, sess: Session = Depends(_require_session)
+                   ) -> dict[str, Any]:
+        """Live progress of a parallel run (subagents per item)."""
+        from .parallel_runs import get_run
+        run = get_run(run_id)
+        if run is None:
+            raise HTTPException(404, "run not found (o el portal se reinició)")
+        return run
 
     @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/experiments/propose")
     def hyp_propose_exps(project_id: str, hyp_id: str,
@@ -432,9 +467,10 @@ def build_portal_router() -> APIRouter:
     @r.post("/api/projects/{project_id}/experiments/run-all")
     def exp_run_all(project_id: str, sess: Session = Depends(_require_session),
                     x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Launch PARALLEL experiment subagents (one per proposed experiment)."""
         _require_csrf(sess, x_csrf_token)
-        from .hypothesis_flow import HypothesisFlow
-        return HypothesisFlow().run_all_experiments(project_id)
+        from .parallel_runs import start_run_all_experiments
+        return {"ok": True, "run": start_run_all_experiments(project_id)}
 
     @r.get("/api/projects/{project_id}/status")
     def project_status(project_id: str, sess: Session = Depends(_require_session)

@@ -236,6 +236,24 @@ body {
 .run-all { margin: .3rem 0 1rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
 .confront { margin-top: .7rem; border-top: 1px dashed #232b36; padding-top: .6rem; }
 .confront ul { margin: .3rem 0 0 1rem; }
+.confront code { background: #10151d; padding: .05rem .35rem; border-radius: 5px; color: #79c0ff; }
+ul.cites { list-style: none; margin-left: 0; padding: 0; display: grid; gap: .5rem; }
+.cite { border-left: 2px solid #2b3444; padding: .1rem 0 .1rem .6rem; font-size: .85rem; }
+.cite .src { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #8b949e;
+  background: #161b22; border-radius: 4px; padding: .05rem .35rem; margin-left: .3rem; }
+.cite-abs { margin: .25rem 0 0; font-size: .8rem; color: #9aa4b1; line-height: 1.45; }
+.hyp-field.improved { border: 1px solid #1f3d2a; background: #0e1b12; border-radius: 10px;
+  padding: .55rem .7rem; }
+.act.small { font-size: .8rem; padding: .28rem .7rem; margin-top: .4rem; }
+ul.ideas { list-style: none; margin: .3rem 0 0; padding: 0; display: grid; gap: .55rem; }
+ul.ideas > li { border-left: 2px solid #2b3444; padding: .1rem 0 .1rem .6rem; font-size: .85rem; }
+.warn-txt { color: #d9a441; }
+.critic-note { margin-top: .7rem; border-top: 1px solid #2b2436; padding: .55rem .7rem .5rem;
+  background: #14101c; border-radius: 0 0 10px 10px; font-size: .85rem; }
+.critic-note .critic-head { display: flex; align-items: center; gap: .45rem; margin-bottom: .25rem; }
+.critic-note > p { margin: .2rem 0 0; color: #b6aecb; line-height: 1.5; }
+.critic-note details { margin-top: .35rem; }
+.critic-note ul { margin: .25rem 0 0 1.1rem; }
 .exp-list { margin-top: .6rem; display: grid; gap: .5rem; }
 .exp-line { border: 1px solid var(--border); border-radius: 10px; padding: .6rem .8rem; background: #10151d; }
 .exp-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .3rem; }

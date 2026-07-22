@@ -99,6 +99,14 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
 
     approved = [h for h in hyps if (h.get("status") or "").upper() == "APPROVED"]
 
+    # newest critique of "El Revisor" per target entity (footer on each card)
+    crits: dict[str, dict[str, Any]] = {}
+    for c in store.list_objects(project_id, kind="critique"):
+        t = c.get("target_id", "")
+        if t and (t not in crits
+                  or (c.get("created_at") or "") > (crits[t].get("created_at") or "")):
+            crits[t] = c
+
     # results = experiment outcomes (metrics/claims) + preserved negatives
     results_items: list[dict[str, Any]] = []
     for e in exps:
@@ -136,6 +144,7 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
                        "test_idea": h.get("test_idea", ""),
                        "competes_with": h.get("competes_with", ""),
                        "provider": h.get("provider", ""),
+                       "critique": crits.get(h.get("id", "")),
                        "flag": "plantilla" if h.get("synthetic") else ""} for h in hyps],
         },
         "literatura": {

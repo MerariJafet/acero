@@ -16,6 +16,14 @@ from acero.literature.store import LiteratureStore
 FIXTURE_CORPUS = Path(__file__).parent / "fixtures" / "corpus"
 
 
+@pytest.fixture(autouse=True)
+def _isolated_obsidian_vault(tmp_path, monkeypatch):
+    """Tests must NEVER write to the user's real ACERO-Research vault, and the
+    async critic subagent must never fire real Codex processes from tests."""
+    monkeypatch.setenv("ACERO_OBSIDIAN_VAULT", str(tmp_path / "_test_vault"))
+    monkeypatch.setenv("ACERO_CRITIC_DISABLED", "1")
+
+
 @pytest.fixture()
 def session_factory():
     engine = create_engine("sqlite:///:memory:", future=True)

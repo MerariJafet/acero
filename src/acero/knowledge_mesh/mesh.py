@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import sources as src
-from .connectors import crossref
+from .connectors import arxiv, crossref, openalex
 
 
 def list_sources() -> list[dict[str, Any]]:
@@ -32,6 +32,45 @@ def lookup_doi(doi: str) -> dict[str, Any]:
     return {"found": True, "object": obj.as_dict(),
             "integrity_status": obj.integrity_status,
             "is_acero_generated": obj.is_acero_generated}
+
+
+def topical_search(query: str, *, domain: str = "", rows: int = 6) -> list[dict[str, Any]]:
+    """Relevance-ranked, multi-source TOPICAL search WITH abstracts.
+
+    Uses OpenAlex (relevance + abstracts + concepts) as primary; adds arXiv for
+    physics/astronomy/math/cs preprints; falls back to Crossref. De-duplicates by DOI/
+    title. This is what real literature discovery should use — not a bare DOI lookup.
+    """
+    objs: list[Any] = []
+    try:
+        objs += openalex.search(query, rows=rows)
+    except Exception:  # noqa: BLE001
+        pass
+    if any(k in (domain or "").lower() for k in ("physics", "astro", "math", "quant", "cs")) \
+            or not objs:
+        try:
+            objs += arxiv.search(query, rows=max(2, rows // 2))
+        except Exception:  # noqa: BLE001
+            pass
+    if not objs:
+        try:
+            objs += crossref.search(query, rows=rows)
+        except Exception:  # noqa: BLE001
+            pass
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for o in objs:
+        doi = (o.identifiers.get("doi") or [""])[0]
+        key = doi or (o.title or "").lower()[:60]
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append({"title": o.title, "doi": doi, "type": o.object_type.value,
+                    "integrity": o.integrity_status, "url": o.canonical_url,
+                    "authors": o.authors[:4], "abstract": o.abstract or "",
+                    "topics": o.topics[:5], "source": o.source_id,
+                    "relevance": o.verification.get("relevance_score")})
+    return out[:rows]
 
 
 def search(query: str, *, rows: int = 5) -> dict[str, Any]:

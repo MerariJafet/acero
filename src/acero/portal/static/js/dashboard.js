@@ -262,7 +262,7 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
           ${pill(i.meta || "", approved ? "ok" : "warn")}
           ${i.flag ? " " + pill(i.flag, "bad") : ""}
           ${reasoning ? `<button class="hyp-toggle" data-htoggle="${ix}">ver razonamiento ▾</button>` : ""}
-        </div>${actions}${reasoning}</div>`;
+        </div>${actions}${reasoning}${criticFoot(i.critique)}</div>`;
     }).join("");
   } else {
     items = (f.items || []).map((i) => {
@@ -384,6 +384,46 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
 }
 
 /* ---------- hypothesis-centric literature + experiments dashboards -------- */
+/* Footer with the resident critic's ("El Revisor") latest take on a card. */
+function criticFoot(c) {
+  if (!c) return "";
+  const COLOR = { solido: "ok", prometedor: "warn", debil: "warn",
+                  defectuoso: "bad", sin_revision: "warn" };
+  const list = (arr, label) => (arr && arr.length)
+    ? `<div class="hyp-field"><b>${label}</b><ul>${arr.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+  const details = (c.objections || []).length || (c.alternatives || []).length ||
+                  (c.suggestions || []).length || c.hard_question ? `
+    <details><summary class="tag">ver crítica completa</summary>
+      ${list(c.objections, "⚠️ Objeciones")}
+      ${list(c.alternatives, "🔀 Explicaciones alternativas no descartadas")}
+      ${list(c.suggestions, "🛠 Sugerencias ejecutables")}
+      ${c.hard_question ? `<div class="hyp-field"><b>🎯 La pregunta incómoda</b><p>${esc(c.hard_question)}</p></div>` : ""}
+    </details>` : "";
+  return `<div class="critic-note">
+    <div class="critic-head">🧐 <b>El Revisor</b> ${pill(c.verdict || "", COLOR[c.verdict] || "warn")}
+      <span class="tag">${esc(c.task || "")}</span></div>
+    <p>${esc(c.summary || "")}</p>${details}
+  </div>`;
+}
+
+/* Poll a parallel run (one subagent per item) and paint live progress. */
+function pollRun(runId, out, onDone) {
+  const icon = { PENDING: "⏳", RUNNING: "🤖", DONE: "✅", ERROR: "❌" };
+  const timer = setInterval(async () => {
+    const { ok, body: r } = await get(`/portal/api/runs/${encodeURIComponent(runId)}`);
+    if (!ok || !r) {
+      clearInterval(timer);
+      out.textContent = "Se perdió el run (¿portal reiniciado?).";
+      return;
+    }
+    out.innerHTML = `${r.done}/${r.total} subagentes — ` + (r.items || [])
+      .map((i) => `${icon[i.status] || "⏳"} ${esc((i.label || "").split(":")[0])}` +
+                  (i.status === "ERROR" ? ` <span class="err">(${esc(i.summary)})</span>` : ""))
+      .join(" · ");
+    if (r.status === "DONE") { clearInterval(timer); onDone(r); }
+  }, 2500);
+}
+
 async function renderHypFlow(view, pid, phaseKey, ph, cb) {
   const { ok, body: fl } = await get(`/portal/api/projects/${encodeURIComponent(pid)}/hyp-flow`);
   const approved = (ok && fl.approved) || [];
@@ -402,22 +442,58 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
     const cards = approved.map((h) => {
       const done = h.lit_status === "DONE";
       const c = h.confrontation || {};
-      const cites = (c.citations || []).map((x) =>
-        `<li><a href="https://doi.org/${esc(x.doi)}" target="_blank" rel="noopener">${esc((x.title || x.doi).slice(0, 80))}</a></li>`).join("");
+      const relTag = (x) => x.relevance ? `<span class="tag">rel ${Math.round(x.relevance)}</span>` : "";
+      const cites = (c.citations || []).map((x) => {
+        const href = x.url || (x.doi ? `https://doi.org/${esc(x.doi)}` : "#");
+        const retr = x.integrity === "retracted" ? ` <span class="pill bad">RETRACTADO</span>` : "";
+        return `<li class="cite">
+          <a href="${esc(href)}" target="_blank" rel="noopener">${esc((x.title || x.doi).slice(0, 90))}</a>
+          <span class="src">${esc(x.source || "")}</span> ${relTag(x)}${retr}
+          ${x.abstract ? `<p class="cite-abs">${esc(x.abstract)}…</p>` : ""}</li>`;
+      }).join("");
+      const qUsed = c.query_used ? `<p class="tag">🔤 Búsqueda ejecutada (inglés): <code>${esc(c.query_used)}</code></p>` : "";
+      const ver = (h.version || 1) > 1 ? `<span class="pill ok">v${h.version}</span>` : "";
+      const stale = h.lit_status === "STALE"
+        ? `<p class="tag warn-txt">⚠️ Tomaste una versión mejorada — vuelve a <b>Investigar</b> para confrontar la v${h.version} con nueva literatura.</p>` : "";
+      // improved-hypothesis block gets a "Tomar hipótesis" button that versions the original
+      const improved = (c.improved_hypothesis || "").trim();
+      const canAdopt = improved && improved !== (h.title || "").trim();
+      const improvedBlock = improved ? `
+          <div class="hyp-field improved">
+            <b>✨ Hipótesis mejorada por la evidencia</b><p>${esc(improved)}</p>
+            ${canAdopt ? `<button class="act small" data-adopt="${esc(h.id)}">⤴ Tomar hipótesis → v${(h.version || 1) + 1}</button>` : `<span class="tag">ya es la versión actual</span>`}
+          </div>` : "";
+      // computer-doable experiment ideas surfaced while reading the literature
+      const ideas = (c.experiment_ideas || []);
+      const mIcon = { download_data: "⬇️ bajar datos", math_analysis: "∑ análisis", theoretical: "📐 teórico", simulation: "🎲 simulación" };
+      const ideasBlock = ideas.length ? `
+          <div class="hyp-field"><b>🧪 Cómo comprobarlo (ejecutable en la compu)</b>
+            <ul class="ideas">${ideas.map((i) => `<li>
+              <b>${esc(i.title || "")}</b>
+              <span class="src">${esc(mIcon[i.method_type] || i.method_type || "")}</span>
+              ${i.feasible_local ? `<span class="pill ok">local</span>` : `<span class="pill warn">requiere infra</span>`}
+              <p class="cite-abs">${esc(i.approach || "")}</p>
+              <p class="tag">📦 Datos: ${esc(i.data_source || "")}</p></li>`).join("")}</ul>
+            <p class="tag">Estas ideas alimentan la fase de <b>Experimentos</b>.</p>
+          </div>` : "";
       const confrontHtml = done && c.provider === "codex" ? `
         <div class="confront">
+          ${qUsed}
           <div class="hyp-field"><b>⚖️ Postura de la evidencia</b> ${pill(c.stance || "", c.stance === "supports" ? "ok" : c.stance === "challenges" ? "bad" : "warn")}</div>
           <div class="hyp-field"><b>➕ A favor</b><p>${esc(c.argument_for || "")}</p></div>
           <div class="hyp-field"><b>➖ En contra</b><p>${esc(c.argument_against || "")}</p></div>
-          <div class="hyp-field"><b>✨ Hipótesis mejorada por la evidencia</b><p>${esc(c.improved_hypothesis || "")}</p></div>
-          <div class="hyp-field"><b>📎 Citas (${(c.citations || []).length})</b><ul>${cites}</ul></div>
-        </div>` : (done ? `<p class="tag">Se indexaron ${h.lit_count} papers (confrontación IA no disponible).</p>` : "");
+          ${improvedBlock}
+          ${ideasBlock}
+          <div class="hyp-field"><b>📎 Literatura leída (${(c.citations || []).length})</b><ul class="cites">${cites}</ul></div>
+        </div>` : (done ? `<div class="confront">${qUsed}<p class="tag">Se indexaron ${h.lit_count} papers (confrontación IA no disponible).</p><ul class="cites">${cites}</ul></div>` : "");
       return `<div class="card hyp-card">
-        <div class="hyp-head"><b>${esc(h.tag)}: ${esc(h.title)}</b>
-          ${pill(done ? `${h.lit_count} papers ✓` : "sin investigar", done ? "ok" : "warn")}</div>
-        <p class="tag">Se buscará literatura real (Crossref) sobre: ${esc(h.trigger_question || h.title)}</p>
+        <div class="hyp-head"><b>${esc(h.tag)}: ${esc(h.title)}</b> ${ver}
+          ${pill(done ? `${h.lit_count} papers ✓` : (h.lit_status === "STALE" ? "re-investigar" : "sin investigar"), done ? "ok" : "warn")}</div>
+        <p class="tag">Literatura real multi-fuente (OpenAlex + arXiv + Crossref) sobre: ${esc(h.trigger_question || h.title)}</p>
+        ${stale}
         <button class="act" data-invest="${esc(h.id)}">${done ? "↻ Re-investigar" : "🔎 Investigar"}</button>
         <div class="confront-out" data-invout="${esc(h.id)}">${confrontHtml}</div>
+        ${criticFoot(h.critique)}
       </div>`;
     }).join("");
     view.innerHTML = back +
@@ -425,6 +501,7 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
        <div class="pulse-head"><h1>📚 Investigación de literatura</h1>
          <span class="tag">${approved.length} hipótesis aprobadas</span></div>
        <div class="run-all"><button class="act" id="lit-run-all">▶▶ Correr TODAS las investigaciones</button>
+         <button class="act ghost" id="obs-sync">🧠 Sync Obsidian</button>
          <span id="lit-run-out" class="tag" aria-live="polite"></span></div>
        ${cards}
        <p class="tag">Cada tarjeta confronta su hipótesis con citas reales y propone una versión mejorada. La síntesis IA es ayuda, no evidencia.</p>`;
@@ -438,16 +515,44 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         b.disabled = false;
         if (iok) cb.openPhase(pid, "literatura");
       }));
+    view.querySelectorAll("[data-adopt]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        b.textContent = "Tomando…";
+        const { ok: aok, body: a } = await post(
+          `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.adopt}/adopt-improved`, {});
+        b.disabled = false;
+        if (aok && a.ok) cb.openPhase(pid, "literatura");
+        else b.textContent = "Error: " + ((a && a.error) || "no se pudo tomar");
+      }));
     view.querySelector("#lit-run-all").addEventListener("click", async () => {
       const out = view.querySelector("#lit-run-out");
       const btn = view.querySelector("#lit-run-all");
       btn.disabled = true;
-      out.textContent = "Corriendo todas (puede tardar varios minutos)…";
+      out.textContent = "Lanzando subagentes en paralelo…";
       const { ok: aok, body: a } = await post(
         `/portal/api/projects/${encodeURIComponent(pid)}/investigate-all`, {});
+      if (!aok || !a.ok || !a.run) {
+        btn.disabled = false;
+        out.textContent = "Error al lanzar los subagentes.";
+        return;
+      }
+      pollRun(a.run.id, out, () => {
+        btn.disabled = false;
+        cb.openPhase(pid, "literatura");
+      });
+    });
+    view.querySelector("#obs-sync").addEventListener("click", async () => {
+      const out = view.querySelector("#lit-run-out");
+      const btn = view.querySelector("#obs-sync");
+      btn.disabled = true;
+      out.textContent = "Sincronizando vault Obsidian…";
+      const { ok: sok, body: s } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/obsidian/sync`, {});
       btn.disabled = false;
-      if (aok && a.ok) cb.openPhase(pid, "literatura");
-      else out.textContent = "Error al correr todas.";
+      out.textContent = sok && s.ok
+        ? `🧠 ${s.notes_written} notas en ${s.vault}`
+        : "Error al sincronizar vault.";
     });
   } else {
     // experimentos por hipótesis
@@ -458,13 +563,15 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         const stColor = st === "COMPLETE" ? "ok" : st === "PLANNED" ? "warn" : "warn";
         const result = e.result ? `<div class="tag">${esc((e.claim || e.result.claim || "").slice(0, 160))}</div>` : "";
         const plan = e.plan ? `<details><summary class="tag">plan de ejecución</summary><div class="lms-body">${esc(e.plan)}</div></details>` : "";
+        const mIcon = { download_data: "⬇️ bajar datos", math_analysis: "∑ análisis", theoretical: "📐 teórico", simulation: "🎲 simulación" };
+        const mt = e.method_type ? `<span class="src">${esc(mIcon[e.method_type] || e.method_type)}</span>` : "";
         return `<div class="exp-line">
-          <div class="exp-head"><b>${esc(e.title || "experimento")}</b> ${pill(st, stColor)}
+          <div class="exp-head"><b>${esc(e.title || "experimento")}</b> ${mt} ${pill(st, stColor)}
             ${st === "PROPOSED" ? `<button class="act" data-runexp="${esc(e.id)}">▶ Correr experimento</button>` : ""}</div>
           <div class="tag"><b>Qué:</b> ${esc(e.what || "")}</div>
           <div class="tag"><b>Cómo:</b> ${esc(e.how || "")}</div>
           <div class="tag"><b>Datos:</b> ${esc(e.data_source || "")} · <b>Controles:</b> ${esc(e.controls || "")}</div>
-          ${result}${plan}
+          ${result}${plan}${criticFoot(e.critique)}
         </div>`;
       }).join("");
       return `<div class="card hyp-card">
@@ -502,11 +609,18 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
       const out = view.querySelector("#exp-run-out");
       const btn = view.querySelector("#exp-run-all");
       btn.disabled = true;
-      out.textContent = "Corriendo todos los experimentos…";
+      out.textContent = "Lanzando subagentes en paralelo…";
       const { ok: aok, body: a } = await post(
         `/portal/api/projects/${encodeURIComponent(pid)}/experiments/run-all`, {});
-      btn.disabled = false;
-      if (aok && a.ok) { out.textContent = a.note; cb.openPhase(pid, "experimentos"); }
+      if (!aok || !a.ok || !a.run) {
+        btn.disabled = false;
+        out.textContent = "Error al lanzar los subagentes.";
+        return;
+      }
+      pollRun(a.run.id, out, () => {
+        btn.disabled = false;
+        cb.openPhase(pid, "experimentos");
+      });
     });
   }
   view.querySelector("#ph-back").addEventListener("click", () => cb.openProject(pid));

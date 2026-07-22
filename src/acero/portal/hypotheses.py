@@ -118,6 +118,13 @@ class HypothesisService:
                            actor="hypothesis_engine",
                            summary=f"hipótesis crítica {tag} ({provider})")
             created.append(payload)
+        from .critic import critique_async
+        for c in created:
+            critique_async(project_id, c["id"], "hipotesis",
+                           f"Hipótesis {c['tag']}: {c['title']}\n"
+                           f"Pregunta detonante: {c['trigger_question']}\n"
+                           f"Argumento: {c['argument']}\nDuda: {c['doubt']}\n"
+                           f"Idea de prueba: {c['test_idea']}", self._sf)
         return {"ok": True, "provider": provider, "created": created,
                 "disclaimer": "Hipótesis generadas como candidatos a PROBAR; no son "
                               "evidencia ni descubrimientos."}
