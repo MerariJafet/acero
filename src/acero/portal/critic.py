@@ -74,10 +74,23 @@ class CriticAgent:
             for p in lit)
 
     # --- synchronous critique (used directly in tests) ------------------------
+    def _version_label(self, project_id: str, target_id: str) -> tuple[int, str]:
+        """Aris v{hypVersion}.{seq}: which version of the flow this critique judges."""
+        t = self.store.get(target_id) or {}
+        hyp = t if "tag" in t and "hyp_id" not in t else \
+            (self.store.get(t.get("hyp_id", "")) or {})
+        ver = int(hyp.get("version", 1)) if hyp else 1
+        seq = 1 + sum(1 for x in self.store.list_objects(project_id, kind="critique")
+                      if x.get("target_id") == target_id
+                      and int(x.get("hyp_version", 1)) == ver)
+        return ver, f"Aris v{ver}.{seq}"
+
     def critique_now(self, project_id: str, target_id: str, task: str,
                      context: str, *, use_ai: bool = True) -> dict[str, Any]:
         out = self._review(project_id, task, context, use_ai=use_ai)
+        ver, label = self._version_label(project_id, target_id)
         rec = {"id": new_id("crit"), "target_id": target_id, "task": task,
+               "hyp_version": ver, "label": label,
                "created_at": now_iso(), **out}
         self.store.put(project_id, "critique", rec["id"], rec, status="ISSUED",
                        actor="critic_agent",

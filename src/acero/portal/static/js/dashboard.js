@@ -261,6 +261,7 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
       return `<div class="card hyp-card">
         <div class="hyp-head">
           <b>${esc(i.tag)}: ${esc(i.title)}</b>
+          ${verChip(`H v${i.version || 1}`, true, "versión actual de la hipótesis")}
           ${klabel ? " " + pill(klabel, kcolor) : ""} ${anom}
           ${pill(i.meta || "", approved ? "ok" : "warn")}
           ${i.flag ? " " + pill(i.flag, "bad") : ""}
@@ -272,7 +273,7 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
           <a href="#" data-goexp>→ ir a Experimentos</a>
           <button class="act ghost danger" data-hdel="${esc(i.id)}" data-tag="${esc(i.tag)}">🗑 Borrar</button>
         </div>
-        ${reasoning}${i.critique ? criticFoot(i.critique, i.id) : criticEmpty(i.id, "hipotesis")}</div>`;
+        ${reasoning}${i.critique ? criticFoot(i.critique, i.id, i.version || 1) : criticEmpty(i.id, "hipotesis")}</div>`;
     }).join("");
   } else {
     items = (f.items || []).map((i) => {
@@ -429,8 +430,13 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
 }
 
 /* ---------- hypothesis-centric literature + experiments dashboards -------- */
+/* Versioned label chips: green = al día con la versión actual, ámbar = desactualizado. */
+function verChip(text, isCurrent, title) {
+  return `<span class="pill vtag ${isCurrent ? "ok" : "warn"}" title="${esc(title || (isCurrent ? "al día con la versión actual" : "hecho sobre una versión anterior — actualiza"))}">${esc(text)}</span>`;
+}
+
 /* Footer with the resident critic's ("El Revisor") latest take on a card. */
-function criticFoot(c, targetId) {
+function criticFoot(c, targetId, curVer) {
   if (!c) return "";
   const COLOR = { solido: "ok", prometedor: "warn", debil: "warn",
                   defectuoso: "bad", sin_revision: "warn" };
@@ -461,7 +467,9 @@ function criticFoot(c, targetId) {
       <button class="act ghost" data-crithist="${esc(targetId)}">🗂 Historial</button>
     </div><div class="crit-hist" data-histout="${esc(targetId)}"></div>` : "";
   return `<div class="critic-note">
-    <div class="critic-head">🧐 <b>Aristóteles</b> ${pill(c.verdict || "", COLOR[c.verdict] || "warn")}
+    <div class="critic-head">🧐 <b>Aristóteles</b>
+      ${c.label ? verChip(c.label, !curVer || (c.hyp_version || 1) >= curVer) : ""}
+      ${pill(c.verdict || "", COLOR[c.verdict] || "warn")}
       <span class="tag">${esc(c.task || "")}</span> ${objChip}</div>
     <p>${esc(c.summary || "")}</p>${details}${tools}
   </div>`;
@@ -599,7 +607,11 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
           ${x.abstract ? `<p class="cite-abs">${esc(x.abstract)}…</p>` : ""}</li>`;
       }).join("");
       const qUsed = c.query_used ? `<p class="tag">🔤 Búsqueda ejecutada (inglés): <code>${esc(c.query_used)}</code></p>` : "";
-      const ver = (h.version || 1) > 1 ? `<span class="pill ok">v${h.version}</span>` : "";
+      const hv = h.version || 1;
+      const iv = (c.hyp_version || (done ? 1 : 0));
+      const ver = verChip(`H v${hv}`, true, "versión actual de la hipótesis");
+      const invChip = iv ? verChip(`Inv v${iv}`, iv >= hv,
+        iv >= hv ? "investigación de la versión actual" : `investigaste la v${iv} pero la hipótesis ya va en v${hv} — re-investiga`) : "";
       const stale = h.lit_status === "STALE"
         ? `<p class="tag warn-txt">⚠️ Tomaste una versión mejorada — vuelve a <b>Investigar</b> para confrontar la v${h.version} con nueva literatura.</p>` : "";
       // improved-hypothesis block gets a "Tomar hipótesis" button that versions the original
@@ -636,7 +648,7 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
       const newEv = (h.new_evidence_count || 0) > 0
         ? `<span class="pill warn">📡 ${h.new_evidence_count} papers nuevos</span>` : "";
       return `<div class="card hyp-card">
-        <div class="hyp-head"><b>${esc(h.tag)}: ${esc(h.title)}</b> ${ver} ${newEv}
+        <div class="hyp-head"><b>${esc(h.tag)}: ${esc(h.title)}</b> ${ver} ${invChip} ${newEv}
           ${pill(done ? `${h.lit_count} papers ✓` : (h.lit_status === "STALE" ? "re-investigar" : "sin investigar"), done ? "ok" : "warn")}</div>
         <p class="tag">Literatura real multi-fuente (OpenAlex + arXiv + Crossref) sobre: ${esc(h.trigger_question || h.title)}</p>
         ${stale}
@@ -645,7 +657,7 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         ${done ? `<button class="act ghost" data-deepen="${esc(h.id)}">🕸 Profundizar (referencias + PDFs)</button>` : ""}
         <button class="act ghost" data-htrace="${esc(h.id)}">🧭 Detalle</button>
         <div class="confront-out" data-invout="${esc(h.id)}">${confrontHtml}</div>
-        ${h.critique ? criticFoot(h.critique, h.id) : criticEmpty(h.id, "literatura")}
+        ${h.critique ? criticFoot(h.critique, h.id, h.version || 1) : criticEmpty(h.id, "literatura")}
       </div>`;
     }).join("");
     view.innerHTML = back +
@@ -826,16 +838,19 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         const plan = e.plan ? `<details><summary class="tag">plan de ejecución</summary><div class="lms-body">${esc(e.plan)}</div></details>` : "";
         const mIcon = { download_data: "⬇️ bajar datos", math_analysis: "∑ análisis", theoretical: "📐 teórico", simulation: "🎲 simulación" };
         const mt = e.method_type ? `<span class="src">${esc(mIcon[e.method_type] || e.method_type)}</span>` : "";
+        const ev = e.hyp_version || 1;
+        const evChip = verChip(`Exp v${ev}`, ev >= (h.version || 1),
+          ev >= (h.version || 1) ? "experimento de la versión actual" : `propuesto para la v${ev}; la hipótesis va en v${h.version} — re-propón o reconsidera`);
         const viaB = String(e.via || "").startsWith("mission") ? `<span class="src">🚀 misión</span>` : (e.from_critique ? `<span class="src">🧐 de crítica</span>` : "");
         const sup = e.superseded_by_critique ? `<span class="pill warn">supeditado a crítica</span>` : "";
         const savedB = e.saved ? `<span class="pill ok">💾 guardado</span>` : `<button class="act ghost" data-esave="${esc(e.id)}">💾 Guardar</button>`;
         return `<div class="exp-line">
-          <div class="exp-head"><b>${esc(e.title || "experimento")}</b> ${mt} ${viaB} ${pill(st, stColor)} ${sup} ${savedB}
+          <div class="exp-head"><b>${esc(e.title || "experimento")}</b> ${evChip} ${mt} ${viaB} ${pill(st, stColor)} ${sup} ${savedB}
             ${st === "PROPOSED" ? `<button class="act" data-runexp="${esc(e.id)}">▶ Correr experimento</button> <span class="tag" data-runout="${esc(e.id)}" aria-live="polite"></span>` : ""}</div>
           <div class="tag"><b>Qué:</b> ${esc(e.what || "")}</div>
           <div class="tag"><b>Cómo:</b> ${esc(e.how || "")}</div>
           <div class="tag"><b>Datos:</b> ${esc(e.data_source || "")} · <b>Controles:</b> ${esc(e.controls || "")}</div>
-          ${result}${genDetail}${ferr}${plan}${e.critique ? criticFoot(e.critique, e.id) : criticEmpty(e.id, "experimento_resultado")}
+          ${result}${genDetail}${ferr}${plan}${e.critique ? criticFoot(e.critique, e.id, h.version || 1) : criticEmpty(e.id, "experimento_resultado")}
         </div>`;
       }).join("");
       return `<div class="card hyp-card">

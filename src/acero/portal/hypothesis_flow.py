@@ -154,7 +154,8 @@ class HypothesisFlow:
                    "topics": o.get("topics", []), "relevance": o.get("relevance"),
                    "openalex_id": o.get("openalex_id", ""),
                    "referenced_works": o.get("referenced_works", []),
-                   "via": via, "query_used": query}
+                   "via": via, "hyp_version": int(h.get("version", 1)),
+                   "query_used": query}
             self.store.put(project_id, "literature", lid, rec, status="INDEXED",
                            actor="knowledge_mesh",
                            summary=f"paper para {h.get('tag')}: {(o['title'] or '')[:50]}")
@@ -162,6 +163,7 @@ class HypothesisFlow:
 
         confront = self._confront(h, papers, use_ai=use_ai)
         confront["query_used"] = query
+        confront["hyp_version"] = int(h.get("version", 1))
         self.store.update_payload(hyp_id, {
             "lit_status": "DONE", "lit_count": len(papers),
             "confrontation": confront})
@@ -403,6 +405,7 @@ class HypothesisFlow:
                    "method_type": e.get("method_type", ""),
                    "controls": e.get("controls", ""),
                    "discriminator": e.get("discriminator", ""), "via": via,
+                   "hyp_version": int(h.get("version", 1)),
                    "status": "PROPOSED", "synthetic": None, "created_at": now_iso()}
             self.store.put(project_id, "experiment", eid, rec, status="PROPOSED",
                            actor="experiment_engine",

@@ -449,3 +449,5 @@ caption { text-align: left; color: var(--muted); padding-bottom: .4rem; }
   .proj-grid, .phase-grid { grid-template-columns: 1fr; }
   .tenant-picker select { max-width: 180px; }
 }
+.pill.vtag { font-weight: 600; letter-spacing: .02em; border: 1px solid transparent; }
+.pill.vtag.warn { border-color: #7a5a12; }
