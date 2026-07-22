@@ -224,6 +224,11 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
   if (!f) { view.innerHTML = "<p class='err'>fase desconocida</p>"; return; }
   const m = f.methodology || {};
 
+  // literature + experiments are hypothesis-centric dashboards
+  if (phaseKey === "literatura" || phaseKey === "experimentos") {
+    return renderHypFlow(view, pid, phaseKey, ph, cb);
+  }
+
   // rich, interactive hypothesis cards
   let items;
   if (phaseKey === "hipotesis") {
@@ -242,14 +247,22 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
           </div>
           <div class="hyp-answer" data-hans="${ix}" aria-live="polite"></div>
         </div>` : "";
+      const approved = i.meta === "APPROVED";
+      const actions = `<div class="hyp-actions">
+          ${approved
+            ? `<span class="pill ok">✓ Aprobada</span>
+               <button class="act ghost" data-hstatus="${esc(i.id)}" data-to="PROPOSED">Desaprobar</button>`
+            : `<button class="act" data-happrove="${esc(i.id)}" data-tag="${esc(i.tag)}">✓ Aprobar</button>
+               <button class="act ghost" data-hstatus="${esc(i.id)}" data-to="REJECTED">Rechazar</button>`}
+        </div>`;
       return `<div class="card hyp-card">
         <div class="hyp-head">
           <b>${esc(i.tag)}: ${esc(i.title)}</b>
           ${klabel ? " " + pill(klabel, kcolor) : ""}
-          ${pill(i.meta || "", i.meta === "APPROVED" ? "ok" : "warn")}
+          ${pill(i.meta || "", approved ? "ok" : "warn")}
           ${i.flag ? " " + pill(i.flag, "bad") : ""}
           ${reasoning ? `<button class="hyp-toggle" data-htoggle="${ix}">ver razonamiento ▾</button>` : ""}
-        </div>${reasoning}</div>`;
+        </div>${actions}${reasoning}</div>`;
     }).join("");
   } else {
     items = (f.items || []).map((i) => {
@@ -295,6 +308,7 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
        <div class="hyp-gen">
          <input id="hyp-focus" placeholder="(opcional) enfoca: p.ej. movimiento del Sol, sesgos de selección…">
          <button class="act" id="hyp-gen-btn">🧠 Generar hipótesis (crítica y creativa)</button>
+         <button class="act ghost" id="hyp-gen-one">＋ Generar nueva hipótesis</button>
          <span id="hyp-gen-out" class="tag" aria-live="polite"></span>
        </div>
        <p class="tag">El copiloto CUESTIONA (no repite): propone hipótesis ya probadas, teorizadas, nuevas y preguntas abiertas, cada una con su pregunta detonante, argumento, duda y cómo probarla.</p>` : ""}
@@ -329,20 +343,173 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
         : `<span class="err">error</span>`;
       input.value = "";
     }));
-  const genBtn = view.querySelector("#hyp-gen-btn");
-  if (genBtn) genBtn.addEventListener("click", async () => {
+  const genHyp = async (n, btn) => {
     const focus = view.querySelector("#hyp-focus").value.trim();
     const out = view.querySelector("#hyp-gen-out");
-    genBtn.disabled = true;
+    btn.disabled = true;
     out.textContent = "Generando (Codex cuestiona… hasta ~3 min)…";
     const { ok: gok, body: g } = await post(
       `/portal/api/projects/${encodeURIComponent(pid)}/hypotheses/generate`,
-      { n: 6, use_ai: true, focus });
-    genBtn.disabled = false;
+      { n, use_ai: true, focus });
+    btn.disabled = false;
     if (!gok || !g.ok) { out.textContent = "Error: " + ((g && (g.detail || g.error)) || "gen"); return; }
     out.textContent = `${g.created.length} hipótesis nuevas (${g.provider}).`;
-    cb.openPhase(pid, "hipotesis");   // recarga para verlas
-  });
+    cb.openPhase(pid, "hipotesis");
+  };
+  const genBtn = view.querySelector("#hyp-gen-btn");
+  if (genBtn) genBtn.addEventListener("click", () => genHyp(6, genBtn));
+  const genOne = view.querySelector("#hyp-gen-one");
+  if (genOne) genOne.addEventListener("click", () => genHyp(1, genOne));
+
+  // approve / reject / unapprove
+  view.querySelectorAll("[data-happrove]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const reason = prompt(`Razón para aprobar ${b.dataset.tag} (los siguientes pasos correrán sobre esta hipótesis):`);
+      if (!reason) return;
+      const { ok, body } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.happrove}/status`,
+        { status: "APPROVED", reason });
+      if (ok && body.ok) cb.openPhase(pid, "hipotesis");
+      else alert("Error: " + ((body && (body.detail || body.error)) || ""));
+    }));
+  view.querySelectorAll("[data-hstatus]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const to = b.dataset.to;
+      if (to === "REJECTED" && !confirm("¿Rechazar esta hipótesis?")) return;
+      const { ok, body } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.hstatus}/status`,
+        { status: to, reason: to === "PROPOSED" ? "desaprobada" : "rechazada por el humano" });
+      if (ok) cb.openPhase(pid, "hipotesis");
+    }));
+}
+
+/* ---------- hypothesis-centric literature + experiments dashboards -------- */
+async function renderHypFlow(view, pid, phaseKey, ph, cb) {
+  const { ok, body: fl } = await get(`/portal/api/projects/${encodeURIComponent(pid)}/hyp-flow`);
+  const approved = (ok && fl.approved) || [];
+  const back = `<button class="act ghost" id="ph-back">← ${esc(ph.title)}</button>`;
+  if (!approved.length) {
+    view.innerHTML = back +
+      `<p class="eyebrow">Dashboard de fase</p>
+       <div class="pulse-head"><h1>${esc(phaseKey === "literatura" ? "📚 Investigación de literatura" : "⚗️ Experimentos")}</h1></div>
+       <p class="muted">Aún no hay hipótesis <b>aprobadas</b>. Ve a la fase <b>Hipótesis</b>,
+       aprueba una (con su razón) y aquí aparecerá su propia investigación.</p>`;
+    view.querySelector("#ph-back").addEventListener("click", () => cb.openProject(pid));
+    return;
+  }
+
+  if (phaseKey === "literatura") {
+    const cards = approved.map((h) => {
+      const done = h.lit_status === "DONE";
+      const c = h.confrontation || {};
+      const cites = (c.citations || []).map((x) =>
+        `<li><a href="https://doi.org/${esc(x.doi)}" target="_blank" rel="noopener">${esc((x.title || x.doi).slice(0, 80))}</a></li>`).join("");
+      const confrontHtml = done && c.provider === "codex" ? `
+        <div class="confront">
+          <div class="hyp-field"><b>⚖️ Postura de la evidencia</b> ${pill(c.stance || "", c.stance === "supports" ? "ok" : c.stance === "challenges" ? "bad" : "warn")}</div>
+          <div class="hyp-field"><b>➕ A favor</b><p>${esc(c.argument_for || "")}</p></div>
+          <div class="hyp-field"><b>➖ En contra</b><p>${esc(c.argument_against || "")}</p></div>
+          <div class="hyp-field"><b>✨ Hipótesis mejorada por la evidencia</b><p>${esc(c.improved_hypothesis || "")}</p></div>
+          <div class="hyp-field"><b>📎 Citas (${(c.citations || []).length})</b><ul>${cites}</ul></div>
+        </div>` : (done ? `<p class="tag">Se indexaron ${h.lit_count} papers (confrontación IA no disponible).</p>` : "");
+      return `<div class="card hyp-card">
+        <div class="hyp-head"><b>${esc(h.tag)}: ${esc(h.title)}</b>
+          ${pill(done ? `${h.lit_count} papers ✓` : "sin investigar", done ? "ok" : "warn")}</div>
+        <p class="tag">Se buscará literatura real (Crossref) sobre: ${esc(h.trigger_question || h.title)}</p>
+        <button class="act" data-invest="${esc(h.id)}">${done ? "↻ Re-investigar" : "🔎 Investigar"}</button>
+        <div class="confront-out" data-invout="${esc(h.id)}">${confrontHtml}</div>
+      </div>`;
+    }).join("");
+    view.innerHTML = back +
+      `<p class="eyebrow">Dashboard de fase · por hipótesis</p>
+       <div class="pulse-head"><h1>📚 Investigación de literatura</h1>
+         <span class="tag">${approved.length} hipótesis aprobadas</span></div>
+       <div class="run-all"><button class="act" id="lit-run-all">▶▶ Correr TODAS las investigaciones</button>
+         <span id="lit-run-out" class="tag" aria-live="polite"></span></div>
+       ${cards}
+       <p class="tag">Cada tarjeta confronta su hipótesis con citas reales y propone una versión mejorada. La síntesis IA es ayuda, no evidencia.</p>`;
+    view.querySelectorAll("[data-invest]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        const out = view.querySelector(`[data-invout="${b.dataset.invest}"]`);
+        out.innerHTML = "<span class='loading'>Investigando literatura + confrontando (Codex)…</span>";
+        b.disabled = true;
+        const { ok: iok } = await post(
+          `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.invest}/investigate`, {});
+        b.disabled = false;
+        if (iok) cb.openPhase(pid, "literatura");
+      }));
+    view.querySelector("#lit-run-all").addEventListener("click", async () => {
+      const out = view.querySelector("#lit-run-out");
+      const btn = view.querySelector("#lit-run-all");
+      btn.disabled = true;
+      out.textContent = "Corriendo todas (puede tardar varios minutos)…";
+      const { ok: aok, body: a } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/investigate-all`, {});
+      btn.disabled = false;
+      if (aok && a.ok) cb.openPhase(pid, "literatura");
+      else out.textContent = "Error al correr todas.";
+    });
+  } else {
+    // experimentos por hipótesis
+    const cards = approved.map((h) => {
+      const litDone = h.lit_status === "DONE";
+      const exps = (h.experiments || []).map((e) => {
+        const st = e.status || "PROPOSED";
+        const stColor = st === "COMPLETE" ? "ok" : st === "PLANNED" ? "warn" : "warn";
+        const result = e.result ? `<div class="tag">${esc((e.claim || e.result.claim || "").slice(0, 160))}</div>` : "";
+        const plan = e.plan ? `<details><summary class="tag">plan de ejecución</summary><div class="lms-body">${esc(e.plan)}</div></details>` : "";
+        return `<div class="exp-line">
+          <div class="exp-head"><b>${esc(e.title || "experimento")}</b> ${pill(st, stColor)}
+            ${st === "PROPOSED" ? `<button class="act" data-runexp="${esc(e.id)}">▶ Correr experimento</button>` : ""}</div>
+          <div class="tag"><b>Qué:</b> ${esc(e.what || "")}</div>
+          <div class="tag"><b>Cómo:</b> ${esc(e.how || "")}</div>
+          <div class="tag"><b>Datos:</b> ${esc(e.data_source || "")} · <b>Controles:</b> ${esc(e.controls || "")}</div>
+          ${result}${plan}
+        </div>`;
+      }).join("");
+      return `<div class="card hyp-card">
+        <div class="hyp-head"><b>${esc(h.tag)}: ${esc(h.title)}</b>
+          ${pill(litDone ? `literatura ✓ (${h.lit_count})` : "literatura pendiente", litDone ? "ok" : "warn")}</div>
+        ${litDone && (h.confrontation || {}).improved_hypothesis
+          ? `<p class="tag">✨ <b>Hipótesis actualizada:</b> ${esc(h.confrontation.improved_hypothesis)}</p>` : ""}
+        <button class="act ghost" data-propexp="${esc(h.id)}">🧪 Proponer experimentos (Codex)</button>
+        <div class="exp-list">${exps || "<p class='muted tag'>Sin experimentos aún — propónlos.</p>"}</div>
+      </div>`;
+    }).join("");
+    view.innerHTML = back +
+      `<p class="eyebrow">Dashboard de fase · por hipótesis</p>
+       <div class="pulse-head"><h1>⚗️ Experimentos</h1>
+         <span class="tag">${approved.length} hipótesis aprobadas</span></div>
+       <div class="run-all"><button class="act" id="exp-run-all">▶▶ Correr TODOS los experimentos</button>
+         <span id="exp-run-out" class="tag" aria-live="polite"></span></div>
+       ${cards}
+       <p class="tag">ACERO ejecuta de verdad los análisis con código (Kepler, Hubble); los demás quedan como PLAN reproducible pendiente de datos (no se inventan resultados).</p>`;
+    view.querySelectorAll("[data-propexp]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true; b.textContent = "Proponiendo (Codex)…";
+        const { ok: pok } = await post(
+          `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.propexp}/experiments/propose`, {});
+        if (pok) cb.openPhase(pid, "experimentos");
+      }));
+    view.querySelectorAll("[data-runexp]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true; b.textContent = "Corriendo…";
+        const { ok: rok } = await post(
+          `/portal/api/projects/${encodeURIComponent(pid)}/experiment/${b.dataset.runexp}/run`, {});
+        if (rok) cb.openPhase(pid, "experimentos");
+      }));
+    view.querySelector("#exp-run-all").addEventListener("click", async () => {
+      const out = view.querySelector("#exp-run-out");
+      const btn = view.querySelector("#exp-run-all");
+      btn.disabled = true;
+      out.textContent = "Corriendo todos los experimentos…";
+      const { ok: aok, body: a } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/experiments/run-all`, {});
+      btn.disabled = false;
+      if (aok && a.ok) { out.textContent = a.note; cb.openPhase(pid, "experimentos"); }
+    });
+  }
+  view.querySelector("#ph-back").addEventListener("click", () => cb.openProject(pid));
 }
 
 /* --------------------------------------------------------- educational plan -- */

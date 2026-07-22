@@ -232,6 +232,16 @@ body {
 .hyp-ask input { flex: 1; font-size: .84rem; }
 .hyp-answer { margin-top: .4rem; }
 
+.hyp-actions { display: flex; gap: .5rem; margin-top: .5rem; flex-wrap: wrap; align-items: center; }
+.run-all { margin: .3rem 0 1rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.confront { margin-top: .7rem; border-top: 1px dashed #232b36; padding-top: .6rem; }
+.confront ul { margin: .3rem 0 0 1rem; }
+.exp-list { margin-top: .6rem; display: grid; gap: .5rem; }
+.exp-line { border: 1px solid var(--border); border-radius: 10px; padding: .6rem .8rem; background: #10151d; }
+.exp-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .3rem; }
+.exp-head b { flex: 1; min-width: 180px; }
+.exp-head .act { font-size: .78rem; padding: .3rem .6rem; }
+
 /* phase methodology explainer */
 .method-panel { background: #10151d; }
 .method-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem; }

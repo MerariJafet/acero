@@ -119,6 +119,11 @@ class HypoBody(BaseModel):
     focus: str = ""
 
 
+class HypStatusBody(BaseModel):
+    status: str
+    reason: str = ""
+
+
 class RunCycleBody(BaseModel):
     question: str
 
@@ -362,6 +367,74 @@ def build_portal_router() -> APIRouter:
         if not h:
             raise HTTPException(404, "hypothesis not found")
         return h
+
+    # --- hypothesis-centric flow: approve → literature → experiments -------
+    @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/status")
+    def hyp_status(project_id: str, hyp_id: str, body: HypStatusBody,
+                   sess: Session = Depends(_require_session),
+                   x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .hypothesis_flow import HypothesisFlow
+        out = HypothesisFlow().set_status(project_id, hyp_id, body.status, body.reason)
+        if not out["ok"]:
+            raise HTTPException(422, out["error"])
+        return out
+
+    @r.get("/api/projects/{project_id}/hyp-flow")
+    def hyp_flow(project_id: str, sess: Session = Depends(_require_session)
+                 ) -> dict[str, Any]:
+        """Approved hypotheses with their literature/confrontation and experiments."""
+        from .hypothesis_flow import HypothesisFlow
+        fl = HypothesisFlow()
+        out = []
+        for h in fl.approved(project_id):
+            out.append({
+                "id": h["id"], "tag": h.get("tag"), "title": h.get("title", ""),
+                "trigger_question": h.get("trigger_question", ""),
+                "kind": h.get("kind", ""),
+                "lit_status": h.get("lit_status", "PENDING"),
+                "lit_count": h.get("lit_count", 0),
+                "confrontation": h.get("confrontation"),
+                "experiments": fl.experiments_for(project_id, h["id"]),
+            })
+        return {"project_id": project_id, "approved": out, "n": len(out)}
+
+    @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/investigate")
+    def hyp_investigate(project_id: str, hyp_id: str,
+                        sess: Session = Depends(_require_session),
+                        x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .hypothesis_flow import HypothesisFlow
+        return HypothesisFlow().investigate(project_id, hyp_id)
+
+    @r.post("/api/projects/{project_id}/investigate-all")
+    def hyp_investigate_all(project_id: str, sess: Session = Depends(_require_session),
+                            x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .hypothesis_flow import HypothesisFlow
+        return HypothesisFlow().investigate_all(project_id)
+
+    @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/experiments/propose")
+    def hyp_propose_exps(project_id: str, hyp_id: str,
+                         sess: Session = Depends(_require_session),
+                         x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .hypothesis_flow import HypothesisFlow
+        return HypothesisFlow().propose_experiments(project_id, hyp_id)
+
+    @r.post("/api/projects/{project_id}/experiment/{exp_id}/run")
+    def exp_run(project_id: str, exp_id: str, sess: Session = Depends(_require_session),
+                x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .hypothesis_flow import HypothesisFlow
+        return HypothesisFlow().run_experiment(project_id, exp_id)
+
+    @r.post("/api/projects/{project_id}/experiments/run-all")
+    def exp_run_all(project_id: str, sess: Session = Depends(_require_session),
+                    x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .hypothesis_flow import HypothesisFlow
+        return HypothesisFlow().run_all_experiments(project_id)
 
     @r.get("/api/projects/{project_id}/status")
     def project_status(project_id: str, sess: Session = Depends(_require_session)
