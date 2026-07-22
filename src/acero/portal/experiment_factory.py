@@ -56,6 +56,22 @@ DATA_HOST_ALLOWLIST = {
 }
 
 MAX_DOWNLOAD_BYTES = 120 * 1024 * 1024      # 120 MB per file
+PRUNE_DATA_OVER_BYTES = 5 * 1024 * 1024     # raw data >5MB pruned after success
+CACHE_CAP_BYTES = 2 * 1024 * 1024 * 1024    # shared download cache LRU cap (2GB)
+
+
+def _enforce_cache_cap() -> None:
+    """LRU-evict the shared download cache above CACHE_CAP_BYTES."""
+    cache = artifacts_root() / "_cache"
+    if not cache.exists():
+        return
+    files = sorted(cache.iterdir(), key=lambda f: f.stat().st_mtime)
+    total = sum(f.stat().st_size for f in files)
+    for f in files:
+        if total <= CACHE_CAP_BYTES:
+            break
+        total -= f.stat().st_size
+        f.unlink(missing_ok=True)
 FETCH_TIMEOUT = 180.0
 SANDBOX_TIMEOUT = 150                        # analysis wall-clock (s)
 SANDBOX_MEMORY_MB = 2048
@@ -440,6 +456,18 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
     (workdir / "run.sh").write_text(
         "#!/bin/sh\n# Reproducción: los datos de ./data/ tienen sha256 en "
         "provenance.json\npython3 -I script.py\n", encoding="utf-8")
+
+    # storage policy: big raw data files are PRUNED after a successful run —
+    # they are re-fetchable (URL + sha256 live in provenance.json) and one
+    # deduplicated copy stays in the shared cache (LRU-capped). Script, result,
+    # provenance and stdout (all tiny) are kept forever.
+    if os.environ.get("ACERO_KEEP_DATA") != "1":
+        for pv in provenance:
+            fp = data_dir / pv["filename"]
+            if fp.exists() and fp.stat().st_size > PRUNE_DATA_OVER_BYTES:
+                fp.unlink()
+                pv["pruned"] = True
+    _enforce_cache_cap()
 
     return {"ok": True, "result": result, "provenance": provenance,
             "attempts": attempts, "cross_check": cross_check,

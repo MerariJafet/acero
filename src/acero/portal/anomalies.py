@@ -98,6 +98,13 @@ class AnomalyEngine:
             touched.add(a["exp_id"])
         for eid in touched:
             self.store.update_payload(eid, {"anomalies_harvested": True})
+        # Aristóteles reviews every newborn hypothesis, anomaly-born included
+        from .critic import critique_async
+        for c in created:
+            critique_async(project_id, c["id"], "hipotesis",
+                           f"Hipótesis {c['tag']} (nacida de anomalía): {c['title']}\n"
+                           f"Anomalía origen: {c['anomaly_provenance']['anomaly']}\n"
+                           f"Duda: {c['doubt']}", self._sf)
         return {"ok": True, "created": created,
                 "disclaimer": "Candidatas nacidas de discrepancias medidas; "
                               "requieren aprobación humana como cualquier hipótesis."}

@@ -406,7 +406,12 @@ def build_portal_router() -> APIRouter:
                 "new_evidence_count": int(h.get("new_evidence_count") or 0),
                 "experiments": exps,
             })
-        return {"project_id": project_id, "approved": out, "n": len(out)}
+        from .lifecycle import Lifecycle
+        orphans = Lifecycle().orphan_experiments(project_id)
+        for o in orphans:
+            o["critique"] = crits.get(o.get("id", ""))
+        return {"project_id": project_id, "approved": out, "n": len(out),
+                "orphans": orphans}
 
     @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/investigate")
     def hyp_investigate(project_id: str, hyp_id: str,
@@ -415,6 +420,83 @@ def build_portal_router() -> APIRouter:
         _require_csrf(sess, x_csrf_token)
         from .hypothesis_flow import HypothesisFlow
         return HypothesisFlow().investigate(project_id, hyp_id)
+
+    # ---- Aristóteles (critic) on demand + history + cascade --------------------
+    @r.post("/api/projects/{project_id}/critic/consult")
+    def critic_consult(project_id: str, body: dict[str, Any],
+                       sess: Session = Depends(_require_session),
+                       x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Ask Aristóteles for a FRESH critique of any card (history is kept)."""
+        _require_csrf(sess, x_csrf_token)
+        from .critic import CriticAgent
+        target_id = str(body.get("target_id") or "")
+        task = str(body.get("task") or "hipotesis")
+        ag = CriticAgent()
+        t = ag.store.get(target_id) or {}
+        ctx = (f"Título: {t.get('title','')}\nPregunta: {t.get('trigger_question','')}\n"
+               f"Qué: {t.get('what','')}\nResultado: "
+               f"{str((t.get('result') or {}).get('verdict_reason',''))[:300]}")
+        return {"ok": True, "critique": ag.critique_now(project_id, target_id,
+                                                        task, ctx, use_ai=True)}
+
+    @r.get("/api/projects/{project_id}/critic/history/{target_id}")
+    def critic_history(project_id: str, target_id: str,
+                       sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        from .critic import CriticAgent
+        ag = CriticAgent()
+        hist = sorted((c for c in ag.store.list_objects(project_id, kind="critique")
+                       if c.get("target_id") == target_id),
+                      key=lambda c: c.get("created_at") or "", reverse=True)
+        return {"history": hist[:10]}
+
+    @r.post("/api/projects/{project_id}/critique/{critique_id}/consider")
+    def critique_consider(project_id: str, critique_id: str,
+                          sess: Session = Depends(_require_session),
+                          x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Accepting a critique re-versions the whole flow from an earlier level."""
+        _require_csrf(sess, x_csrf_token)
+        from .lifecycle import Lifecycle
+        return Lifecycle().consider_critique(project_id, critique_id)
+
+    # ---- lifecycle: delete / save / anchor / trace / processes ------------------
+    @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/delete")
+    def hyp_delete(project_id: str, hyp_id: str,
+                   sess: Session = Depends(_require_session),
+                   x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Cascade delete (saved experiments survive); vault keeps the memory."""
+        _require_csrf(sess, x_csrf_token)
+        from .lifecycle import Lifecycle
+        return Lifecycle().delete_hypothesis(project_id, hyp_id)
+
+    @r.post("/api/projects/{project_id}/experiment/{exp_id}/save")
+    def exp_save(project_id: str, exp_id: str,
+                 sess: Session = Depends(_require_session),
+                 x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .lifecycle import Lifecycle
+        return Lifecycle().save_experiment(exp_id)
+
+    @r.post("/api/projects/{project_id}/experiment/{exp_id}/anchor")
+    def exp_anchor(project_id: str, exp_id: str, body: dict[str, Any],
+                   sess: Session = Depends(_require_session),
+                   x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .lifecycle import Lifecycle
+        return Lifecycle().anchor_experiment(project_id, exp_id,
+                                             str(body.get("hyp_id") or ""))
+
+    @r.get("/api/projects/{project_id}/hypothesis/{hyp_id}/trace")
+    def hyp_trace(project_id: str, hyp_id: str,
+                  sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        """The full story of one hypothesis as a top-down flow (Detalle)."""
+        from .lifecycle import Lifecycle
+        return Lifecycle().trace(project_id, hyp_id)
+
+    @r.get("/api/processes")
+    def active_processes(sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        """Live missions + parallel runs across ALL projects."""
+        from .lifecycle import Lifecycle
+        return Lifecycle().active_processes()
 
     @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/literature/deepen")
     def lit_deepen(project_id: str, hyp_id: str,
@@ -537,9 +619,24 @@ def build_portal_router() -> APIRouter:
     @r.post("/api/projects/{project_id}/experiment/{exp_id}/run")
     def exp_run(project_id: str, exp_id: str, sess: Session = Depends(_require_session),
                 x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Run ONE experiment as a background subagent with live status."""
         _require_csrf(sess, x_csrf_token)
         from .hypothesis_flow import HypothesisFlow
-        return HypothesisFlow().run_experiment(project_id, exp_id)
+        from .parallel_runs import start_run
+        fl = HypothesisFlow()
+        e = fl.store.get(exp_id) or {}
+
+        def work(item: dict[str, Any]) -> dict[str, Any]:
+            r = HypothesisFlow().run_experiment(project_id, item["id"])
+            if not r.get("ok"):
+                raise RuntimeError(r.get("error", "run failed"))
+            return {"summary": r.get("mode", "")}
+
+        run = start_run("run_experiment",
+                        [{"id": exp_id,
+                          "label": f"{e.get('hyp_tag','')}: {e.get('title','')[:60]}"}],
+                        work)
+        return {"ok": True, "run": run}
 
     @r.post("/api/projects/{project_id}/experiments/run-all")
     def exp_run_all(project_id: str, sess: Session = Depends(_require_session),

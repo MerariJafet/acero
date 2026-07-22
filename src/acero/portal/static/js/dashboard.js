@@ -265,7 +265,14 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
           ${pill(i.meta || "", approved ? "ok" : "warn")}
           ${i.flag ? " " + pill(i.flag, "bad") : ""}
           ${reasoning ? `<button class="hyp-toggle" data-htoggle="${ix}">ver razonamiento ▾</button>` : ""}
-        </div>${anomProv}${actions}${reasoning}${criticFoot(i.critique, i.id)}</div>`;
+        </div>${anomProv}${actions}
+        <div class="hyp-links">
+          <button class="act ghost" data-htrace="${esc(i.id)}">🧭 Detalle</button>
+          <a href="#" data-golit>→ ir a Literatura</a> ·
+          <a href="#" data-goexp>→ ir a Experimentos</a>
+          <button class="act ghost danger" data-hdel="${esc(i.id)}" data-tag="${esc(i.tag)}">🗑 Borrar</button>
+        </div>
+        ${reasoning}${i.critique ? criticFoot(i.critique, i.id) : criticEmpty(i.id, "hipotesis")}</div>`;
     }).join("");
   } else {
     items = (f.items || []).map((i) => {
@@ -364,6 +371,25 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
   if (genBtn) genBtn.addEventListener("click", () => genHyp(6, genBtn));
   const genOne = view.querySelector("#hyp-gen-one");
   if (genOne) genOne.addEventListener("click", () => genHyp(1, genOne));
+  // detalle / borrar / hipervínculos / Aristóteles (hipotesis phase)
+  wireAristoteles(view, pid, cb, () => cb.openPhase(pid, "hipotesis"));
+  view.querySelectorAll("[data-htrace]").forEach((b) =>
+    b.addEventListener("click", () => renderTrace(view, pid, b.dataset.htrace, cb)));
+  view.querySelectorAll("[data-golit]").forEach((a) =>
+    a.addEventListener("click", (ev) => { ev.preventDefault(); cb.openPhase(pid, "literatura"); }));
+  view.querySelectorAll("[data-goexp]").forEach((a) =>
+    a.addEventListener("click", (ev) => { ev.preventDefault(); cb.openPhase(pid, "experimentos"); }));
+  view.querySelectorAll("[data-hdel]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm(`¿BORRAR ${b.dataset.tag} y todo lo que depende de ella (literatura, experimentos no guardados, críticas)? El vault conservará la memoria de lo que se hizo.`)) return;
+      const { ok, body } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.hdel}/delete`, {});
+      if (ok && body.ok) {
+        alert(`Borrada. Archivo en vault: ${body.vault_note || "—"}. Experimentos guardados que sobreviven: ${(body.kept_orphans || []).length}`);
+        cb.openPhase(pid, "hipotesis");
+      } else alert("Error: " + ((body && body.error) || ""));
+    }));
+
   const anomBtn = view.querySelector("#anom-harvest");
   if (anomBtn) anomBtn.addEventListener("click", async () => {
     const out = view.querySelector("#hyp-gen-out");
@@ -429,11 +455,60 @@ function criticFoot(c, targetId) {
   const resolved = sts.filter((s) => s === "resolved").length;
   const objChip = (c.objections || []).length
     ? `<span class="tag">${resolved}/${c.objections.length} objeciones resueltas</span>` : "";
+  const tools = targetId ? `<div class="critic-tools">
+      <button class="act ghost" data-consult="${esc(targetId)}" data-ctask="${esc(c.task || "hipotesis")}">🧐 Consultar a Aristóteles</button>
+      ${c.id ? `<button class="act ghost" data-consider="${esc(c.id)}">🔄 Considerar crítica</button>` : ""}
+      <button class="act ghost" data-crithist="${esc(targetId)}">🗂 Historial</button>
+    </div><div class="crit-hist" data-histout="${esc(targetId)}"></div>` : "";
   return `<div class="critic-note">
-    <div class="critic-head">🧐 <b>El Revisor</b> ${pill(c.verdict || "", COLOR[c.verdict] || "warn")}
+    <div class="critic-head">🧐 <b>Aristóteles</b> ${pill(c.verdict || "", COLOR[c.verdict] || "warn")}
       <span class="tag">${esc(c.task || "")}</span> ${objChip}</div>
-    <p>${esc(c.summary || "")}</p>${details}
+    <p>${esc(c.summary || "")}</p>${details}${tools}
   </div>`;
+}
+
+/* Aristóteles card when there is NO critique yet — still consultable. */
+function criticEmpty(targetId, task) {
+  return `<div class="critic-note"><div class="critic-head">🧐 <b>Aristóteles</b>
+      <span class="tag">aún sin crítica</span></div>
+    <div class="critic-tools">
+      <button class="act ghost" data-consult="${esc(targetId)}" data-ctask="${esc(task)}">🧐 Consultar a Aristóteles</button>
+    </div><div class="crit-hist" data-histout="${esc(targetId)}"></div></div>`;
+}
+
+function wireAristoteles(view, pid, cb, refresh) {
+  view.querySelectorAll("[data-consult]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      b.textContent = "🧐 Aristóteles está pensando (1-3 min)…";
+      const { ok, body } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/critic/consult`,
+        { target_id: b.dataset.consult, task: b.dataset.ctask || "hipotesis" });
+      if (ok && body.ok) refresh();
+      else { b.disabled = false; b.textContent = "Error al consultar"; }
+    }));
+  view.querySelectorAll("[data-consider]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm("Considerar esta crítica replantea TODO el flujo desde un nivel anterior (nueva versión de la hipótesis, literatura STALE, experimentos supeditados). ¿Continuar?")) return;
+      b.disabled = true;
+      const { ok, body } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/critique/${b.dataset.consider}/consider`, {});
+      if (ok && body.ok) { alert(body.note || "Flujo replanteado."); refresh(); }
+      else { b.disabled = false; alert("Error: " + ((body && body.error) || "")); }
+    }));
+  view.querySelectorAll("[data-crithist]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const out = view.querySelector(`[data-histout="${b.dataset.crithist}"]`);
+      if (!out) return;
+      out.innerHTML = "<span class='loading'>cargando historial…</span>";
+      const { ok, body } = await get(
+        `/portal/api/projects/${encodeURIComponent(pid)}/critic/history/${b.dataset.crithist}`);
+      out.innerHTML = ok && body.history.length
+        ? body.history.map((c) => `<div class="cite"><b>${esc(c.verdict || "")}</b>
+            <span class="tag">${esc((c.created_at || "").slice(0, 16))} · ${esc(c.task || "")}</span>
+            <p class="cite-abs">${esc((c.summary || "").slice(0, 220))}</p></div>`).join("")
+        : "<p class='muted tag'>sin críticas previas</p>";
+    }));
 }
 
 function wireCriticConvert(view, pid, cb, phaseKey) {
@@ -446,6 +521,36 @@ function wireCriticConvert(view, pid, cb, phaseKey) {
       if (ok && body.ok) cb.openPhase(pid, "experimentos");
       else { b.disabled = false; b.textContent = "Error: " + esc((body && body.error) || "conversión"); }
     }));
+}
+
+/* Detalle: the full story of one hypothesis as a top-down connected flow. */
+async function renderTrace(view, pid, hypId, cb) {
+  view.innerHTML = "<p class='loading'>Reconstruyendo la historia…</p>";
+  const { ok, body: t } = await get(
+    `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${encodeURIComponent(hypId)}/trace`);
+  if (!ok || !t.ok) { view.innerHTML = "<p class='err'>No se pudo cargar el detalle.</p>"; return; }
+  const nodes = (t.nodes || []).map((n) => `
+    <div class="trace-node t-${esc(n.type)}">
+      <div class="trace-dot">${esc(n.icon)}</div>
+      <div class="trace-card" ${n.link ? `data-tlink="${esc(n.link)}" role="button" tabindex="0"` : ""}>
+        <div class="trace-head"><b>${esc(n.title)}</b>
+          <span class="tag">${esc((n.ts || "").slice(0, 16).replace("T", " "))}</span></div>
+        <p class="tag">${esc(n.summary || "")}</p>
+        ${n.link ? `<span class="trace-go">abrir ficha →</span>` : ""}
+      </div>
+    </div>`).join("");
+  view.innerHTML = `
+    <button class="act ghost" id="trace-back">← volver</button>
+    <p class="eyebrow">Detalle · mapa del flujo</p>
+    <div class="pulse-head"><h1>🧭 ${esc(t.tag)} (v${t.version}): historia completa</h1></div>
+    <p class="muted">${esc(t.title)}</p>
+    <div class="trace-flow">${nodes || "<p class='muted'>sin eventos aún</p>"}</div>`;
+  view.querySelector("#trace-back").addEventListener("click", () => cb.openPhase(pid, "hipotesis"));
+  view.querySelectorAll("[data-tlink]").forEach((c) => {
+    const go = () => cb.openPhase(pid, c.dataset.tlink);
+    c.addEventListener("click", go);
+    c.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  });
 }
 
 /* Poll a parallel run (one subagent per item) and paint live progress. */
@@ -536,10 +641,11 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         <p class="tag">Literatura real multi-fuente (OpenAlex + arXiv + Crossref) sobre: ${esc(h.trigger_question || h.title)}</p>
         ${stale}
         <button class="act" data-invest="${esc(h.id)}">${done ? "↻ Re-investigar" : "🔎 Investigar"}</button>
-        <button class="act mission-btn" data-mission="${esc(h.id)}">🚀 Misión completa</button>
+        <button class="act mission-btn" data-mission="${esc(h.id)}">🚀 Lanzar Misión</button>
         ${done ? `<button class="act ghost" data-deepen="${esc(h.id)}">🕸 Profundizar (referencias + PDFs)</button>` : ""}
+        <button class="act ghost" data-htrace="${esc(h.id)}">🧭 Detalle</button>
         <div class="confront-out" data-invout="${esc(h.id)}">${confrontHtml}</div>
-        ${criticFoot(h.critique, h.id)}
+        ${h.critique ? criticFoot(h.critique, h.id) : criticEmpty(h.id, "literatura")}
       </div>`;
     }).join("");
     view.innerHTML = back +
@@ -652,6 +758,9 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
     });
 
     wireCriticConvert(view, pid, cb, phaseKey);
+    wireAristoteles(view, pid, cb, () => cb.openPhase(pid, "literatura"));
+    view.querySelectorAll("[data-htrace]").forEach((b) =>
+      b.addEventListener("click", () => renderTrace(view, pid, b.dataset.htrace, cb)));
     get(`/portal/api/projects/${encodeURIComponent(pid)}/rigor`).then(({ ok: rk, body: rg }) => {
       const chip = view.querySelector("#rigor-chip");
       if (chip && rk) {
@@ -717,13 +826,16 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         const plan = e.plan ? `<details><summary class="tag">plan de ejecución</summary><div class="lms-body">${esc(e.plan)}</div></details>` : "";
         const mIcon = { download_data: "⬇️ bajar datos", math_analysis: "∑ análisis", theoretical: "📐 teórico", simulation: "🎲 simulación" };
         const mt = e.method_type ? `<span class="src">${esc(mIcon[e.method_type] || e.method_type)}</span>` : "";
+        const viaB = String(e.via || "").startsWith("mission") ? `<span class="src">🚀 misión</span>` : (e.from_critique ? `<span class="src">🧐 de crítica</span>` : "");
+        const sup = e.superseded_by_critique ? `<span class="pill warn">supeditado a crítica</span>` : "";
+        const savedB = e.saved ? `<span class="pill ok">💾 guardado</span>` : `<button class="act ghost" data-esave="${esc(e.id)}">💾 Guardar</button>`;
         return `<div class="exp-line">
-          <div class="exp-head"><b>${esc(e.title || "experimento")}</b> ${mt} ${pill(st, stColor)}
-            ${st === "PROPOSED" ? `<button class="act" data-runexp="${esc(e.id)}">▶ Correr experimento</button>` : ""}</div>
+          <div class="exp-head"><b>${esc(e.title || "experimento")}</b> ${mt} ${viaB} ${pill(st, stColor)} ${sup} ${savedB}
+            ${st === "PROPOSED" ? `<button class="act" data-runexp="${esc(e.id)}">▶ Correr experimento</button> <span class="tag" data-runout="${esc(e.id)}" aria-live="polite"></span>` : ""}</div>
           <div class="tag"><b>Qué:</b> ${esc(e.what || "")}</div>
           <div class="tag"><b>Cómo:</b> ${esc(e.how || "")}</div>
           <div class="tag"><b>Datos:</b> ${esc(e.data_source || "")} · <b>Controles:</b> ${esc(e.controls || "")}</div>
-          ${result}${genDetail}${ferr}${plan}${criticFoot(e.critique)}
+          ${result}${genDetail}${ferr}${plan}${e.critique ? criticFoot(e.critique, e.id) : criticEmpty(e.id, "experimento_resultado")}
         </div>`;
       }).join("");
       return `<div class="card hyp-card">
@@ -735,6 +847,15 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         <div class="exp-list">${exps || "<p class='muted tag'>Sin experimentos aún — propónlos.</p>"}</div>
       </div>`;
     }).join("");
+    const orphans = ((fl && fl.orphans) || []).map((e) => `
+      <div class="exp-line orphan">
+        <div class="exp-head"><b>${esc(e.title || "experimento")}</b>
+          <span class="pill warn">sin hipótesis</span>
+          ${e.orphaned_from ? `<span class="tag">venía de ${esc(e.orphaned_from.tag || "")}</span>` : ""}</div>
+        <div class="tag">Ancla este experimento a una hipótesis para que su flujo lo absorba:</div>
+        <div>${approved.map((h) => `<button class="act ghost" data-anchor="${esc(e.id)}" data-to="${esc(h.id)}">⚓ ${esc(h.tag)}</button>`).join(" ")}</div>
+      </div>`).join("");
+    const orphanBlock = orphans ? `<div class="card"><b>💾 Experimentos guardados (huérfanos)</b>${orphans}</div>` : "";
     view.innerHTML = back +
       `<p class="eyebrow">Dashboard de fase · por hipótesis</p>
        <div class="pulse-head"><h1>⚗️ Experimentos</h1>
@@ -742,7 +863,25 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
        <div class="run-all"><button class="act" id="exp-run-all">▶▶ Correr TODOS los experimentos</button>
          <span id="exp-run-out" class="tag" aria-live="polite"></span></div>
        ${cards}
+       ${orphanBlock}
        <p class="tag">ACERO ejecuta de verdad los análisis con código (Kepler, Hubble); los demás quedan como PLAN reproducible pendiente de datos (no se inventan resultados).</p>`;
+    wireAristoteles(view, pid, cb, () => cb.openPhase(pid, "experimentos"));
+    view.querySelectorAll("[data-esave]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        const { ok } = await post(
+          `/portal/api/projects/${encodeURIComponent(pid)}/experiment/${b.dataset.esave}/save`, {});
+        if (ok) cb.openPhase(pid, "experimentos");
+      }));
+    view.querySelectorAll("[data-anchor]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        const { ok, body } = await post(
+          `/portal/api/projects/${encodeURIComponent(pid)}/experiment/${b.dataset.anchor}/anchor`,
+          { hyp_id: b.dataset.to });
+        if (ok && body.ok) { alert(`Anclado a ${body.anchored_to}. El flujo lo absorbió: ${body.synthesis}`); cb.openPhase(pid, "experimentos"); }
+        else { b.disabled = false; alert("Error: " + ((body && body.error) || "")); }
+      }));
     view.querySelectorAll("[data-propexp]").forEach((b) =>
       b.addEventListener("click", async () => {
         b.disabled = true; b.textContent = "Proponiendo (Codex)…";
@@ -751,12 +890,16 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         if (pok) cb.openPhase(pid, "experimentos");
       }));
     view.querySelectorAll("[data-runexp]").forEach((b) =>
-      b.addEventListener("click", async () => {
-        b.disabled = true; b.textContent = "Corriendo…";
-        const { ok: rok } = await post(
-          `/portal/api/projects/${encodeURIComponent(pid)}/experiment/${b.dataset.runexp}/run`, {});
-        if (rok) cb.openPhase(pid, "experimentos");
-      }));
+    b.addEventListener("click", async () => {
+      const out = view.querySelector(`[data-runout="${b.dataset.runexp}"]`);
+      b.disabled = true;
+      if (out) out.textContent = "lanzando subagente…";
+      const { ok, body } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/experiment/${b.dataset.runexp}/run`, {});
+      if (ok && body.ok && body.run) {
+        pollRun(body.run.id, out || b, () => cb.openPhase(pid, "experimentos"));
+      } else { b.disabled = false; if (out) out.textContent = "error al lanzar"; }
+    }));
     view.querySelector("#exp-run-all").addEventListener("click", async () => {
       const out = view.querySelector("#exp-run-out");
       const btn = view.querySelector("#exp-run-all");

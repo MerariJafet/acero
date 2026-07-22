@@ -130,8 +130,8 @@ class HypothesisFlow:
                 pass
         return base[:240]
 
-    def investigate(self, project_id: str, hyp_id: str, *, use_ai: bool = True
-                    ) -> dict[str, Any]:
+    def investigate(self, project_id: str, hyp_id: str, *, use_ai: bool = True,
+                    via: str = "") -> dict[str, Any]:
         h = self.store.get(hyp_id)
         if not h:
             return {"ok": False, "error": "hypothesis not found"}
@@ -154,7 +154,7 @@ class HypothesisFlow:
                    "topics": o.get("topics", []), "relevance": o.get("relevance"),
                    "openalex_id": o.get("openalex_id", ""),
                    "referenced_works": o.get("referenced_works", []),
-                   "query_used": query}
+                   "via": via, "query_used": query}
             self.store.put(project_id, "literature", lid, rec, status="INDEXED",
                            actor="knowledge_mesh",
                            summary=f"paper para {h.get('tag')}: {(o['title'] or '')[:50]}")
@@ -388,8 +388,8 @@ class HypothesisFlow:
                             for r in results if r.get("ok")]}
 
     # --- experiments per hypothesis ---------------------------------------
-    def propose_experiments(self, project_id: str, hyp_id: str, *, use_ai: bool = True
-                            ) -> dict[str, Any]:
+    def propose_experiments(self, project_id: str, hyp_id: str, *, use_ai: bool = True,
+                            via: str = "") -> dict[str, Any]:
         h = self.store.get(hyp_id)
         if not h:
             return {"ok": False, "error": "hypothesis not found"}
@@ -402,7 +402,7 @@ class HypothesisFlow:
                    "how": e.get("how", ""), "data_source": e.get("data_source", ""),
                    "method_type": e.get("method_type", ""),
                    "controls": e.get("controls", ""),
-                   "discriminator": e.get("discriminator", ""),
+                   "discriminator": e.get("discriminator", ""), "via": via,
                    "status": "PROPOSED", "synthetic": None, "created_at": now_iso()}
             self.store.put(project_id, "experiment", eid, rec, status="PROPOSED",
                            actor="experiment_engine",

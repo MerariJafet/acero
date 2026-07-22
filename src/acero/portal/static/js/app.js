@@ -217,6 +217,34 @@ async function boot() {
   $("#home-btn").addEventListener("click", () => cb.openHome());
   $("#new-project").addEventListener("click", newProjectFlow);
   $("#courses-btn").addEventListener("click", () => cb.openCourses());
+  $("#processes-btn").addEventListener("click", async () => {
+    const panel = $("#float-panel");
+    $("#float-title").textContent = "⚙️ Procesos activos";
+    const body = $("#float-body");
+    panel.hidden = false;
+    async function paint() {
+      const { ok, body: pr } = await get("/portal/api/processes");
+      if (!ok) { body.innerHTML = "<p class='err'>error</p>"; return false; }
+      const ms = (pr.missions || []).map((m) => `
+        <div class="mission-line">🚀 <b>${esc(m.hyp_tag)}</b> v${m.hyp_version}
+          <span class="tag">${esc(m.project)}</span> ${esc(m.status)}<br>
+          ${(m.steps || []).map((s2) => `<span class="mstep ${s2.status.toLowerCase()}">${esc(s2.name.replace("experiments_", "exp:"))}: ${esc(s2.status)}</span>`).join(" → ")}
+        </div>`).join("");
+      const rs = (pr.runs || []).map((r) => `
+        <div class="mission-line">⚙️ ${esc(r.kind)} ${r.done}/${r.total}
+          ${(r.items || []).map((i) => `<span class="mstep ${i.status.toLowerCase()}">${esc(i.label.slice(0, 40))}: ${esc(i.status)}</span>`).join(" · ")}
+        </div>`).join("");
+      body.innerHTML = (ms + rs) || "<p class='muted'>Sin procesos activos ahora mismo.</p>";
+      return (pr.missions || []).length + (pr.runs || []).length > 0;
+    }
+    const live = await paint();
+    if (live) {
+      const t = setInterval(async () => {
+        if (panel.hidden) { clearInterval(t); return; }
+        if (!(await paint())) clearInterval(t);
+      }, 4000);
+    }
+  });
   $("#float-close").addEventListener("click", () => { $("#float-panel").hidden = true; });
   $("#edu-plan-btn").addEventListener("click", () => {
     const pid = state.context.project_id || state.project;

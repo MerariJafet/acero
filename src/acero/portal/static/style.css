@@ -248,6 +248,31 @@ ul.cites { list-style: none; margin-left: 0; padding: 0; display: grid; gap: .5r
 ul.ideas { list-style: none; margin: .3rem 0 0; padding: 0; display: grid; gap: .55rem; }
 ul.ideas > li { border-left: 2px solid #2b3444; padding: .1rem 0 .1rem .6rem; font-size: .85rem; }
 .warn-txt { color: #d9a441; }
+.trace-flow { margin-top: 1rem; display: grid; gap: 0; }
+.trace-node { display: grid; grid-template-columns: 44px 1fr; gap: .7rem; position: relative;
+  padding-bottom: 1.1rem; }
+.trace-node::before { content: ""; position: absolute; left: 21px; top: 38px; bottom: -2px;
+  width: 2px; background: #2b3444; }
+.trace-node:last-child::before { display: none; }
+.trace-node::after { content: "▼"; position: absolute; left: 15px; bottom: .1rem;
+  color: #3d4a5e; font-size: .7rem; }
+.trace-node:last-child::after { display: none; }
+.trace-dot { width: 42px; height: 38px; border-radius: 10px; background: #101826;
+  border: 1px solid #1d2a3a; display: flex; align-items: center; justify-content: center;
+  font-size: 1.05rem; }
+.trace-card { background: #0f1520; border: 1px solid var(--border); border-radius: 10px;
+  padding: .55rem .75rem; }
+.trace-card[data-tlink] { cursor: pointer; }
+.trace-card[data-tlink]:hover { border-color: #4aa3ff; }
+.trace-head { display: flex; justify-content: space-between; gap: .5rem; align-items: baseline; }
+.trace-go { font-size: .78rem; color: #4aa3ff; }
+.critic-tools { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .45rem; }
+.crit-hist { margin-top: .4rem; display: grid; gap: .4rem; }
+.hyp-links { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center;
+  margin: .35rem 0; font-size: .85rem; }
+.hyp-links a { color: #4aa3ff; }
+.act.danger { border-color: #5c2323; color: #ff7b72; margin-left: auto; }
+.exp-line.orphan { border-color: #4a3a1a; }
 #missions-strip { margin: .5rem 0 .8rem; display: grid; gap: .35rem; }
 .mission-line { font-size: .84rem; background: #101826; border: 1px solid #1d2a3a;
   border-radius: 8px; padding: .4rem .6rem; display: flex; flex-wrap: wrap;

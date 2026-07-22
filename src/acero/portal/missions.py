@@ -194,7 +194,7 @@ class MissionEngine:
         use_ai = bool(m.get("use_ai", True))
 
         if name == "investigate":
-            r = fl.investigate(pid, hid, use_ai=use_ai)
+            r = fl.investigate(pid, hid, use_ai=use_ai, via=f"mission:{m['id']}")
             if not r.get("ok"):
                 raise RuntimeError(r.get("error", "investigate failed"))
             return f"{r.get('n_papers')} papers · " \
@@ -204,7 +204,7 @@ class MissionEngine:
             existing = fl.experiments_for(pid, hid)
             if any(e.get("status") == "PROPOSED" for e in existing):
                 return f"ya había {len(existing)} propuestos"
-            r = fl.propose_experiments(pid, hid, use_ai=use_ai)
+            r = fl.propose_experiments(pid, hid, use_ai=use_ai, via=f"mission:{m['id']}")
             if not r.get("ok"):
                 raise RuntimeError(r.get("error", "propose failed"))
             return f"{len(r.get('created', []))} experimentos propuestos"
