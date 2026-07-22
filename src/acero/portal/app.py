@@ -144,6 +144,18 @@ def _require_csrf(sess: Session, x_csrf_token: str | None) -> None:
         raise HTTPException(403, "missing or invalid CSRF token")
 
 
+def _mission_brief(m: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Compact mission state for a hypothesis card (progress bar + current step)."""
+    if not m:
+        return None
+    cur = next((s for s in m.get("steps", []) if s.get("status") == "RUNNING"), None)
+    return {"id": m.get("id"), "status": m.get("status"),
+            "progress_pct": int(m.get("progress_pct") or 0),
+            "current": (cur or {}).get("sub", "") if cur else "",
+            "steps": [{"name": s["name"], "status": s["status"]}
+                      for s in m.get("steps", [])]}
+
+
 def build_portal_router() -> APIRouter:
     r = APIRouter(prefix="/portal", tags=["portal"])
 
@@ -386,8 +398,13 @@ def build_portal_router() -> APIRouter:
         """Approved hypotheses with their literature/confrontation and experiments."""
         from .critic import CriticAgent
         from .hypothesis_flow import HypothesisFlow
+        from .missions import MissionEngine
         fl = HypothesisFlow()
         crits = CriticAgent().latest_by_target(project_id)
+        eng = MissionEngine()
+        latest_mission: dict[str, dict[str, Any]] = {}
+        for m in eng.list_missions(project_id):        # newest-first
+            latest_mission.setdefault(m.get("hyp_id", ""), m)
         out = []
         for h in fl.approved(project_id):
             exps = fl.experiments_for(project_id, h["id"])
@@ -404,6 +421,7 @@ def build_portal_router() -> APIRouter:
                 "confrontation": h.get("confrontation"),
                 "critique": crits.get(h["id"]),
                 "new_evidence_count": int(h.get("new_evidence_count") or 0),
+                "mission": _mission_brief(latest_mission.get(h["id"])),
                 "experiments": exps,
             })
         from .lifecycle import Lifecycle

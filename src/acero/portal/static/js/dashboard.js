@@ -561,6 +561,50 @@ async function renderTrace(view, pid, hypId, cb) {
   });
 }
 
+/* Progress bar for a hypothesis' running/last mission (0-100%). */
+function missionBar(m, hypId) {
+  if (!m) return "";
+  const running = m.status === "RUNNING" || m.status === "PENDING";
+  const pct = m.status === "DONE" ? 100 : (m.progress_pct || 0);
+  const cls = m.status === "FAILED" ? "bad" : (m.status === "DONE" ? "ok" : "run");
+  const label = m.status === "DONE" ? "✅ misión completa"
+    : m.status === "FAILED" ? "❌ misión falló"
+    : (m.current || "misión en curso…");
+  return `<div class="mbar-wrap" data-mbar="${esc(hypId)}" data-mid="${esc(m.id)}" data-mrun="${running ? 1 : 0}">
+      <div class="mbar"><div class="mbar-fill ${cls}" style="width:${pct}%"></div>
+        <span class="mbar-pct">${pct}%</span></div>
+      <div class="mbar-label">🚀 ${esc(label)}</div>
+    </div>`;
+}
+
+/* Live-poll each running mission bar on this view and refresh when it ends. */
+function wireMissionBars(view, pid, cb) {
+  const bars = [...view.querySelectorAll('[data-mbar][data-mrun="1"]')];
+  if (!bars.length) return;
+  const t = setInterval(async () => {
+    if (!document.body.contains(view)) { clearInterval(t); return; }
+    const { ok, body } = await get(`/portal/api/projects/${encodeURIComponent(pid)}/missions`);
+    if (!ok) return;
+    const byHyp = {};
+    (body.missions || []).forEach((mn) => { if (!(mn.hyp_id in byHyp)) byHyp[mn.hyp_id] = mn; });
+    let anyRunning = false;
+    bars.forEach((wrap) => {
+      const mn = byHyp[wrap.dataset.mbar];
+      if (!mn) return;
+      const cur = (mn.steps || []).find((s2) => s2.status === "RUNNING");
+      const pct = mn.status === "DONE" ? 100 : (mn.progress_pct || 0);
+      const fill = wrap.querySelector(".mbar-fill");
+      fill.style.width = pct + "%";
+      wrap.querySelector(".mbar-pct").textContent = pct + "%";
+      wrap.querySelector(".mbar-label").textContent = "🚀 " + (mn.status === "DONE" ? "✅ misión completa"
+        : (cur && cur.sub) || "misión en curso…");
+      if (mn.status === "RUNNING" || mn.status === "PENDING") anyRunning = true;
+      else { fill.classList.remove("run"); fill.classList.add(mn.status === "FAILED" ? "bad" : "ok"); }
+    });
+    if (!anyRunning) { clearInterval(t); cb.openPhase(pid, "literatura"); }
+  }, 3500);
+}
+
 /* Poll a parallel run (one subagent per item) and paint live progress. */
 function pollRun(runId, out, onDone) {
   const icon = { PENDING: "⏳", RUNNING: "🤖", DONE: "✅", ERROR: "❌" };
@@ -654,6 +698,7 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         ${stale}
         <button class="act" data-invest="${esc(h.id)}">${done ? "↻ Re-investigar" : "🔎 Investigar"}</button>
         <button class="act mission-btn" data-mission="${esc(h.id)}">🚀 Lanzar Misión</button>
+        ${missionBar(h.mission, h.id)}
         ${done ? `<button class="act ghost" data-deepen="${esc(h.id)}">🕸 Profundizar (referencias + PDFs)</button>` : ""}
         <button class="act ghost" data-htrace="${esc(h.id)}">🧭 Detalle</button>
         <div class="confront-out" data-invout="${esc(h.id)}">${confrontHtml}</div>
@@ -735,7 +780,8 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         const steps = (mn.steps || []).map((s2) =>
           `<span class="mstep ${s2.status.toLowerCase()}" title="${esc(s2.error || s2.info || "")}">${S_ICON[s2.status] || "⏳"} ${esc(s2.name.replace("experiments_", "exp:"))}</span>`).join(" → ");
         const retry = mn.status === "FAILED" ? ` <button class="act ghost" data-mretry="${esc(mn.id)}">↻ Reintentar</button>` : "";
-        return `<div class="mission-line">${S_ICON[mn.status] || "⏳"} <b>${esc(mn.hyp_tag)}</b> ${steps}${retry}</div>`;
+        const pct = mn.status === "DONE" ? 100 : (mn.progress_pct || 0);
+        return `<div class="mission-line">${S_ICON[mn.status] || "⏳"} <b>${esc(mn.hyp_tag)}</b> <span class="tag">${pct}%</span> ${steps}${retry}</div>`;
       }).join("") : "";
       strip.querySelectorAll("[data-mretry]").forEach((b) =>
         b.addEventListener("click", async () => {
@@ -771,6 +817,7 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
 
     wireCriticConvert(view, pid, cb, phaseKey);
     wireAristoteles(view, pid, cb, () => cb.openPhase(pid, "literatura"));
+    wireMissionBars(view, pid, cb);
     view.querySelectorAll("[data-htrace]").forEach((b) =>
       b.addEventListener("click", () => renderTrace(view, pid, b.dataset.htrace, cb)));
     get(`/portal/api/projects/${encodeURIComponent(pid)}/rigor`).then(({ ok: rk, body: rg }) => {

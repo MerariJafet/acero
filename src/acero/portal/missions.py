@@ -30,6 +30,9 @@ from ..ledger.service import ResearchLedger
 from ..provenance.events import ProvenanceAction
 
 STEPS = ["investigate", "experiments_propose", "experiments_run", "synthesize"]
+# relative weights → a smooth 0-100% (experiments_run is by far the longest)
+STEP_WEIGHT = {"investigate": 15, "experiments_propose": 15,
+               "experiments_run": 55, "synthesize": 15}
 MAX_MISSIONS = 2                     # concurrent missions (each spawns Codex work)
 STALE_HEARTBEAT_SEC = 180.0
 
@@ -108,8 +111,24 @@ class MissionEngine:
         _POOL.submit(_run)
 
     # --- persistence helpers ---------------------------------------------------
+    @staticmethod
+    def _pct(m: dict[str, Any]) -> int:
+        """Smooth 0-100% from step weights + the running step's sub-fraction."""
+        total = sum(STEP_WEIGHT.values()) or 100
+        acc = 0.0
+        for s in m.get("steps", []):
+            w = STEP_WEIGHT.get(s["name"], 25)
+            if s["status"] == "DONE":
+                acc += w
+            elif s["status"] == "RUNNING":
+                acc += w * float(s.get("sub_frac") or 0.0)
+        if m.get("status") == "DONE":
+            return 100
+        return max(0, min(99, round(100 * acc / total)))
+
     def _save(self, m: dict[str, Any]) -> None:
         m["heartbeat_ts"] = _now_ts()
+        m["progress_pct"] = self._pct(m)
         self.store.update_payload(m["id"], m, status=m["status"])
 
     def list_missions(self, project_id: str) -> list[dict[str, Any]]:
@@ -165,10 +184,12 @@ class MissionEngine:
                 continue                      # checkpoint: already done pre-restart
             step["status"] = "RUNNING"
             step["started_at"] = now_iso()
+            step["sub_frac"] = 0.0
             self._save(m)
             try:
-                info = self._run_step(m, step["name"])
+                info = self._run_step(m, step)
                 step["status"] = "DONE"
+                step["sub_frac"] = 1.0
                 step["info"] = str(info)[:300]
             except Exception as exc:  # noqa: BLE001 - honest failure, resumable
                 step["status"] = "FAILED"
@@ -187,13 +208,16 @@ class MissionEngine:
         m["finished_at"] = now_iso()
         self._save(m)
 
-    def _run_step(self, m: dict[str, Any], name: str) -> str:
+    def _run_step(self, m: dict[str, Any], step: dict[str, Any]) -> str:
         from .hypothesis_flow import HypothesisFlow
         fl = HypothesisFlow(self._sf)
         pid, hid = m["project_id"], m["hyp_id"]
         use_ai = bool(m.get("use_ai", True))
+        name = step["name"]
 
         if name == "investigate":
+            step["sub"] = "buscando literatura real (multi-fuente)…"
+            self._save(m)
             r = fl.investigate(pid, hid, use_ai=use_ai, via=f"mission:{m['id']}")
             if not r.get("ok"):
                 raise RuntimeError(r.get("error", "investigate failed"))
@@ -204,22 +228,33 @@ class MissionEngine:
             existing = fl.experiments_for(pid, hid)
             if any(e.get("status") == "PROPOSED" for e in existing):
                 return f"ya había {len(existing)} propuestos"
+            step["sub"] = "Codex diseñando experimentos…"
+            self._save(m)
             r = fl.propose_experiments(pid, hid, use_ai=use_ai, via=f"mission:{m['id']}")
             if not r.get("ok"):
                 raise RuntimeError(r.get("error", "propose failed"))
             return f"{len(r.get('created', []))} experimentos propuestos"
 
         if name == "experiments_run":
+            todo = [e for e in fl.experiments_for(pid, hid)
+                    if e.get("status") == "PROPOSED"]
+            total = len(todo)
             ran, modes = 0, []
-            for e in fl.experiments_for(pid, hid):
-                if e.get("status") != "PROPOSED":
-                    continue
+            for i, e in enumerate(todo):
+                step["sub"] = (f"corriendo experimento {i + 1}/{total}: "
+                               f"{(e.get('title') or '')[:50]}")
+                step["sub_frac"] = i / total if total else 0.0
+                self._save(m)
                 r = fl.run_experiment(pid, e["id"], use_ai=use_ai)
                 ran += 1
                 modes.append(r.get("mode", "?"))
+                step["sub_frac"] = ran / total if total else 1.0
+                self._save(m)
             return f"{ran} corridos ({', '.join(modes) or 'ninguno pendiente'})"
 
         if name == "synthesize":
+            step["sub"] = "actualizando conocimiento y dossier…"
+            self._save(m)
             from .synthesis import synthesize_hypothesis
             r = synthesize_hypothesis(pid, hid, self._sf, use_ai=use_ai)
             return r.get("summary", "síntesis registrada")[:200]

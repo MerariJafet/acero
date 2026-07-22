@@ -259,12 +259,17 @@ class Lifecycle:
                 if m.get("status") not in ("RUNNING", "PENDING"):
                     continue
                 hyp = self.store.get(m.get("hyp_id", "")) or {}
+                cur = next((s for s in m.get("steps", [])
+                            if s["status"] == "RUNNING"), None)
                 missions.append({
                     "mission_id": m["id"], "project": p.title[:50],
                     "hyp_tag": m.get("hyp_tag", ""), "hyp_id": m.get("hyp_id", ""),
                     "hyp_version": int(hyp.get("version", 1)),
                     "status": m.get("status"),
-                    "steps": [{"name": s["name"], "status": s["status"]}
+                    "progress_pct": int(m.get("progress_pct") or 0),
+                    "current": (cur or {}).get("sub", "") if cur else "",
+                    "steps": [{"name": s["name"], "status": s["status"],
+                               "sub": s.get("sub", "")}
                               for s in m.get("steps", [])]})
         with _LOCK:
             runs = [{"id": r["id"], "kind": r["kind"], "status": r["status"],

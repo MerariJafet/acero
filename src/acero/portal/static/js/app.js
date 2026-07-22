@@ -225,11 +225,14 @@ async function boot() {
     async function paint() {
       const { ok, body: pr } = await get("/portal/api/processes");
       if (!ok) { body.innerHTML = "<p class='err'>error</p>"; return false; }
-      const ms = (pr.missions || []).map((m) => `
-        <div class="mission-line">🚀 <b>${esc(m.hyp_tag)}</b> v${m.hyp_version}
-          <span class="tag">${esc(m.project)}</span> ${esc(m.status)}<br>
+      const ms = (pr.missions || []).map((m) => {
+        const pct = m.status === "DONE" ? 100 : (m.progress_pct || 0);
+        return `<div class="mission-line">🚀 <b>${esc(m.hyp_tag)}</b> v${m.hyp_version}
+          <span class="tag">${esc(m.project)}</span> ${esc(m.status)} <b>${pct}%</b>
+          <div class="mbar"><div class="mbar-fill run" style="width:${pct}%"></div></div>
+          ${m.current ? `<div class="mbar-label">${esc(m.current)}</div>` : ""}
           ${(m.steps || []).map((s2) => `<span class="mstep ${s2.status.toLowerCase()}">${esc(s2.name.replace("experiments_", "exp:"))}: ${esc(s2.status)}</span>`).join(" → ")}
-        </div>`).join("");
+        </div>`; }).join("");
       const rs = (pr.runs || []).map((r) => `
         <div class="mission-line">⚙️ ${esc(r.kind)} ${r.done}/${r.total}
           ${(r.items || []).map((i) => `<span class="mstep ${i.status.toLowerCase()}">${esc(i.label.slice(0, 40))}: ${esc(i.status)}</span>`).join(" · ")}

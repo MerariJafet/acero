@@ -451,3 +451,13 @@ caption { text-align: left; color: var(--muted); padding-bottom: .4rem; }
 }
 .pill.vtag { font-weight: 600; letter-spacing: .02em; border: 1px solid transparent; }
 .pill.vtag.warn { border-color: #7a5a12; }
+.mbar-wrap { margin: .5rem 0 .2rem; }
+.mbar { position: relative; height: 16px; background: #10151d; border: 1px solid var(--border);
+  border-radius: 999px; overflow: hidden; }
+.mbar-fill { height: 100%; transition: width .5s ease; border-radius: 999px; }
+.mbar-fill.run { background: linear-gradient(90deg, #2ea043, #4aa3ff); }
+.mbar-fill.ok { background: #2ea043; }
+.mbar-fill.bad { background: #f85149; }
+.mbar-pct { position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  font-size: .68rem; font-weight: 700; color: #cdd9e5; text-shadow: 0 0 3px #000; }
+.mbar-label { font-size: .78rem; color: var(--muted); margin-top: .25rem; }
