@@ -22,6 +22,7 @@ def _isolated_obsidian_vault(tmp_path, monkeypatch):
     async critic subagent must never fire real Codex processes from tests."""
     monkeypatch.setenv("ACERO_OBSIDIAN_VAULT", str(tmp_path / "_test_vault"))
     monkeypatch.setenv("ACERO_CRITIC_DISABLED", "1")
+    monkeypatch.setenv("ACERO_EXPERIMENT_ARTIFACTS", str(tmp_path / "_test_artifacts"))
 
 
 @pytest.fixture()

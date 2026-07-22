@@ -561,7 +561,26 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
       const exps = (h.experiments || []).map((e) => {
         const st = e.status || "PROPOSED";
         const stColor = st === "COMPLETE" ? "ok" : st === "PLANNED" ? "warn" : "warn";
-        const result = e.result ? `<div class="tag">${esc((e.claim || e.result.claim || "").slice(0, 160))}</div>` : "";
+        // generated-analysis results: verdict + real metrics + data provenance + code
+        const r = e.result || {};
+        const V_COLOR = { supports: "ok", refutes: "bad", inconclusive: "warn" };
+        const metrics = r.metrics
+          ? Object.entries(r.metrics).slice(0, 5).map(([k, v]) =>
+              `<span class="metric">${esc(k)}: <b>${esc(typeof v === "number" ? Number(v.toPrecision(4)).toString() : String(v))}</b></span>`).join(" ")
+          : "";
+        const provs = (e.provenance || []).map((p2) =>
+          `<div class="tag">📦 <a href="${esc(p2.url)}" target="_blank" rel="noopener">${esc(p2.filename)}</a> · ${Math.round((p2.bytes || 0) / 1024)} KB · sha256 <code>${esc((p2.sha256 || "").slice(0, 12))}…</code></div>`).join("");
+        const genDetail = r.verdict ? `
+          <div class="gen-result">
+            <div>${pill(r.verdict, V_COLOR[r.verdict] || "warn")} <span class="tag">análisis generado por IA — revisar código</span></div>
+            <p class="tag">${esc(r.verdict_reason || "")}</p>
+            <div class="metrics">${metrics}</div>
+            ${r.null_test && r.null_test.description !== "ausente" ? `<div class="tag">🎲 Nulo: ${esc(r.null_test.description || "")} → ${r.null_test.passed ? "superado" : "NO superado"}</div>` : ""}
+            ${provs}
+            ${e.code_path ? `<div class="tag">📄 Código: <code>${esc(e.code_path)}</code></div>` : ""}
+          </div>` : "";
+        const result = e.claim ? `<div class="tag">${esc((e.claim || "").slice(0, 180))}</div>` : "";
+        const ferr = e.factory_error ? `<div class="tag warn-txt">⚠️ La fábrica no pudo ejecutarlo (${esc(e.factory_error.stage || "")}): ${esc((e.factory_error.error || "").slice(0, 120))}</div>` : "";
         const plan = e.plan ? `<details><summary class="tag">plan de ejecución</summary><div class="lms-body">${esc(e.plan)}</div></details>` : "";
         const mIcon = { download_data: "⬇️ bajar datos", math_analysis: "∑ análisis", theoretical: "📐 teórico", simulation: "🎲 simulación" };
         const mt = e.method_type ? `<span class="src">${esc(mIcon[e.method_type] || e.method_type)}</span>` : "";
@@ -571,7 +590,7 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
           <div class="tag"><b>Qué:</b> ${esc(e.what || "")}</div>
           <div class="tag"><b>Cómo:</b> ${esc(e.how || "")}</div>
           <div class="tag"><b>Datos:</b> ${esc(e.data_source || "")} · <b>Controles:</b> ${esc(e.controls || "")}</div>
-          ${result}${plan}${criticFoot(e.critique)}
+          ${result}${genDetail}${ferr}${plan}${criticFoot(e.critique)}
         </div>`;
       }).join("");
       return `<div class="card hyp-card">

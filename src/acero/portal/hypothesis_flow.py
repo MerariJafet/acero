@@ -396,7 +396,14 @@ class HypothesisFlow:
                            f"Experimento: {e.get('title','')}\n"
                            f"Resultado real: {str(res.get('claim',''))[:600]}", self._sf)
             return {"ok": True, "mode": "real_analysis", "result": res}
-        # no code to run this yet → reproducible PLAN, honestly not a result
+
+        # EXPERIMENT FACTORY: generate + sandbox-run the analysis for real
+        if use_ai:
+            fr = self._run_factory(project_id, e)
+            if fr is not None:
+                return fr
+
+        # no way to execute this yet → reproducible PLAN, honestly not a result
         plan = self._plan(e, use_ai=use_ai)
         self.store.update_payload(exp_id, {
             "status": "PLANNED", "synthetic": None, "plan": plan}, status="PLANNED")
@@ -407,6 +414,51 @@ class HypothesisFlow:
         return {"ok": True, "mode": "plan_only", "plan": plan,
                 "note": ("ACERO aún no tiene código para ejecutar este experimento con datos "
                          "reales; se generó un PLAN reproducible (pendiente). No es un resultado.")}
+
+    def _run_factory(self, project_id: str, e: dict[str, Any]) -> dict[str, Any] | None:
+        """Try the Experiment Factory. Returns the run dict on success, else None
+        (caller falls back to an honest PLAN — never a fabricated result)."""
+        from .critic import critique_async
+        from .experiment_factory import run_generated
+        from .obsidian_sync import sync_project_best_effort
+        h = self.store.get(e.get("hyp_id", "")) or {}
+        p = self.ledger.get_project(project_id)
+        try:
+            fr = run_generated(e, h, domain=(p.domain if p else ""))
+        except Exception as exc:  # noqa: BLE001 - factory crash must not kill the flow
+            fr = {"ok": False, "stage": "factory", "error": str(exc)[:300]}
+        if not fr.get("ok"):
+            # keep the honest trace of WHY it could not execute
+            self.store.update_payload(e["id"], {"factory_error": {
+                "stage": fr.get("stage", ""), "error": fr.get("error", ""),
+                "attempts": fr.get("attempts", 0), "at": now_iso()}})
+            return None
+        res = fr["result"]
+        claim = (f"[CÓDIGO GENERADO POR IA — revisar script] {res['verdict']}: "
+                 f"{res['verdict_reason']}")[:300]
+        real_data = bool(fr.get("provenance"))
+        self.store.update_payload(e["id"], {
+            "status": "COMPLETE", "synthetic": (not real_data), "result": res,
+            "claim": claim, "provenance": fr.get("provenance", []),
+            "code_path": fr.get("code_path", ""),
+            "artifacts_dir": fr.get("artifacts_dir", ""),
+            "factory": {"attempts": fr.get("attempts"), "generator": fr.get("generator"),
+                        "duration_sec": fr.get("duration_sec"),
+                        "disclaimer": fr.get("disclaimer", "")}},
+            status="COMPLETE")
+        sync_project_best_effort(project_id, self._sf)
+        critique_async(project_id, e["id"], "experimento_resultado",
+                       f"Experimento: {e.get('title','')}\n"
+                       f"Veredicto del análisis generado: {res['verdict']} — "
+                       f"{res['verdict_reason'][:300]}\n"
+                       f"Métricas: {str(res.get('metrics'))[:300]}\n"
+                       f"Nulos: {str(res.get('null_test'))[:200]}\n"
+                       "OJO: el código lo escribió una IA; juzga también si el "
+                       "análisis en sí es válido.", self._sf)
+        return {"ok": True, "mode": "generated_analysis", "result": res,
+                "provenance": fr.get("provenance", []),
+                "attempts": fr.get("attempts"), "claim": claim,
+                "disclaimer": fr.get("disclaimer", "")}
 
     def _plan(self, e: dict[str, Any], *, use_ai: bool) -> str:
         base = (f"Objetivo: {e.get('what','')}\nMétodo: {e.get('how','')}\n"

@@ -248,6 +248,13 @@ ul.cites { list-style: none; margin-left: 0; padding: 0; display: grid; gap: .5r
 ul.ideas { list-style: none; margin: .3rem 0 0; padding: 0; display: grid; gap: .55rem; }
 ul.ideas > li { border-left: 2px solid #2b3444; padding: .1rem 0 .1rem .6rem; font-size: .85rem; }
 .warn-txt { color: #d9a441; }
+.gen-result { margin-top: .5rem; border: 1px solid #1d2a3a; background: #0d1622;
+  border-radius: 10px; padding: .55rem .7rem; font-size: .85rem; }
+.gen-result .metrics { display: flex; flex-wrap: wrap; gap: .4rem; margin: .3rem 0; }
+.gen-result .metric { background: #10151d; border: 1px solid var(--border);
+  border-radius: 6px; padding: .1rem .5rem; font-size: .8rem; }
+.gen-result code { background: #10151d; padding: .05rem .3rem; border-radius: 4px;
+  color: #79c0ff; font-size: .78rem; }
 .critic-note { margin-top: .7rem; border-top: 1px solid #2b2436; padding: .55rem .7rem .5rem;
   background: #14101c; border-radius: 0 0 10px 10px; font-size: .85rem; }
 .critic-note .critic-head { display: flex; align-items: center; gap: .45rem; margin-bottom: .25rem; }
