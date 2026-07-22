@@ -416,6 +416,15 @@ def build_portal_router() -> APIRouter:
         from .hypothesis_flow import HypothesisFlow
         return HypothesisFlow().investigate(project_id, hyp_id)
 
+    @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/literature/deepen")
+    def lit_deepen(project_id: str, hyp_id: str,
+                   sess: Session = Depends(_require_session),
+                   x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Snowball: index the references of already-read papers + pull OA PDFs."""
+        _require_csrf(sess, x_csrf_token)
+        from .hypothesis_flow import HypothesisFlow
+        return HypothesisFlow().deepen_literature(project_id, hyp_id)
+
     @r.post("/api/projects/{project_id}/anomalies/harvest")
     def anomalies_harvest(project_id: str, sess: Session = Depends(_require_session),
                           x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:

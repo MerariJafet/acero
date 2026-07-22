@@ -104,9 +104,13 @@ def _host_allowed(url: str) -> bool:
 
 def fetch_data(urls: list[dict[str, Any]], dest: Path, *,
                timeout: float = FETCH_TIMEOUT,
-               max_bytes: int = MAX_DOWNLOAD_BYTES) -> list[dict[str, Any]]:
-    """Trusted downloader: allowlisted hosts only; records verifiable provenance."""
+               max_bytes: int = MAX_DOWNLOAD_BYTES,
+               cache_dir: Path | None = None) -> list[dict[str, Any]]:
+    """Trusted downloader: allowlisted hosts only; records verifiable provenance.
+    Downloads are CACHED by URL hash so re-runs and cross-checks reuse bytes."""
     dest.mkdir(parents=True, exist_ok=True)
+    cache = cache_dir if cache_dir is not None else artifacts_root() / "_cache"
+    cache.mkdir(parents=True, exist_ok=True)
     prov: list[dict[str, Any]] = []
     for spec in urls:
         url = str(spec.get("url", "")).strip()
@@ -115,10 +119,20 @@ def fetch_data(urls: list[dict[str, Any]], dest: Path, *,
             raise ValueError(f"solo HTTPS permitido: {url[:80]}")
         if not _host_allowed(url):
             raise ValueError(f"host fuera del allowlist científico: {url[:100]}")
+        path = dest / name
+        ckey = cache / hashlib.sha256(url.encode()).hexdigest()[:32]
+        cached = ckey.exists() and ckey.stat().st_size > 0
+        if cached:
+            data = ckey.read_bytes()
+            path.write_bytes(data)
+            prov.append({"url": url, "filename": name, "bytes": len(data),
+                         "sha256": hashlib.sha256(data).hexdigest(),
+                         "what": spec.get("what", ""), "cached": True,
+                         "fetched_at": now_iso()})
+            continue
         req = urllib.request.Request(url, headers={"User-Agent": _UA})
         h = hashlib.sha256()
         n = 0
-        path = dest / name
         with urllib.request.urlopen(req, timeout=timeout) as r, open(path, "wb") as f:
             while True:
                 chunk = r.read(1 << 16)
@@ -131,9 +145,10 @@ def fetch_data(urls: list[dict[str, Any]], dest: Path, *,
                 f.write(chunk)
         if n == 0:
             raise ValueError(f"descarga vacía: {url[:80]}")
+        ckey.write_bytes(path.read_bytes())
         prov.append({"url": url, "filename": name, "bytes": n,
                      "sha256": h.hexdigest(), "what": spec.get("what", ""),
-                     "fetched_at": now_iso()})
+                     "cached": False, "fetched_at": now_iso()})
     return prov
 
 
@@ -156,12 +171,14 @@ def _codex():
     return prov
 
 
-def default_plan(exp: dict[str, Any], hyp: dict[str, Any], domain: str) -> dict[str, Any]:
+def default_plan(exp: dict[str, Any], hyp: dict[str, Any], domain: str,
+                 feedback: str | None = None) -> dict[str, Any]:
     """Ask Codex which public datasets the experiment needs (may be none)."""
     mt = exp.get("method_type", "")
     prov = _codex()
     allow = ", ".join(sorted(DATA_HOST_ALLOWLIST))
-    out = prov.complete_json(
+    fb = f"\n\nINTENTO ANTERIOR: {feedback[:600]}\n" if feedback else ""
+    out = prov.complete_json(fb +
         f"Dominio: {domain}. Experimento: «{exp.get('title','')}». "
         f"Qué: {exp.get('what','')}. Cómo: {exp.get('how','')}. "
         f"Fuente de datos declarada: {exp.get('data_source','')}. "
@@ -200,8 +217,16 @@ _CODE_RULES = (
     "- verdict se decide por el discriminador contra los nulos; si los datos no "
     "alcanzan, verdict=inconclusive y dilo en verdict_reason. NUNCA inventes "
     "números: todo métrico debe salir del cómputo.\n"
+    "- Opcional: guarda gráficas PNG en ./out/ (crea el directorio).\n"
     "- Responde SOLO con el código Python (sin ``` ni explicación)."
 )
+
+_SECOND_IMPL = (
+    "SEGUNDA IMPLEMENTACIÓN INDEPENDIENTE (verificación cruzada): implementa el "
+    "MISMO experimento con un ENFOQUE ALGORÍTMICO DISTINTO al obvio (otra "
+    "estimación espectral/estadística, otro esquema de surrogatos, otra "
+    "parametrización). Mismo contrato RESULT_JSON y mismas claves en metrics "
+    "para poder comparar. No copies la implementación típica.")
 
 
 def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
@@ -263,11 +288,35 @@ def _parse_result(stdout: str) -> tuple[dict[str, Any] | None, str]:
 
 # --- main entry ------------------------------------------------------------------
 
+def _compare_results(a: dict[str, Any], b: dict[str, Any],
+                     rel_tol: float = 0.15) -> tuple[bool, str]:
+    """Two independent implementations must agree: same verdict AND shared
+    numeric metrics within rel_tol. Honest disagreement → not agreed."""
+    if b.get("verdict") != a.get("verdict"):
+        return False, (f"veredictos difieren: {a.get('verdict')} vs "
+                       f"{b.get('verdict')}")
+    ma, mb = a.get("metrics") or {}, b.get("metrics") or {}
+    shared = [k for k in ma if k in mb
+              and isinstance(ma[k], (int, float)) and isinstance(mb[k], (int, float))]
+    if not shared:
+        return False, "sin métricas comparables entre implementaciones"
+    bad = []
+    for k in shared:
+        va, vb = float(ma[k]), float(mb[k])
+        denom = max(abs(va), abs(vb), 1e-12)
+        if abs(va - vb) / denom > rel_tol:
+            bad.append(f"{k}: {va:.4g} vs {vb:.4g}")
+    if bad:
+        return False, "métricas divergentes: " + "; ".join(bad[:4])
+    return True, f"{len(shared)} métricas coinciden (tol {int(rel_tol*100)}%)"
+
+
 def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
                   plan: Callable[..., dict[str, Any]] | None = None,
                   codegen: Callable[..., str] | None = None,
                   fetch: Callable[..., list[dict[str, Any]]] | None = None,
-                  max_repairs: int = MAX_REPAIRS) -> dict[str, Any]:
+                  max_repairs: int = MAX_REPAIRS,
+                  verify_supports: bool = True) -> dict[str, Any]:
     """Full factory pipeline. Returns {ok, result?, error?, ...} — never fabricates."""
     from ..sandbox.runner import SubprocessRunner
 
@@ -280,20 +329,38 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
     data_dir = workdir / "data"
     workdir.mkdir(parents=True, exist_ok=True)
 
-    # 1) plan: which public data does this need?
-    try:
-        p = plan(exp, hyp, domain)
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "stage": "plan", "error": str(exc)[:300]}
-    urls = list(p.get("data_urls") or [])
-
-    # 2) trusted fetch with provenance
+    # 1-2) plan → trusted fetch; on fetch failure RE-PLAN with alternatives (2 rounds)
     provenance: list[dict[str, Any]] = []
-    if urls:
+    plan_fb: str | None = None
+    fetch_err = ""
+    for _round in range(2):
+        try:
+            if plan_fb is None:
+                p = plan(exp, hyp, domain)
+            else:
+                try:
+                    p = plan(exp, hyp, domain, feedback=plan_fb)
+                except TypeError:              # injected planners may not take feedback
+                    p = plan(exp, hyp, domain)
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "stage": "plan", "error": str(exc)[:300]}
+        urls = list(p.get("data_urls") or [])
+        if not urls:
+            fetch_err = ""            # re-plan chose a self-contained analysis
+            break
         try:
             provenance = fetch(urls, data_dir)
+            fetch_err = ""
+            break
         except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "stage": "fetch", "error": str(exc)[:300]}
+            fetch_err = str(exc)[:300]
+            plan_fb = (f"Estas URLs FALLARON ({fetch_err}). Propón un dataset "
+                       f"ALTERNATIVO público (otro host del allowlist u otra "
+                       f"consulta), o data_urls vacío si el análisis puede ser "
+                       f"autocontenido. URLs fallidas: "
+                       + "; ".join(str(u.get('url', ''))[:90] for u in urls))
+    if fetch_err and not provenance:
+        return {"ok": False, "stage": "fetch", "error": fetch_err}
     if exp.get("method_type") == "download_data" and not provenance:
         return {"ok": False, "stage": "fetch",
                 "error": "experimento download_data sin datos descargables verificables"}
@@ -303,35 +370,65 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
 
     # 3-4) codegen + sandboxed run + repair loop
     runner = SubprocessRunner()
-    feedback: str | None = None
-    attempts = 0
-    code = ""
-    sres = None
-    result: dict[str, Any] | None = None
-    why = ""
-    while attempts <= max_repairs:
-        attempts += 1
-        try:
-            code = codegen(exp, hyp, provenance, previews, feedback)
-        except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "stage": "codegen", "error": str(exc)[:300],
-                    "attempts": attempts}
-        sres = runner.run(code, workdir, timeout_sec=SANDBOX_TIMEOUT,
-                          memory_mb=SANDBOX_MEMORY_MB, allow_network=False)
-        if sres.status == "ok" and sres.exit_code == 0:
-            result, why = _parse_result(sres.stdout)
-            if result is not None:
-                break
-        feedback = (f"status={sres.status} exit={sres.exit_code}\n"
-                    f"STDERR:\n{(sres.stderr or '')[-1200:]}\n"
-                    f"STDOUT (cola):\n{(sres.stdout or '')[-600:]}\n"
-                    + (f"VALIDACIÓN: {why}" if why else ""))
-        result = None
 
+    def _one_impl(extra: str | None) -> tuple[dict[str, Any] | None, str, Any, int, str]:
+        feedback = extra
+        attempts = 0
+        code = ""
+        sres = None
+        result: dict[str, Any] | None = None
+        why = ""
+        while attempts <= max_repairs:
+            attempts += 1
+            try:
+                code = codegen(exp, hyp, provenance, previews, feedback)
+            except Exception as exc:  # noqa: BLE001
+                return None, "", None, attempts, f"codegen: {str(exc)[:250]}"
+            sres = runner.run(code, workdir, timeout_sec=SANDBOX_TIMEOUT,
+                              memory_mb=SANDBOX_MEMORY_MB, allow_network=False)
+            if sres.status == "ok" and sres.exit_code == 0:
+                result, why = _parse_result(sres.stdout)
+                if result is not None:
+                    return result, code, sres, attempts, ""
+            feedback = ((extra + "\n\n") if extra else "") + (
+                f"status={sres.status} exit={sres.exit_code}\n"
+                f"STDERR:\n{(sres.stderr or '')[-1200:]}\n"
+                f"STDOUT (cola):\n{(sres.stdout or '')[-600:]}\n"
+                + (f"VALIDACIÓN: {why}" if why else ""))
+            result = None
+        return None, code, sres, attempts, feedback or "sin resultado válido"
+
+    result, code, sres, attempts, err = _one_impl(None)
     if result is None:
         (workdir / "last_attempt.py").write_text(code or "", encoding="utf-8")
         return {"ok": False, "stage": "run", "attempts": attempts,
-                "error": (feedback or "sin resultado válido")[:400]}
+                "error": err[:400]}
+
+    # 4b) cross-check: a "supports" needs an INDEPENDENT second implementation
+    cross_check: dict[str, Any] | None = None
+    if verify_supports and result.get("verdict") == "supports":
+        r2, code2, _s2, att2, err2 = _one_impl(_SECOND_IMPL)
+        if r2 is None:
+            cross_check = {"performed": True, "agreed": False,
+                           "reason": f"2ª implementación no corrió: {err2[:200]}"}
+        else:
+            (workdir / "script_v2.py").write_text(code2, encoding="utf-8")
+            agreed, detail = _compare_results(result, r2)
+            cross_check = {"performed": True, "agreed": agreed, "detail": detail,
+                           "second_verdict": r2.get("verdict"),
+                           "attempts": att2}
+        if not cross_check.get("agreed"):
+            result["verdict"] = "inconclusive"
+            result["verdict_reason"] = (
+                "[degradado por ACERO: la verificación cruzada con una "
+                "implementación independiente NO coincidió — "
+                f"{cross_check.get('reason') or cross_check.get('detail','')}] "
+                + str(result.get("verdict_reason", "")))[:400]
+
+    # figures written by the script (if any)
+    out_dir = workdir / "out"
+    result["figures"] = sorted(f.name for f in out_dir.glob("*.png")) \
+        if out_dir.exists() else []
 
     # 5) reproducible package
     (workdir / "script.py").write_text(code, encoding="utf-8")
@@ -345,7 +442,8 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
         "provenance.json\npython3 -I script.py\n", encoding="utf-8")
 
     return {"ok": True, "result": result, "provenance": provenance,
-            "attempts": attempts, "code_path": str(workdir / "script.py"),
+            "attempts": attempts, "cross_check": cross_check,
+            "code_path": str(workdir / "script.py"),
             "artifacts_dir": str(workdir),
             "duration_sec": round(getattr(sres, "duration_sec", 0.0), 2),
             "generator": "codex+sandbox",

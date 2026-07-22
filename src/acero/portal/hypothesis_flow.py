@@ -152,6 +152,8 @@ class HypothesisFlow:
                    "url": o["url"], "authors": o["authors"],
                    "abstract": o.get("abstract", ""), "source": o.get("source", ""),
                    "topics": o.get("topics", []), "relevance": o.get("relevance"),
+                   "openalex_id": o.get("openalex_id", ""),
+                   "referenced_works": o.get("referenced_works", []),
                    "query_used": query}
             self.store.put(project_id, "literature", lid, rec, status="INDEXED",
                            actor="knowledge_mesh",
@@ -275,6 +277,107 @@ class HypothesisFlow:
                        "realmente mejor, o solo más cómoda/vaga?", self._sf)
         return {"ok": True, "hyp_id": hyp_id, "version": new_ver,
                 "title": improved, "previous": old_title}
+
+    # --- C6: deep literature — follow the references (snowballing) + OA PDFs ---
+    def deepen_literature(self, project_id: str, hyp_id: str, *,
+                          snowballer: Any | None = None,
+                          pdf_fetcher: Any | None = None,
+                          rows: int = 10) -> dict[str, Any]:
+        """Level-2 literature: index the REFERENCES of the papers already read,
+        and pull open-access arXiv PDFs into the Obsidian vault for deep reading."""
+        h = self.store.get(hyp_id)
+        if not h:
+            return {"ok": False, "error": "hypothesis not found"}
+        mine = [x for x in self.store.list_objects(project_id, kind="literature")
+                if x.get("hyp_id") == hyp_id]
+        if not mine:
+            return {"ok": False, "error": "investiga primero: sin papers indexados"}
+        known = {(x.get("doi") or "").lower() for x in
+                 self.store.list_objects(project_id, kind="literature")}
+        known |= {(x.get("title") or "").lower()[:60] for x in
+                  self.store.list_objects(project_id, kind="literature")}
+        ref_ids: list[str] = []
+        for x in mine:
+            ref_ids += list(x.get("referenced_works") or [])
+        ref_ids = list(dict.fromkeys(ref_ids))          # dedup, keep order
+        if snowballer is None:
+            from ..knowledge_mesh import mesh as _mesh
+            snowballer = _mesh.snowball
+
+        added = []
+        if ref_ids:
+            try:
+                refs = snowballer(ref_ids, rows=rows)
+            except Exception:  # noqa: BLE001
+                refs = []
+            for o in refs:
+                key_d = (o.get("doi") or "").lower()
+                key_t = (o.get("title") or "").lower()[:60]
+                if (key_d and key_d in known) or (key_t and key_t in known):
+                    continue
+                lid = new_id("lit")
+                rec = {"id": lid, "angle": h.get("tag", ""), "hyp_id": hyp_id,
+                       "title": o["title"], "doi": o.get("doi", ""),
+                       "type": o["type"], "integrity": o["integrity"],
+                       "url": o["url"], "authors": o["authors"],
+                       "abstract": o.get("abstract", ""),
+                       "source": o.get("source", ""),
+                       "relevance": o.get("relevance"), "depth": 2}
+                self.store.put(project_id, "literature", lid, rec, status="INDEXED",
+                               actor="knowledge_mesh",
+                               summary=f"🕸 referencia nivel-2 para {h.get('tag')}: "
+                                       f"{(o['title'] or '')[:45]}")
+                known.add(key_d or key_t)
+                added.append(rec["title"][:80])
+
+        pdfs = self._fetch_arxiv_pdfs(project_id, mine, pdf_fetcher=pdf_fetcher)
+        from .obsidian_sync import sync_project_best_effort
+        sync_project_best_effort(project_id, self._sf)
+        return {"ok": True, "level2_added": len(added), "titles": added[:8],
+                "pdfs_saved": pdfs,
+                "note": ("Referencias reales de los papers leídos (OpenAlex) + PDFs "
+                         "open-access al vault. Vacío = las fuentes no resolvieron "
+                         "más, no se inventa nada.")}
+
+    def _fetch_arxiv_pdfs(self, project_id: str, papers: list[dict[str, Any]], *,
+                          pdf_fetcher: Any | None = None, cap: int = 3) -> list[str]:
+        """Best-effort: arXiv PDFs of this hypothesis' papers → vault Literatura/PDFs."""
+        import re as _re
+        import urllib.request as _rq
+
+        from .obsidian_sync import ObsidianExporter, _safe
+        p = self.ledger.get_project(project_id)
+        if p is None:
+            return []
+        vault_dir = ObsidianExporter().root / _safe(p.title, 60) / "Literatura" / "PDFs"
+        saved: list[str] = []
+        for x in papers:
+            if len(saved) >= cap:
+                break
+            url = x.get("url") or ""
+            m = _re.search(r"arxiv\.org/abs/([\w.\-/]+)", url)
+            if not m:
+                continue
+            aid = m.group(1)
+            fname = _safe(aid.replace("/", "_")) + ".pdf"
+            dest = vault_dir / fname
+            if dest.exists():
+                continue
+            try:
+                if pdf_fetcher is not None:
+                    data = pdf_fetcher(aid)
+                else:
+                    req = _rq.Request(f"https://arxiv.org/pdf/{aid}",
+                                      headers={"User-Agent": "ACERO/0.1"})
+                    with _rq.urlopen(req, timeout=60) as r:
+                        data = r.read(25 * 1024 * 1024)
+                if data[:4] == b"%PDF":
+                    vault_dir.mkdir(parents=True, exist_ok=True)
+                    dest.write_bytes(data)
+                    saved.append(fname)
+            except Exception:  # noqa: BLE001 - a missing PDF is skipped, never faked
+                continue
+        return saved
 
     def investigate_all(self, project_id: str, *, use_ai: bool = True) -> dict[str, Any]:
         results = [self.investigate(project_id, h["id"], use_ai=use_ai)

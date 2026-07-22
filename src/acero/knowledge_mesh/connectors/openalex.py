@@ -64,6 +64,20 @@ def search(query: str, *, rows: int = 5, min_year: int | None = None,
     return [_normalize(w) for w in items]
 
 
+def works_by_ids(ids: list[str], *, timeout: float = 25.0) -> list[ScientificObject]:
+    """Fetch specific works (e.g. the REFERENCES of a paper) with abstracts."""
+    out: list[ScientificObject] = []
+    for wid in ids[:12]:
+        wid = wid.strip().rsplit("/", 1)[-1]
+        if not wid.startswith("W"):
+            continue
+        try:
+            out.append(_normalize(_get(f"{_BASE}/{wid}", timeout=timeout)))
+        except Exception:  # noqa: BLE001 - a missing reference is skipped, not faked
+            continue
+    return out
+
+
 def _normalize(w: dict[str, Any]) -> ScientificObject:
     doi = (w.get("doi") or "").replace("https://doi.org/", "")
     otype = _TYPE_MAP.get(str(w.get("type", "")).lower(), ObjectType.PEER_REVIEWED_ARTICLE)
@@ -87,7 +101,10 @@ def _normalize(w: dict[str, Any]) -> ScientificObject:
         canonical_url=(f"https://doi.org/{doi}" if doi else w.get("id", "")),
         review_status="peer_reviewed" if otype == ObjectType.PEER_REVIEWED_ARTICLE else "unknown",
         verification={"openalex": True, "cited_by_count": w.get("cited_by_count"),
-                      "relevance_score": w.get("relevance_score")},
+                      "relevance_score": w.get("relevance_score"),
+                      "openalex_id": (w.get("id") or "").rsplit("/", 1)[-1],
+                      "referenced_works": [(x or "").rsplit("/", 1)[-1]
+                                           for x in (w.get("referenced_works") or [])[:15]]},
     )
     obj.add_provenance("connector:openalex", "search",
                        f"relevance={w.get('relevance_score')}")

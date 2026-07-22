@@ -537,6 +537,7 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         ${stale}
         <button class="act" data-invest="${esc(h.id)}">${done ? "↻ Re-investigar" : "🔎 Investigar"}</button>
         <button class="act mission-btn" data-mission="${esc(h.id)}">🚀 Misión completa</button>
+        ${done ? `<button class="act ghost" data-deepen="${esc(h.id)}">🕸 Profundizar (referencias + PDFs)</button>` : ""}
         <div class="confront-out" data-invout="${esc(h.id)}">${confrontHtml}</div>
         ${criticFoot(h.critique, h.id)}
       </div>`;
@@ -563,6 +564,20 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
           `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.invest}/investigate`, {});
         b.disabled = false;
         if (iok) cb.openPhase(pid, "literatura");
+      }));
+    view.querySelectorAll("[data-deepen]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        const out = view.querySelector("#lit-run-out");
+        b.disabled = true;
+        b.textContent = "🕸 Siguiendo referencias…";
+        const { ok: dok, body: d } = await post(
+          `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.deepen}/literature/deepen`, {});
+        b.disabled = false;
+        b.textContent = "🕸 Profundizar (referencias + PDFs)";
+        if (dok && d.ok) {
+          out.textContent = `🕸 +${d.level2_added} referencias nivel-2 · ${(d.pdfs_saved || []).length} PDFs al vault`;
+          if (d.level2_added) cb.openPhase(pid, "literatura");
+        } else out.textContent = "Error: " + esc((d && d.error) || "profundizar");
       }));
     view.querySelectorAll("[data-adopt]").forEach((b) =>
       b.addEventListener("click", async () => {

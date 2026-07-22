@@ -69,7 +69,31 @@ def topical_search(query: str, *, domain: str = "", rows: int = 6) -> list[dict[
                     "integrity": o.integrity_status, "url": o.canonical_url,
                     "authors": o.authors[:4], "abstract": o.abstract or "",
                     "topics": o.topics[:5], "source": o.source_id,
-                    "relevance": o.verification.get("relevance_score")})
+                    "relevance": o.verification.get("relevance_score"),
+                    "openalex_id": o.verification.get("openalex_id", ""),
+                    "referenced_works": o.verification.get("referenced_works", [])})
+    return out[:rows]
+
+
+def snowball(reference_ids: list[str], *, rows: int = 10) -> list[dict[str, Any]]:
+    """Level-2 literature: fetch the REFERENCES of already-read papers (real
+    citation-following, with abstracts). Empty result = none resolvable."""
+    objs = openalex.works_by_ids(reference_ids[: rows + 4])
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for o in objs:
+        doi = (o.identifiers.get("doi") or [""])[0]
+        key = doi or (o.title or "").lower()[:60]
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append({"title": o.title, "doi": doi, "type": o.object_type.value,
+                    "integrity": o.integrity_status, "url": o.canonical_url,
+                    "authors": o.authors[:4], "abstract": o.abstract or "",
+                    "topics": o.topics[:5], "source": o.source_id,
+                    "relevance": o.verification.get("relevance_score"),
+                    "openalex_id": o.verification.get("openalex_id", ""),
+                    "referenced_works": o.verification.get("referenced_works", [])})
     return out[:rows]
 
 
