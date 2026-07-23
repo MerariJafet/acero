@@ -1,0 +1,68 @@
+"""Data resolver: accessions → real download URLs (offline, no network)."""
+
+from __future__ import annotations
+
+from acero.portal import data_resolver as dr
+
+
+def test_geo_series_matrix_url_pattern():
+    u = dr._geo_series_matrix_url("GSE111629")
+    assert u == ("https://ftp.ncbi.nlm.nih.gov/geo/series/GSE111nnn/"
+                 "GSE111629/matrix/GSE111629_series_matrix.txt.gz")
+    # short accession
+    assert "GSE1nnn/GSE1234/" in dr._geo_series_matrix_url("GSE1234")
+
+
+def test_resolve_reference_finds_geo_in_text():
+    r = dr.resolve_reference("bajar de GEO GSE55763 en sangre", verify=False)
+    assert r["accession"] == "GSE55763" and r["repository"] == "GEO"
+    assert r["url"].endswith("GSE55763_series_matrix.txt.gz")
+    assert r["filename"] == "GSE55763_series_matrix.txt.gz"
+
+
+def test_resolve_reference_none_when_no_accession():
+    assert dr.resolve_reference("un dataset genérico sin ID", verify=False) is None
+
+
+def test_enrich_plan_fills_url_from_accession():
+    plan = {"data_urls": [{"url": "", "accession": "GSE111629",
+                           "filename": "", "what": "metilación"}],
+            "analysis_outline": "x"}
+    out = dr.enrich_plan_urls(plan, verify=False)
+    assert out["data_urls"][0]["url"].endswith("GSE111629_series_matrix.txt.gz")
+    assert out["data_urls"][0]["what"] == "metilación"     # keeps human description
+
+
+def test_enrich_keeps_direct_https_urls():
+    plan = {"data_urls": [{"url": "https://www.sidc.be/x.csv", "accession": "",
+                           "filename": "x.csv", "what": "sunspots"}],
+            "analysis_outline": "y"}
+    out = dr.enrich_plan_urls(plan, verify=False)
+    assert out["data_urls"][0]["url"] == "https://www.sidc.be/x.csv"
+
+
+def test_enrich_mines_outline_when_no_urls():
+    plan = {"data_urls": [], "analysis_outline": "usar GSE42861 de GEO"}
+    out = dr.enrich_plan_urls(plan, verify=False)
+    assert out["data_urls"] and out["data_urls"][0]["accession"] == "GSE42861"
+
+
+def test_enrich_dedups():
+    plan = {"data_urls": [
+        {"url": "", "accession": "GSE111629", "filename": "", "what": "a"},
+        {"url": "", "accession": "GSE111629", "filename": "", "what": "b"}],
+        "analysis_outline": ""}
+    out = dr.enrich_plan_urls(plan, verify=False)
+    assert len(out["data_urls"]) == 1
+
+
+def test_gunzip_roundtrip(tmp_path):
+    import gzip
+
+    from acero.portal.experiment_factory import _gunzip
+    gz = tmp_path / "data.txt.gz"
+    with gzip.open(gz, "wb") as f:
+        f.write(b"col_a,col_b\n1,2\n3,4\n")
+    name = _gunzip(gz)
+    assert name == "data.txt"
+    assert (tmp_path / "data.txt").read_text() == "col_a,col_b\n1,2\n3,4\n"

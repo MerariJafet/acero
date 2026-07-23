@@ -55,7 +55,7 @@ DATA_HOST_ALLOWLIST = {
     "raw.githubusercontent.com", "ftp.ncbi.nlm.nih.gov", "eutils.ncbi.nlm.nih.gov",
 }
 
-MAX_DOWNLOAD_BYTES = 120 * 1024 * 1024      # 120 MB per file
+MAX_DOWNLOAD_BYTES = int(os.environ.get("ACERO_MAX_DOWNLOAD_MB", "400")) * 1024 * 1024
 PRUNE_DATA_OVER_BYTES = 5 * 1024 * 1024     # raw data >5MB pruned after success
 CACHE_CAP_BYTES = 2 * 1024 * 1024 * 1024    # shared download cache LRU cap (2GB)
 
@@ -88,10 +88,11 @@ PLAN_SCHEMA = {
             "type": "object",
             "properties": {
                 "url": {"type": "string"},
+                "accession": {"type": "string"},   # GEO GSE…, repo ID (resolver builds URL)
                 "filename": {"type": "string"},
                 "what": {"type": "string"},
             },
-            "required": ["url", "filename", "what"],
+            "required": ["url", "accession", "filename", "what"],
             "additionalProperties": False}},
         "analysis_outline": {"type": "string"},
     },
@@ -165,7 +166,29 @@ def fetch_data(urls: list[dict[str, Any]], dest: Path, *,
         prov.append({"url": url, "filename": name, "bytes": n,
                      "sha256": h.hexdigest(), "what": spec.get("what", ""),
                      "cached": False, "fetched_at": now_iso()})
+    # gzip files are decompressed to a sibling the analysis script can read directly
+    for rec in prov:
+        if rec["filename"].endswith(".gz"):
+            plain = _gunzip(dest / rec["filename"])
+            if plain:
+                rec["decompressed_to"] = plain
     return prov
+
+
+def _gunzip(path: Path) -> str:
+    """Decompress a .gz next to it; returns the new filename or ''."""
+    import gzip
+    try:
+        out = path.with_suffix("")           # drop .gz
+        with gzip.open(path, "rb") as g, open(out, "wb") as f:
+            while True:
+                chunk = g.read(1 << 20)
+                if not chunk:
+                    break
+                f.write(chunk)
+        return out.name
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def _head_preview(path: Path, chars: int = 500) -> str:
@@ -199,14 +222,20 @@ def default_plan(exp: dict[str, Any], hyp: dict[str, Any], domain: str,
         f"Qué: {exp.get('what','')}. Cómo: {exp.get('how','')}. "
         f"Fuente de datos declarada: {exp.get('data_source','')}. "
         f"Tipo: {mt or 'desconocido'}.\n\n"
-        "Si el experimento NECESITA datos externos, da data_urls con URLs HTTPS "
-        "DIRECTAS a archivos/consultas públicas (CSV/TSV/FITS/JSON) SOLO de estos "
-        f"hosts: {allow}. Prefiere consultas TAP/API que devuelvan CSV (p.ej. "
-        "exoplanetarchive.ipac.caltech.edu/TAP/sync?query=...&format=csv, o "
-        "www.sidc.be/SILSO/INFO/snmtotcsv.php). URLs REALES y verificables — si no "
-        "conoces una URL exacta y pública, devuelve data_urls VACÍO y plantea el "
-        "análisis como simulación/matemático autocontenido. NO inventes URLs. "
-        "analysis_outline: 3-6 pasos del análisis con controles nulos.",
+        "Si el experimento NECESITA datos externos, da data_urls. Para CADA dataset "
+        "provee: (a) accession — el ID de repositorio público si existe (p.ej. GEO "
+        "'GSE111629'); ACERO construye la URL real de descarga desde la accesión — "
+        "y/o (b) url — una URL HTTPS DIRECTA a un archivo/consulta pública "
+        "(CSV/TSV/FITS/JSON/gz) SOLO de estos hosts: " + allow + ". Prefiere DATOS "
+        "PROCESADOS y descargables (series matrix de GEO, TAP de NASA que devuelva "
+        "CSV como exoplanetarchive.ipac.caltech.edu/TAP/sync?query=...&format=csv, "
+        "SILSO www.sidc.be/SILSO/INFO/snmtotcsv.php). Si el dataset requiere ACCESO "
+        "CONTROLADO (EGA/dbGaP) o son IDATs crudos pesados que no caben ni corren en "
+        "una laptop, NO lo pongas como url descargable: deja data_urls VACÍO y "
+        "reformula el análisis con datos PÚBLICOS PROCESADOS que sí bajen (p.ej. la "
+        "matriz de betas del propio GEO) o como simulación/matemático autocontenido. "
+        "accession vacío si no aplica; url vacío si solo das accession. NO inventes "
+        "URLs. analysis_outline: 3-6 pasos con controles nulos.",
         PLAN_SCHEMA, temperature=0.2)
     return out
 
@@ -251,9 +280,11 @@ def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
                     feedback: str | None = None) -> str:
     prov = _codex()
     files_txt = "\n".join(
-        f"- ./data/{d['filename']} ({d['bytes']} bytes, sha256 {d['sha256'][:12]}…): "
-        f"{d.get('what','')}\n  PRIMEROS CARACTERES:\n  " +
-        previews.get(d["filename"], "")[:400].replace("\n", "\n  ")
+        f"- ./data/{d.get('decompressed_to') or d['filename']} "
+        f"({d['bytes']} bytes descargados, sha256 {d['sha256'][:12]}…"
+        + (f", descomprimido de {d['filename']}" if d.get('decompressed_to') else "")
+        + f"): {d.get('what','')}\n  PRIMEROS CARACTERES:\n  " +
+        previews.get(d.get("decompressed_to") or d["filename"], "")[:400].replace("\n", "\n  ")
         for d in data_files) or "(sin archivos: análisis autocontenido)"
     fb = f"\n\nEL INTENTO ANTERIOR FALLÓ. Corrige la causa:\n{feedback[:1500]}\n" \
         if feedback else ""
@@ -360,6 +391,12 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
                     p = plan(exp, hyp, domain)
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "stage": "plan", "error": str(exc)[:300]}
+        # resolve dataset ACCESSIONS (e.g. GEO GSE…) into real download URLs
+        try:
+            from .data_resolver import enrich_plan_urls
+            p = enrich_plan_urls(p)
+        except Exception:  # noqa: BLE001 - resolver is best-effort
+            pass
         urls = list(p.get("data_urls") or [])
         if not urls:
             fetch_err = ""            # re-plan chose a self-contained analysis
@@ -381,8 +418,11 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
         return {"ok": False, "stage": "fetch",
                 "error": "experimento download_data sin datos descargables verificables"}
 
-    previews = {d["filename"]: _head_preview(data_dir / d["filename"])
-                for d in provenance}
+    # for gz files the analysis reads the DECOMPRESSED sibling — preview that one
+    previews = {}
+    for d in provenance:
+        readable = d.get("decompressed_to") or d["filename"]
+        previews[readable] = _head_preview(data_dir / readable)
 
     # 3-4) codegen + sandboxed run + repair loop
     runner = SubprocessRunner()
