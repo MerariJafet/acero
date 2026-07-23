@@ -435,9 +435,46 @@ def build_portal_router() -> APIRouter:
     def hyp_investigate(project_id: str, hyp_id: str,
                         sess: Session = Depends(_require_session),
                         x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Investigate literature in the background with live progress."""
         _require_csrf(sess, x_csrf_token)
         from .hypothesis_flow import HypothesisFlow
-        return HypothesisFlow().investigate(project_id, hyp_id)
+        from .parallel_runs import start_run
+        fl = HypothesisFlow()
+        h = fl.store.get(hyp_id) or {}
+
+        def work(item: dict[str, Any]) -> dict[str, Any]:
+            rr = HypothesisFlow().investigate(project_id, item["id"])
+            if not rr.get("ok"):
+                raise RuntimeError(rr.get("error", "investigate failed"))
+            stance = (rr.get("confrontation") or {}).get("stance", "")
+            return {"summary": f"{rr.get('n_papers', 0)} papers · {stance}"}
+
+        run = start_run("investigate",
+                        [{"id": hyp_id, "label": f"{h.get('tag','')}: literatura"}],
+                        work)
+        return {"ok": True, "run": run}
+
+    @r.get("/api/projects/{project_id}/experiment/{exp_id}/detail")
+    def exp_detail(project_id: str, exp_id: str,
+                   sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        """Full experiment dashboard: method, data, metrics, code, figures."""
+        from .lifecycle import Lifecycle
+        return Lifecycle().experiment_detail(project_id, exp_id)
+
+    @r.get("/api/projects/{project_id}/experiment/{exp_id}/figure/{name}")
+    def exp_figure(project_id: str, exp_id: str, name: str,
+                   sess: Session = Depends(_require_session)) -> FileResponse:
+        """Serve a generated figure PNG from the experiment's artifacts dir."""
+        from .lifecycle import Lifecycle
+        e = Lifecycle().store.get(exp_id) or {}
+        adir = e.get("artifacts_dir") or ""
+        safe = os.path.basename(name)
+        if not safe.endswith(".png") or safe != name or not adir:
+            raise HTTPException(400, "nombre de figura inválido")
+        fp = os.path.join(adir, "out", safe)
+        if not os.path.isfile(fp):
+            raise HTTPException(404, "figura no encontrada")
+        return FileResponse(fp, media_type="image/png")
 
     # ---- Aristóteles (critic) on demand + history + cascade --------------------
     @r.post("/api/projects/{project_id}/critic/consult")

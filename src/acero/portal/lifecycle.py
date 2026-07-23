@@ -8,6 +8,7 @@ derived object keeps provenance to WHO/WHAT created it (via, origin, IDs).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from ..core.clock import now_iso
@@ -150,6 +151,58 @@ class Lifecycle:
             return str(d / fname)
         except Exception:  # noqa: BLE001 - archiving is best-effort
             return ""
+
+    # ---- experiment detail (full dashboard) ------------------------------------
+    def experiment_detail(self, project_id: str, exp_id: str) -> dict[str, Any]:
+        """Everything about an executed experiment: method, data provenance,
+        metrics, null test, generated code, figures, stdout, cross-check."""
+        e = self.store.get(exp_id)
+        if not e:
+            return {"ok": False, "error": "experiment not found"}
+        adir = Path(e.get("artifacts_dir") or "")
+        code = code_v2 = stdout = ""
+        figures: list[str] = []
+        if adir and adir.exists():
+            for name, var in (("script.py", "code"), ("script_v2.py", "code_v2"),
+                              ("stdout.txt", "stdout")):
+                fp = adir / name
+                if fp.exists():
+                    txt = fp.read_text(encoding="utf-8", errors="replace")[:20000]
+                    if var == "code":
+                        code = txt
+                    elif var == "code_v2":
+                        code_v2 = txt
+                    else:
+                        stdout = txt
+            out_dir = adir / "out"
+            if out_dir.exists():
+                figures = sorted(f.name for f in out_dir.glob("*.png"))
+        res = e.get("result") or {}
+        hyp = self.store.get(e.get("hyp_id", "")) or {}
+        return {"ok": True, "experiment": {
+            "id": e["id"], "title": e.get("title", ""),
+            "hyp_id": e.get("hyp_id", ""), "hyp_tag": e.get("hyp_tag", ""),
+            "hyp_version": int(e.get("hyp_version", 1)),
+            "status": e.get("status", ""), "method_type": e.get("method_type", ""),
+            "what": e.get("what", ""), "how": e.get("how", ""),
+            "data_source": e.get("data_source", ""),
+            "controls": e.get("controls", ""),
+            "discriminator": e.get("discriminator", ""),
+            "via": e.get("via", ""), "from_critique": e.get("from_critique", ""),
+            "saved": bool(e.get("saved")),
+            "verdict": res.get("verdict", ""),
+            "verdict_reason": res.get("verdict_reason", ""),
+            "metrics": res.get("metrics", {}),
+            "null_test": res.get("null_test", {}),
+            "anomalies": res.get("anomalies", []),
+            "provenance": e.get("provenance", []),
+            "factory": e.get("factory", {}),
+            "plan": e.get("plan", ""),
+            "code": code, "code_v2": code_v2, "stdout": stdout,
+            "figures": figures,
+            "claim": e.get("claim", ""),
+            "hyp_title": hyp.get("title", ""),
+        }}
 
     # ---- 6) save / anchor experiments ------------------------------------------
     def save_experiment(self, exp_id: str) -> dict[str, Any]:

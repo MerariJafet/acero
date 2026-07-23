@@ -531,6 +531,98 @@ function wireCriticConvert(view, pid, cb, phaseKey) {
     }));
 }
 
+/* Small SVG bar chart for an experiment's numeric metrics. */
+function metricsChart(metrics) {
+  const entries = Object.entries(metrics || {})
+    .filter(([, v]) => typeof v === "number" && isFinite(v));
+  if (!entries.length) return "";
+  const max = Math.max(...entries.map(([, v]) => Math.abs(v))) || 1;
+  const rowH = 30, w = 620, labelW = 200, barW = w - labelW - 90;
+  const rows = entries.map(([k, v], i) => {
+    const len = Math.max(2, Math.round(barW * Math.abs(v) / max));
+    const y = i * rowH + 6;
+    const val = Math.abs(v) < 1e-3 || Math.abs(v) > 1e4 ? v.toExponential(2) : Number(v.toPrecision(4));
+    return `<text x="0" y="${y + 15}" class="mc-lbl">${esc(k.slice(0, 28))}</text>
+      <rect x="${labelW}" y="${y + 3}" width="${len}" height="18" rx="4" class="mc-bar ${v < 0 ? "neg" : ""}"></rect>
+      <text x="${labelW + len + 6}" y="${y + 16}" class="mc-val">${esc(String(val))}</text>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${w} ${entries.length * rowH + 12}" class="metrics-chart" role="img" aria-label="métricas">${rows}</svg>`;
+}
+
+/* Full experiment dashboard: method, data, metrics, nulls, code, figures. */
+async function renderExperiment(view, pid, expId, cb, backPhase) {
+  view.innerHTML = "<p class='loading'>Cargando análisis del experimento…</p>";
+  const { ok, body } = await get(
+    `/portal/api/projects/${encodeURIComponent(pid)}/experiment/${encodeURIComponent(expId)}/detail`);
+  if (!ok || !body.ok) { view.innerHTML = "<p class='err'>No se pudo cargar el experimento.</p>"; return; }
+  const e = body.experiment;
+  const V_COLOR = { supports: "ok", refutes: "bad", inconclusive: "warn" };
+  const mIcon = { download_data: "⬇️ datos descargados", math_analysis: "∑ análisis matemático", theoretical: "📐 teórico", simulation: "🎲 simulación" };
+  const nt = e.null_test || {};
+  const fac = e.factory || {};
+  const cc = fac.cross_check;
+  const provRows = (e.provenance || []).map((p2) => `
+    <tr><td><a href="${esc(p2.url)}" target="_blank" rel="noopener">${esc(p2.filename)}</a></td>
+      <td>${Math.round((p2.bytes || 0) / 1024)} KB</td>
+      <td><code>${esc((p2.sha256 || "").slice(0, 16))}…</code></td>
+      <td>${p2.pruned ? "podado (re-descargable)" : (p2.cached ? "caché" : "descargado")}</td></tr>`).join("");
+  const figs = (e.figures || []).map((f) =>
+    `<figure class="exp-fig"><img src="/portal/api/projects/${encodeURIComponent(pid)}/experiment/${encodeURIComponent(expId)}/figure/${encodeURIComponent(f)}" alt="${esc(f)}" loading="lazy"><figcaption>${esc(f)}</figcaption></figure>`).join("");
+  const kpi = (big, label, cls) => `<div class="kpi exp-kpi"><div class="exp-kpi-big ${cls || ""}">${esc(big)}</div><div class="exp-kpi-lbl">${esc(label)}</div></div>`;
+
+  view.innerHTML = `
+    <button class="act ghost" id="exp-back">← volver a Experimentos</button>
+    <p class="eyebrow">Análisis del experimento · ${esc(e.hyp_tag)} v${e.hyp_version}</p>
+    <div class="pulse-head"><h1>🔬 ${esc(e.title)}</h1>
+      ${e.verdict ? pill(e.verdict, V_COLOR[e.verdict] || "warn") : pill(e.status, "warn")}</div>
+    <p class="muted">Hipótesis: ${esc(e.hyp_title)}</p>
+
+    <div class="kpi-strip">
+      ${kpi(e.verdict || e.status, "veredicto", V_COLOR[e.verdict] || "")}
+      ${kpi(mIcon[e.method_type] || e.method_type || "—", "método")}
+      ${kpi((e.provenance || []).length, "datasets reales")}
+      ${kpi(nt.passed === true ? "✓" : nt.passed === false ? "✗" : "—", "control nulo")}
+      ${fac.attempts ? kpi(fac.attempts, "intentos de código") : ""}
+      ${fac.duration_sec ? kpi(fac.duration_sec + "s", "cómputo") : ""}
+    </div>
+
+    ${e.verdict_reason ? `<div class="card"><b>⚖️ Conclusión del análisis</b><p>${esc(e.verdict_reason)}</p>
+      <p class="tag">Código escrito por IA y ejecutado en sandbox — revisa el código antes de confiar en el resultado. Nada es un descubrimiento.</p></div>` : ""}
+
+    <div class="card"><b>🧪 Qué se hizo</b>
+      <div class="tag"><b>Qué mide:</b> ${esc(e.what)}</div>
+      <div class="tag"><b>Cómo (método):</b> ${esc(e.how)}</div>
+      <div class="tag"><b>Datos:</b> ${esc(e.data_source)}</div>
+      <div class="tag"><b>Controles:</b> ${esc(e.controls)}</div>
+      <div class="tag"><b>Discriminador:</b> ${esc(e.discriminator)}</div>
+    </div>
+
+    ${Object.keys(e.metrics || {}).length ? `<div class="card"><b>📊 Métricas calculadas</b>${metricsChart(e.metrics)}</div>` : ""}
+
+    ${nt.description ? `<div class="card"><b>🎲 Control nulo (¿es señal o azar?)</b>
+      <p>${esc(nt.description)}</p>
+      <div class="tag">estadístico: ${esc(String(nt.statistic ?? "—"))} · umbral: ${esc(String(nt.threshold ?? "—"))} · <b>${nt.passed === true ? "SUPERADO" : nt.passed === false ? "NO superado" : "sin nulo"}</b></div></div>` : ""}
+
+    ${cc ? `<div class="card"><b>🔁 Verificación cruzada (2ª implementación independiente)</b>
+      <p class="tag">${cc.agreed ? "✅ coincidió" : "⚠️ NO coincidió"} — ${esc(cc.detail || cc.reason || "")}</p></div>` : ""}
+
+    ${(e.anomalies || []).length ? `<div class="card"><b>🔥 Anomalías detectadas</b><ul>${e.anomalies.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>` : ""}
+
+    ${figs ? `<div class="card"><b>📈 Figuras</b><div class="exp-figs">${figs}</div></div>` : ""}
+
+    ${provRows ? `<div class="card"><b>📦 Procedencia de los datos (verificable)</b>
+      <table class="prov-table"><thead><tr><th>archivo</th><th>tamaño</th><th>sha256</th><th>estado</th></tr></thead><tbody>${provRows}</tbody></table></div>` : ""}
+
+    ${e.plan ? `<div class="card"><b>📋 Plan de ejecución (pendiente de datos reales)</b><div class="lms-body">${esc(e.plan)}</div></div>` : ""}
+
+    ${e.code ? `<div class="card"><details><summary><b>📄 Código del análisis (generado por IA — revísalo)</b></summary><pre class="code-block">${esc(e.code)}</pre></details>
+      ${e.code_v2 ? `<details><summary><b>📄 Segunda implementación (verificación cruzada)</b></summary><pre class="code-block">${esc(e.code_v2)}</pre></details>` : ""}</div>` : ""}
+
+    ${e.stdout ? `<div class="card"><details><summary><b>🖥 Salida de la ejecución (stdout)</b></summary><pre class="code-block">${esc(e.stdout)}</pre></details></div>` : ""}
+  `;
+  view.querySelector("#exp-back").addEventListener("click", () => cb.openPhase(pid, backPhase || "experimentos"));
+}
+
 /* Detalle: the full story of one hypothesis as a top-down connected flow. */
 async function renderTrace(view, pid, hypId, cb) {
   view.innerHTML = "<p class='loading'>Reconstruyendo la historia…</p>";
@@ -540,11 +632,13 @@ async function renderTrace(view, pid, hypId, cb) {
   const nodes = (t.nodes || []).map((n) => `
     <div class="trace-node t-${esc(n.type)}">
       <div class="trace-dot">${esc(n.icon)}</div>
-      <div class="trace-card" ${n.link ? `data-tlink="${esc(n.link)}" role="button" tabindex="0"` : ""}>
+      <div class="trace-card" ${n.link ? `data-tlink="${esc(n.link)}" role="button" tabindex="0"` : ""}
+        ${n.type === "experiment" && n.ref ? `data-texp="${esc(n.ref)}"` : ""}>
         <div class="trace-head"><b>${esc(n.title)}</b>
           <span class="tag">${esc((n.ts || "").slice(0, 16).replace("T", " "))}</span></div>
         <p class="tag">${esc(n.summary || "")}</p>
-        ${n.link ? `<span class="trace-go">abrir ficha →</span>` : ""}
+        ${n.type === "experiment" && n.ref ? `<span class="trace-go">ver análisis →</span>`
+          : n.link ? `<span class="trace-go">abrir ficha →</span>` : ""}
       </div>
     </div>`).join("");
   view.innerHTML = `
@@ -554,7 +648,9 @@ async function renderTrace(view, pid, hypId, cb) {
     <p class="muted">${esc(t.title)}</p>
     <div class="trace-flow">${nodes || "<p class='muted'>sin eventos aún</p>"}</div>`;
   view.querySelector("#trace-back").addEventListener("click", () => cb.openPhase(pid, "hipotesis"));
-  view.querySelectorAll("[data-tlink]").forEach((c) => {
+  view.querySelectorAll("[data-texp]").forEach((c) =>
+    c.addEventListener("click", () => renderExperiment(view, pid, c.dataset.texp, cb, "hipotesis")));
+  view.querySelectorAll("[data-tlink]:not([data-texp])").forEach((c) => {
     const go = () => cb.openPhase(pid, c.dataset.tlink);
     c.addEventListener("click", go);
     c.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
@@ -721,12 +817,18 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
     view.querySelectorAll("[data-invest]").forEach((b) =>
       b.addEventListener("click", async () => {
         const out = view.querySelector(`[data-invout="${b.dataset.invest}"]`);
-        out.innerHTML = "<span class='loading'>Investigando literatura + confrontando (Codex)…</span>";
+        out.innerHTML = `<div class="mbar-wrap"><div class="mbar"><div class="mbar-fill run" style="width:20%"></div><span class="mbar-pct"></span></div><div class="mbar-label">🔎 buscando literatura real (multi-fuente) + confrontando con Codex…</div></div>`;
         b.disabled = true;
-        const { ok: iok } = await post(
+        const { ok: iok, body } = await post(
           `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.invest}/investigate`, {});
-        b.disabled = false;
-        if (iok) cb.openPhase(pid, "literatura");
+        if (iok && body.run) {
+          const fill = out.querySelector(".mbar-fill");
+          let w = 20;
+          const grow = setInterval(() => { w = Math.min(90, w + 6); fill.style.width = w + "%"; }, 2500);
+          pollRun(body.run.id, out.querySelector(".mbar-label"), () => {
+            clearInterval(grow); b.disabled = false; cb.openPhase(pid, "literatura");
+          });
+        } else { b.disabled = false; out.innerHTML = "<span class='err'>error al investigar</span>"; }
       }));
     view.querySelectorAll("[data-deepen]").forEach((b) =>
       b.addEventListener("click", async () => {
@@ -897,6 +999,7 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
           <div class="tag"><b>Qué:</b> ${esc(e.what || "")}</div>
           <div class="tag"><b>Cómo:</b> ${esc(e.how || "")}</div>
           <div class="tag"><b>Datos:</b> ${esc(e.data_source || "")} · <b>Controles:</b> ${esc(e.controls || "")}</div>
+          ${st === "COMPLETE" || st === "PLANNED" ? `<button class="act" data-expdetail="${esc(e.id)}">🔬 Ver análisis completo</button>` : ""}
           ${result}${genDetail}${ferr}${plan}${e.critique ? criticFoot(e.critique, e.id, h.version || 1) : criticEmpty(e.id, "experimento_resultado")}
         </div>`;
       }).join("");
@@ -928,6 +1031,8 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
        ${orphanBlock}
        <p class="tag">ACERO ejecuta de verdad los análisis con código (Kepler, Hubble); los demás quedan como PLAN reproducible pendiente de datos (no se inventan resultados).</p>`;
     wireAristoteles(view, pid, cb, () => cb.openPhase(pid, "experimentos"));
+    view.querySelectorAll("[data-expdetail]").forEach((b) =>
+      b.addEventListener("click", () => renderExperiment(view, pid, b.dataset.expdetail, cb, "experimentos")));
     view.querySelectorAll("[data-esave]").forEach((b) =>
       b.addEventListener("click", async () => {
         b.disabled = true;
