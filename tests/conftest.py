@@ -17,14 +17,22 @@ FIXTURE_CORPUS = Path(__file__).parent / "fixtures" / "corpus"
 
 
 @pytest.fixture(autouse=True)
-def _isolated_obsidian_vault(tmp_path, monkeypatch):
-    """Tests must NEVER write to the user's real ACERO-Research vault, and the
-    async critic subagent must never fire real Codex processes from tests."""
+def _isolated_side_effects(tmp_path, monkeypatch):
+    """Tests must NEVER touch the user's real data: redirect the DB, the vault,
+    the experiment artifacts to per-test temp paths, and silence the async
+    subagents. Fixes integration tests (create_app) polluting the real DB with
+    'Disc API'/'API project' projects on every `make verify`."""
+    monkeypatch.setenv("ACERO_DB_URL", f"sqlite:///{tmp_path / 'acero_test.sqlite'}")
     monkeypatch.setenv("ACERO_OBSIDIAN_VAULT", str(tmp_path / "_test_vault"))
     monkeypatch.setenv("ACERO_CRITIC_DISABLED", "1")
     monkeypatch.setenv("ACERO_EXPERIMENT_ARTIFACTS", str(tmp_path / "_test_artifacts"))
     monkeypatch.setenv("ACERO_MISSIONS_DISABLED", "1")
     monkeypatch.setenv("ACERO_WATCHDOG_DISABLED", "1")
+    # get_config() is lru_cached — force it to re-read the temp DB_URL each test
+    from acero.core.config import get_config
+    get_config.cache_clear()
+    yield
+    get_config.cache_clear()
 
 
 @pytest.fixture()
