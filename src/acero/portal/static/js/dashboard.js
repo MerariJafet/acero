@@ -741,9 +741,10 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
       const cites = (c.citations || []).map((x) => {
         const href = x.url || (x.doi ? `https://doi.org/${esc(x.doi)}` : "#");
         const retr = x.integrity === "retracted" ? ` <span class="pill bad">RETRACTADO</span>` : "";
+        const ft = x.has_fulltext ? ` <span class="pill ok">📖 texto completo leído</span>` : "";
         return `<li class="cite">
           <a href="${esc(href)}" target="_blank" rel="noopener">${esc((x.title || x.doi).slice(0, 90))}</a>
-          <span class="src">${esc(x.source || "")}</span> ${relTag(x)}${retr}
+          <span class="src">${esc(x.source || "")}</span> ${relTag(x)}${retr}${ft}
           ${x.abstract ? `<p class="cite-abs">${esc(x.abstract)}…</p>` : ""}</li>`;
       }).join("");
       const qUsed = c.query_used ? `<p class="tag">🔤 Búsqueda ejecutada (inglés): <code>${esc(c.query_used)}</code></p>` : "";
@@ -795,7 +796,7 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
         <button class="act" data-invest="${esc(h.id)}">${done ? "↻ Re-investigar" : "🔎 Investigar"}</button>
         <button class="act mission-btn" data-mission="${esc(h.id)}">🚀 Lanzar Misión</button>
         ${missionBar(h.mission, h.id)}
-        ${done ? `<button class="act ghost" data-deepen="${esc(h.id)}">🕸 Profundizar (referencias + PDFs)</button>` : ""}
+        ${done ? `<button class="act ghost" data-deepen="${esc(h.id)}">📖 Leer a fondo (descargar PDFs + leer texto completo + indexar)</button>` : ""}
         <button class="act ghost" data-htrace="${esc(h.id)}">🧭 Detalle</button>
         <div class="confront-out" data-invout="${esc(h.id)}">${confrontHtml}</div>
         ${h.critique ? criticFoot(h.critique, h.id, h.version || 1) : criticEmpty(h.id, "literatura")}
@@ -811,6 +812,11 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
          <button class="act ghost" id="watch-scan">📡 Buscar novedades</button>
          <button class="act ghost" id="obs-sync">🧠 Sync Obsidian</button>
          <span id="lit-run-out" class="tag" aria-live="polite"></span></div>
+       <div class="vault-search">
+         <input id="vault-q" placeholder="🔍 Busca por SIGNIFICADO en toda la literatura del proyecto (embeddings)…" aria-label="Buscar en el vault">
+         <button class="act ghost" id="vault-go">Buscar</button>
+         <div id="vault-out" aria-live="polite"></div>
+       </div>
        <div id="missions-strip" aria-live="polite"></div>
        ${cards}
        <p class="tag">Cada tarjeta confronta su hipótesis con citas reales y propone una versión mejorada. La síntesis IA es ayuda, no evidencia.</p>`;
@@ -834,14 +840,14 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
       b.addEventListener("click", async () => {
         const out = view.querySelector("#lit-run-out");
         b.disabled = true;
-        b.textContent = "🕸 Siguiendo referencias…";
+        b.textContent = "📖 Descargando PDFs, leyendo texto completo e indexando…";
         const { ok: dok, body: d } = await post(
           `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.deepen}/literature/deepen`, {});
         b.disabled = false;
-        b.textContent = "🕸 Profundizar (referencias + PDFs)";
+        b.textContent = "📖 Leer a fondo (descargar PDFs + leer texto completo + indexar)";
         if (dok && d.ok) {
-          out.textContent = `🕸 +${d.level2_added} referencias nivel-2 · ${(d.pdfs_saved || []).length} PDFs al vault`;
-          if (d.level2_added) cb.openPhase(pid, "literatura");
+          out.textContent = `📖 ${d.fulltext_read}/${d.fulltext_attempted} papers LEÍDOS a texto completo · +${d.level2_added} referencias nivel-2 · ${(d.pdfs_saved || []).length} PDFs al vault · índice: ${esc(d.embeddings_backend || "")}`;
+          cb.openPhase(pid, "literatura");
         } else out.textContent = "Error: " + esc((d && d.error) || "profundizar");
       }));
     view.querySelectorAll("[data-adopt]").forEach((b) =>
@@ -883,7 +889,9 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
           `<span class="mstep ${s2.status.toLowerCase()}" title="${esc(s2.error || s2.info || "")}">${S_ICON[s2.status] || "⏳"} ${esc(s2.name.replace("experiments_", "exp:"))}</span>`).join(" → ");
         const retry = mn.status === "FAILED" ? ` <button class="act ghost" data-mretry="${esc(mn.id)}">↻ Reintentar</button>` : "";
         const pct = mn.status === "DONE" ? 100 : (mn.progress_pct || 0);
-        return `<div class="mission-line">${S_ICON[mn.status] || "⏳"} <b>${esc(mn.hyp_tag)}</b> <span class="tag">${pct}%</span> ${steps}${retry}</div>`;
+        const queued = mn.status === "PENDING"
+          ? ` <span class="tag warn-txt">⏳ en cola — esperando turno (máx 2 misiones a la vez)</span>` : "";
+        return `<div class="mission-line">${S_ICON[mn.status] || "⏳"} <b>${esc(mn.hyp_tag)}</b> <span class="tag">${pct}%</span>${queued} ${steps}${retry}</div>`;
       }).join("") : "";
       strip.querySelectorAll("[data-mretry]").forEach((b) =>
         b.addEventListener("click", async () => {
@@ -920,6 +928,24 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
     wireCriticConvert(view, pid, cb, phaseKey);
     wireAristoteles(view, pid, cb, () => cb.openPhase(pid, "literatura"));
     wireMissionBars(view, pid, cb);
+    const vaultSearch = async () => {
+      const q = view.querySelector("#vault-q").value.trim();
+      const vout = view.querySelector("#vault-out");
+      if (!q) return;
+      vout.innerHTML = "<span class='loading'>buscando por significado…</span>";
+      const { ok, body } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/vault/search`, { query: q });
+      if (!ok) { vout.textContent = "error"; return; }
+      const rows = (body.results || []).map((rr) =>
+        `<li class="cite"><a href="${esc(rr.url || (rr.doi ? "https://doi.org/" + rr.doi : "#"))}" target="_blank" rel="noopener">${esc(rr.title.slice(0, 100))}</a>
+          <span class="src">${esc(rr.source)}</span> <span class="tag">sim ${rr.score}</span>
+          ${rr.has_fulltext ? `<span class="pill ok">texto completo</span>` : ""}</li>`).join("");
+      vout.innerHTML = rows
+        ? `<p class="tag">motor: ${esc(body.backend)} · ${body.n_indexed} papers indexados</p><ul class="cites">${rows}</ul>`
+        : `<p class="tag">sin coincidencias (${esc(body.backend || "")})</p>`;
+    };
+    view.querySelector("#vault-go").addEventListener("click", vaultSearch);
+    view.querySelector("#vault-q").addEventListener("keydown", (e) => { if (e.key === "Enter") vaultSearch(); });
     view.querySelectorAll("[data-htrace]").forEach((b) =>
       b.addEventListener("click", () => renderTrace(view, pid, b.dataset.htrace, cb)));
     get(`/portal/api/projects/${encodeURIComponent(pid)}/rigor`).then(({ ok: rk, body: rg }) => {

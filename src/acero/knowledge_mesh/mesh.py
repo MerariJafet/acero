@@ -71,6 +71,8 @@ def topical_search(query: str, *, domain: str = "", rows: int = 6) -> list[dict[
                     "topics": o.topics[:5], "source": o.source_id,
                     "relevance": o.verification.get("relevance_score"),
                     "openalex_id": o.verification.get("openalex_id", ""),
+                    "is_oa": o.verification.get("is_oa", False),
+                    "pdf_url": o.verification.get("pdf_url", ""),
                     "referenced_works": o.verification.get("referenced_works", [])})
     return out[:rows]
 

@@ -89,6 +89,8 @@ def _normalize(w: dict[str, Any]) -> ScientificObject:
                 if c.get("score", 0) > 0.3][:6]
     abstract = _reconstruct_abstract(w.get("abstract_inverted_index"))
     oa = w.get("open_access", {}) or {}
+    ploc = w.get("primary_location", {}) or {}
+    pdf_url = ploc.get("pdf_url") or oa.get("oa_url") or ""
     obj = ScientificObject(
         object_type=otype, title=w.get("title") or "",
         abstract=abstract or None,
@@ -103,6 +105,7 @@ def _normalize(w: dict[str, Any]) -> ScientificObject:
         verification={"openalex": True, "cited_by_count": w.get("cited_by_count"),
                       "relevance_score": w.get("relevance_score"),
                       "openalex_id": (w.get("id") or "").rsplit("/", 1)[-1],
+                      "is_oa": bool(oa.get("is_oa")), "pdf_url": pdf_url,
                       "referenced_works": [(x or "").rsplit("/", 1)[-1]
                                            for x in (w.get("referenced_works") or [])[:15]]},
     )

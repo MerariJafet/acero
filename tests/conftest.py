@@ -28,6 +28,7 @@ def _isolated_side_effects(tmp_path, monkeypatch):
     monkeypatch.setenv("ACERO_EXPERIMENT_ARTIFACTS", str(tmp_path / "_test_artifacts"))
     monkeypatch.setenv("ACERO_MISSIONS_DISABLED", "1")
     monkeypatch.setenv("ACERO_WATCHDOG_DISABLED", "1")
+    monkeypatch.setenv("ACERO_EMBEDDINGS_DISABLED", "1")  # no heavy model in tests
     # get_config() is lru_cached — force it to re-read the temp DB_URL each test
     from acero.core.config import get_config
     get_config.cache_clear()

@@ -14,6 +14,7 @@ Everything is a candidate to test; nothing is a discovery.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from ..core.clock import now_iso
@@ -139,8 +140,9 @@ class HypothesisFlow:
         domain = p.domain if p else ""
         query = self._english_query(h, domain, use_ai=use_ai)
         from ..knowledge_mesh import mesh
+        rows = int(os.environ.get("ACERO_LIT_ROWS", "10"))     # broader by default
         try:
-            found = mesh.topical_search(query, domain=domain, rows=6)
+            found = mesh.topical_search(query, domain=domain, rows=rows)
         except Exception:  # noqa: BLE001
             found = []
         papers = []
@@ -153,6 +155,7 @@ class HypothesisFlow:
                    "abstract": o.get("abstract", ""), "source": o.get("source", ""),
                    "topics": o.get("topics", []), "relevance": o.get("relevance"),
                    "openalex_id": o.get("openalex_id", ""),
+                   "is_oa": o.get("is_oa", False), "pdf_url": o.get("pdf_url", ""),
                    "referenced_works": o.get("referenced_works", []),
                    "via": via, "hyp_version": int(h.get("version", 1)),
                    "query_used": query}
@@ -187,6 +190,7 @@ class HypothesisFlow:
                 "source": p.get("source", ""), "url": p.get("url", ""),
                 "relevance": p.get("relevance"),
                 "abstract": (p.get("abstract") or "")[:280],
+                "has_fulltext": bool(p.get("fulltext_excerpt")),
                 "integrity": p.get("integrity", "")}
 
     def _confront(self, h: dict[str, Any], papers: list[dict[str, Any]], *, use_ai: bool
@@ -202,10 +206,15 @@ class HypothesisFlow:
             prov = CodexCliProvider(timeout_sec=200)
             if not prov.available():
                 raise RuntimeError("codex unavailable")
+            def _content(p: dict[str, Any]) -> str:
+                if p.get("fulltext_excerpt"):
+                    return ("TEXTO COMPLETO (leído del PDF): "
+                            + p["fulltext_excerpt"][:1600])
+                return "ABSTRACT: " + (p.get("abstract") or "sin abstract")[:700]
             plist = "\n\n".join(
                 f"[{i}] {p['title']} ({p.get('source','')}, {p['doi']}) "
                 f"{'[RETRACTADO]' if p['integrity']=='retracted' else ''}\n"
-                f"    ABSTRACT: {(p.get('abstract') or 'sin abstract')[:700]}"
+                f"    {_content(p)}"
                 for i, p in enumerate(papers))
             prompt = (
                 "Confronta esta HIPÓTESIS LEYENDO los abstracts reales de la literatura. "
@@ -332,14 +341,55 @@ class HypothesisFlow:
                 known.add(key_d or key_t)
                 added.append(rec["title"][:80])
 
+        # download OPEN-ACCESS full text, extract it, and READ beyond the abstract
+        allp = [x for x in self.store.list_objects(project_id, kind="literature")
+                if x.get("hyp_id") == hyp_id]
+        read = self._read_fulltext(project_id, allp, fetcher=pdf_fetcher)
         pdfs = self._fetch_arxiv_pdfs(project_id, mine, pdf_fetcher=pdf_fetcher)
+
         from .obsidian_sync import sync_project_best_effort
         sync_project_best_effort(project_id, self._sf)
+        # rebuild the semantic index over the (now richer) literature
+        try:
+            from .vault_index import build_index
+            idx = build_index(project_id, self._sf, force=True)
+            backend = idx.get("backend")
+        except Exception:  # noqa: BLE001
+            backend = "unavailable"
         return {"ok": True, "level2_added": len(added), "titles": added[:8],
-                "pdfs_saved": pdfs,
-                "note": ("Referencias reales de los papers leídos (OpenAlex) + PDFs "
-                         "open-access al vault. Vacío = las fuentes no resolvieron "
-                         "más, no se inventa nada.")}
+                "pdfs_saved": pdfs, "fulltext_read": read["read"],
+                "fulltext_attempted": read["attempted"],
+                "embeddings_backend": backend,
+                "note": ("Referencias reales (OpenAlex) + PDFs open-access descargados, "
+                         f"LEÍDOS a texto completo ({read['read']}/{read['attempted']}) "
+                         "e indexados por significado (embeddings). Vacío = las fuentes "
+                         "no resolvieron más; nada se inventa.")}
+
+    def _read_fulltext(self, project_id: str, papers: list[dict[str, Any]], *,
+                       fetcher: Any | None = None, cap: int = 8) -> dict[str, int]:
+        """Download OA PDFs, extract text, store a real excerpt on each paper."""
+        from .fulltext import fetch_fulltext
+        attempted = read = 0
+        for p in papers:
+            if p.get("fulltext_excerpt") or read >= cap:
+                continue
+            if not (p.get("pdf_url") or p.get("is_oa") or p.get("source") == "arxiv"):
+                continue
+            attempted += 1
+            try:
+                r = fetch_fulltext(p, downloader=fetcher) if fetcher \
+                    else fetch_fulltext(p)
+            except Exception:  # noqa: BLE001
+                continue
+            if r.get("ok"):
+                self.store.update_payload(p["id"], {
+                    "fulltext_excerpt": r["excerpt"], "fulltext_chars": r["chars"],
+                    "fulltext_url": r.get("url", "")})
+                read += 1
+            else:
+                self.store.update_payload(p["id"], {
+                    "fulltext_status": r.get("reason", "no accesible")})
+        return {"attempted": attempted, "read": read}
 
     def _fetch_arxiv_pdfs(self, project_id: str, papers: list[dict[str, Any]], *,
                           pdf_fetcher: Any | None = None, cap: int = 3) -> list[str]:

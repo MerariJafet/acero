@@ -553,6 +553,18 @@ def build_portal_router() -> APIRouter:
         from .lifecycle import Lifecycle
         return Lifecycle().active_processes()
 
+    @r.post("/api/projects/{project_id}/vault/search")
+    def vault_search(project_id: str, body: dict[str, Any],
+                     sess: Session = Depends(_require_session),
+                     x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Semantic search over ALL literature gathered for the project."""
+        _require_csrf(sess, x_csrf_token)
+        from .vault_index import search
+        q = str(body.get("query") or "").strip()
+        if not q:
+            raise HTTPException(422, "query requerida")
+        return search(project_id, q, k=int(body.get("k") or 8))
+
     @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/literature/deepen")
     def lit_deepen(project_id: str, hyp_id: str,
                    sess: Session = Depends(_require_session),

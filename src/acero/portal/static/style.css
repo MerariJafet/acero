@@ -482,3 +482,6 @@ caption { text-align: left; color: var(--muted); padding-bottom: .4rem; }
 .exp-kpi-big.ok { color: #56d364; } .exp-kpi-big.bad { color: #ff7b72; }
 .exp-kpi-big.warn { color: #e3b341; }
 .exp-kpi-lbl { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.vault-search { display: flex; gap: .5rem; margin: .5rem 0 .3rem; flex-wrap: wrap; }
+.vault-search input { flex: 1; min-width: 280px; }
+#vault-out { width: 100%; }
