@@ -55,9 +55,10 @@ DATA_HOST_ALLOWLIST = {
     "raw.githubusercontent.com", "ftp.ncbi.nlm.nih.gov", "eutils.ncbi.nlm.nih.gov",
 }
 
-MAX_DOWNLOAD_BYTES = int(os.environ.get("ACERO_MAX_DOWNLOAD_MB", "400")) * 1024 * 1024
-PRUNE_DATA_OVER_BYTES = 5 * 1024 * 1024     # raw data >5MB pruned after success
-CACHE_CAP_BYTES = 2 * 1024 * 1024 * 1024    # shared download cache LRU cap (2GB)
+# tuned to a real workstation (this machine has 62GB RAM); all overridable by env
+MAX_DOWNLOAD_BYTES = int(os.environ.get("ACERO_MAX_DOWNLOAD_MB", "4096")) * 1024 * 1024
+PRUNE_DATA_OVER_BYTES = int(os.environ.get("ACERO_PRUNE_OVER_MB", "50")) * 1024 * 1024
+CACHE_CAP_BYTES = int(os.environ.get("ACERO_CACHE_CAP_GB", "20")) * 1024 * 1024 * 1024
 
 
 def _enforce_cache_cap() -> None:
@@ -73,8 +74,8 @@ def _enforce_cache_cap() -> None:
         total -= f.stat().st_size
         f.unlink(missing_ok=True)
 FETCH_TIMEOUT = 180.0
-SANDBOX_TIMEOUT = 150                        # analysis wall-clock (s)
-SANDBOX_MEMORY_MB = 2048
+SANDBOX_TIMEOUT = int(os.environ.get("ACERO_SANDBOX_TIMEOUT", "600"))   # s
+SANDBOX_MEMORY_MB = int(os.environ.get("ACERO_SANDBOX_MEMORY_MB", "12288"))  # 12GB
 MAX_REPAIRS = 2
 
 _UA = "ACERO-experiment-factory/0.1 (mailto:merari.jafet@gmail.com)"
@@ -249,7 +250,10 @@ _CODE_RULES = (
     "- Determinista: usa numpy.random.default_rng(0).\n"
     "- Implementa el análisis, los CONTROLES NULOS (surrogatos/shuffle/monte "
     "carlo según el experimento) y evalúa el DISCRIMINADOR.\n"
-    "- Presupuesto: < 120 s de CPU, < 2 GB RAM.\n"
+    "- Presupuesto AMPLIO (estación de trabajo): hasta ~10 min y ~10 GB RAM. Para "
+    "matrices grandes (p.ej. 450K CpGs x cientos de muestras) usa numpy float32, "
+    "lee por columnas/chunks si hace falta, y submuestrea sondas SOLO si no cabe "
+    "(dilo en verdict_reason). Los .gz ya vienen DESCOMPRIMIDOS en ./data/.\n"
     "- Al FINAL imprime EXACTAMENTE una línea:\n"
     "  RESULT_JSON: {\"metrics\": {..números..}, \"null_test\": {\"description\": str, "
     "\"statistic\": num, \"threshold\": num, \"passed\": bool}, "
@@ -286,6 +290,18 @@ def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
         + f"): {d.get('what','')}\n  PRIMEROS CARACTERES:\n  " +
         previews.get(d.get("decompressed_to") or d["filename"], "")[:400].replace("\n", "\n  ")
         for d in data_files) or "(sin archivos: análisis autocontenido)"
+    geo = any("series_matrix" in (d.get("filename") or "") for d in data_files)
+    geo_hint = (
+        "\nFORMATO GEO series matrix: los FENOTIPOS/grupos están en líneas que "
+        "empiezan con '!Sample_' — sobre todo '!Sample_characteristics_ch1' (p.ej. "
+        "'disease state: Parkinson\\'s disease' vs 'control'/'PD-free'), "
+        "'!Sample_title' y '!Sample_geo_accession'; cada una tiene UN valor por "
+        "muestra separado por tabs, en el MISMO orden de columnas que la matriz de "
+        "betas. Deriva caso/control buscando la subcadena de enfermedad en "
+        "characteristics (case-insensitive); si no hay controles mapeados, revisa "
+        "qué línea/característica realmente codifica el grupo antes de rendirte. "
+        "Alinea muestras por el ID de columna (GSM…) entre metadatos y matriz.\n"
+        if geo else "")
     fb = f"\n\nEL INTENTO ANTERIOR FALLÓ. Corrige la causa:\n{feedback[:1500]}\n" \
         if feedback else ""
     r = prov.complete(
@@ -294,7 +310,7 @@ def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
         f"Experimento: {exp.get('title','')}\nQué mide: {exp.get('what','')}\n"
         f"Método: {exp.get('how','')}\nControles: {exp.get('controls','')}\n"
         f"Discriminador: {exp.get('discriminator','')}\n\n"
-        f"ARCHIVOS DE DATOS:\n{files_txt}\n\n{_CODE_RULES}{fb}",
+        f"ARCHIVOS DE DATOS:\n{files_txt}\n{geo_hint}\n{_CODE_RULES}{fb}",
         temperature=0.2, max_tokens=4000)
     code = r.text.strip()
     # strip accidental markdown fences
@@ -391,10 +407,12 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
                     p = plan(exp, hyp, domain)
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "stage": "plan", "error": str(exc)[:300]}
-        # resolve dataset ACCESSIONS (e.g. GEO GSE…) into real download URLs
+        # resolve dataset ACCESSIONS (e.g. GEO GSE…) into real download URLs;
+        # download_data experiments also pull the real DATA matrix from /suppl/
         try:
             from .data_resolver import enrich_plan_urls
-            p = enrich_plan_urls(p)
+            p = enrich_plan_urls(
+                p, want_data=(exp.get("method_type") == "download_data"))
         except Exception:  # noqa: BLE001 - resolver is best-effort
             pass
         urls = list(p.get("data_urls") or [])
@@ -441,7 +459,8 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
             except Exception as exc:  # noqa: BLE001
                 return None, "", None, attempts, f"codegen: {str(exc)[:250]}"
             sres = runner.run(code, workdir, timeout_sec=SANDBOX_TIMEOUT,
-                              memory_mb=SANDBOX_MEMORY_MB, allow_network=False)
+                              memory_mb=SANDBOX_MEMORY_MB,
+                              cpu_seconds=SANDBOX_TIMEOUT, allow_network=False)
             if sres.status == "ok" and sres.exit_code == 0:
                 result, why = _parse_result(sres.stdout)
                 if result is not None:

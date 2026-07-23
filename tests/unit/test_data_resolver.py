@@ -15,13 +15,44 @@ def test_geo_series_matrix_url_pattern():
 
 def test_resolve_reference_finds_geo_in_text():
     r = dr.resolve_reference("bajar de GEO GSE55763 en sangre", verify=False)
-    assert r["accession"] == "GSE55763" and r["repository"] == "GEO"
-    assert r["url"].endswith("GSE55763_series_matrix.txt.gz")
-    assert r["filename"] == "GSE55763_series_matrix.txt.gz"
+    assert len(r) == 1 and r[0]["accession"] == "GSE55763"
+    assert r[0]["repository"] == "GEO"
+    assert r[0]["url"].endswith("GSE55763_series_matrix.txt.gz")
 
 
 def test_resolve_reference_none_when_no_accession():
-    assert dr.resolve_reference("un dataset genérico sin ID", verify=False) is None
+    assert dr.resolve_reference("un dataset genérico sin ID", verify=False) == []
+
+
+def test_geo_supplementary_files_parsed(monkeypatch):
+    html = ('<a href="GSE111629_PEGblood_450kMethylationDataBackgroundNormalized.txt.gz">x</a>'
+            '<a href="GSE111629_RAW.tar">raw</a>'
+            '<a href="filelist.txt">list</a>')
+
+    class Resp:
+        def read(self): return html.encode()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    files = dr.geo_supplementary_files("GSE111629", opener=lambda req, timeout=0: Resp())
+    # RAW.tar and filelist skipped; the normalized methylation matrix is first + is_data
+    names = [f["filename"] for f in files]
+    assert "GSE111629_RAW.tar" not in names and "filelist.txt" not in names
+    assert files[0]["is_data"] and "Normalized" in files[0]["filename"]
+
+
+def test_want_data_adds_supplementary_matrix(monkeypatch):
+    html = '<a href="GSE1_processed_beta_matrix.txt.gz">m</a>'
+
+    class Resp:
+        def read(self): return html.encode()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    specs = dr.resolve_reference("GEO GSE123", verify=False, want_data=True,
+                                 opener=lambda req, timeout=0: Resp())
+    # series matrix (metadata) + supplementary data matrix (betas)
+    assert len(specs) == 2
+    assert any("series_matrix" in s["url"] for s in specs)
+    assert any("processed_beta_matrix" in s["url"] for s in specs)
 
 
 def test_enrich_plan_fills_url_from_accession():

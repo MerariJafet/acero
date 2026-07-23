@@ -88,6 +88,7 @@ class SubprocessRunner:
         *,
         timeout_sec: int | None = None,
         memory_mb: int | None = None,
+        cpu_seconds: int | None = None,
         allow_network: bool = False,
     ) -> SandboxResult:
         ws = Path(workspace)
@@ -103,7 +104,10 @@ class SubprocessRunner:
 
         timeout = timeout_sec or int(self.exec_policy.get("timeout_sec", 30))
         mem = memory_mb or int(self.exec_policy.get("memory_mb", 1024))
-        cpu_seconds = int(self.exec_policy.get("cpu_seconds", timeout))
+        # explicit override wins; else policy; else the wall-clock. Heavy analyses
+        # (e.g. a 450K-probe EWAS) need a CPU budget matched to their wall-clock.
+        cpu_seconds = (cpu_seconds if cpu_seconds is not None
+                       else int(self.exec_policy.get("cpu_seconds", timeout)))
 
         network_disabled = (
             not allow_network
