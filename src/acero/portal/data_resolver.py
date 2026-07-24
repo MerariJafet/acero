@@ -49,7 +49,9 @@ def _resolve_nea(text: str) -> list[dict[str, Any]]:
                                 "quimica estelar", "mg/si", "fe/h fino", "hypatia",
                                 "elemental", "composición estelar", "composicion estelar"))
     specs: list[dict[str, Any]] = []
-    if exo:
+    # a chemistry cross-match STILL needs the planet radii table — you can't test
+    # radius-vs-chemistry without the radii. So chemistry implies the planet table.
+    if exo or chem:
         if any(k in t for k in ("koi", "dr25", "kepler objects", "cumulative")):
             specs.append({"url": _nea_url("q1_q17_dr25_koi"),
                           "filename": "kepler_dr25_koi.csv",
@@ -59,7 +61,7 @@ def _resolve_nea(text: str) -> list[dict[str, Any]]:
                       "filename": "nea_confirmed_planets.csv",
                       "accession": "pscomppars", "repository": "NASA-NEA",
                       "what": "NASA Exoplanet Archive planetas confirmados (radios±, "
-                              "periodos, params estelares, hostname para CRUZAR)"})
+                              "periodos, hostname para CRUZAR con la química estelar)"})
     # CROSS-CATALOG: stellar chemical abundances (join by host star) — the
     # discovery-shaped angle that few have combined with planet radii.
     if chem:

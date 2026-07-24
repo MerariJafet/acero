@@ -47,6 +47,9 @@ def test_stellarhosts_resolver_for_chemistry_crossmatch():
     assert any(s["accession"] == "stellarhosts" for s in specs)
 
 
-def test_chemistry_alone_offers_stellar_catalog():
+def test_chemistry_alone_still_includes_planet_radii():
+    # a chemistry reference must ALSO pull the planet table — you can't test
+    # radius-vs-chemistry without the radii (fixes the empty cross-match bug)
     specs = dr.resolve_reference("catálogo de abundancias estelares Hypatia")
-    assert specs and any(s["accession"] == "stellarhosts" for s in specs)
+    accs = {s["accession"] for s in specs}
+    assert "stellarhosts" in accs and "pscomppars" in accs
