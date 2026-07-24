@@ -265,6 +265,33 @@ def _head_preview(path: Path, chars: int = 500) -> str:
         return "(binario)"
 
 
+def _schema(path: Path) -> dict[str, Any]:
+    """Read a CSV/TSV/table's REAL columns + row count so codegen isn't blind.
+
+    Feeding Codex the actual column names/count (not a 400-char blob) is what
+    turns 'column not found' failures into working analyses. Skips GEO-style '!'
+    comment lines. Returns {columns, n_rows, delimiter} or {} if not tabular.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            header = ""
+            for line in f:
+                s = _sanitize(line).strip()
+                if s and not s.startswith(("!", "#", "//")):
+                    header = s
+                    break
+            if not header:
+                return {}
+            delim = "\t" if header.count("\t") > header.count(",") else ","
+            cols = [c.strip().strip('"') for c in header.split(delim)][:60]
+            if len(cols) < 2:
+                return {}
+            n = sum(1 for _ in f)            # remaining data rows (header consumed)
+            return {"columns": cols, "n_rows": n, "delimiter": delim}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 # --- Codex steps --------------------------------------------------------------
 
 def _codex():
@@ -347,13 +374,23 @@ def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
                     previews: dict[str, str],
                     feedback: str | None = None) -> str:
     prov = _codex()
-    files_txt = "\n".join(
-        f"- ./data/{d.get('decompressed_to') or d['filename']} "
-        f"({d['bytes']} bytes descargados, sha256 {d['sha256'][:12]}…"
-        + (f", descomprimido de {d['filename']}" if d.get('decompressed_to') else "")
-        + f"): {d.get('what','')}\n  PRIMEROS CARACTERES:\n  " +
-        previews.get(d.get("decompressed_to") or d["filename"], "")[:400].replace("\n", "\n  ")
-        for d in data_files) or "(sin archivos: análisis autocontenido)"
+
+    def _fdesc(d: dict[str, Any]) -> str:
+        name = d.get("decompressed_to") or d["filename"]
+        head = previews.get(name, "")[:300].replace("\n", "\n  ")
+        # REAL schema (columns + row count) beats a blind text preview
+        if d.get("columns"):
+            cols = ", ".join(d["columns"][:40])
+            schema = (f"\n  COLUMNAS REALES ({len(d['columns'])}, {d.get('n_rows','?')} "
+                      f"filas): {cols}\n  Usa EXACTAMENTE estos nombres de columna.")
+        else:
+            schema = ""
+        return (f"- ./data/{name} ({d['bytes']} bytes, sha256 {d['sha256'][:12]}…"
+                + (f", de {d['filename']}" if d.get('decompressed_to') else "")
+                + (", extraído del zip" if d.get('extracted') else "")
+                + f"): {d.get('what','')}{schema}\n  PRIMEROS CARACTERES:\n  {head}")
+    files_txt = "\n".join(_fdesc(d) for d in data_files) \
+        or "(sin archivos: análisis autocontenido)"
     multi = len(data_files) >= 2
     join_hint = (
         "\nCRUCE DE CATÁLOGOS (hay ≥2 datasets): el descubrimiento vive en UNIR "
@@ -487,7 +524,8 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
         try:
             from .data_resolver import enrich_plan_urls
             p = enrich_plan_urls(
-                p, want_data=(exp.get("method_type") == "download_data"))
+                p, want_data=(exp.get("method_type") == "download_data"),
+                domain=domain)
         except Exception:  # noqa: BLE001 - resolver is best-effort
             pass
         urls = list(p.get("data_urls") or [])
@@ -511,11 +549,14 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
         return {"ok": False, "stage": "fetch",
                 "error": "experimento download_data sin datos descargables verificables"}
 
-    # for gz files the analysis reads the DECOMPRESSED sibling — preview that one
+    # for gz files the analysis reads the DECOMPRESSED sibling — preview + SCHEMA
     previews = {}
     for d in provenance:
         readable = d.get("decompressed_to") or d["filename"]
         previews[readable] = _head_preview(data_dir / readable)
+        sch = _schema(data_dir / readable)   # REAL columns + row count for codegen
+        if sch:
+            d["columns"], d["n_rows"] = sch["columns"], sch["n_rows"]
 
     # 3-4) codegen + sandboxed run + repair loop
     runner = SubprocessRunner()

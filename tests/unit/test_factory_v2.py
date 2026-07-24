@@ -208,3 +208,16 @@ def test_download_deadline_kills_runaway(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="presupuesto"):
         fx.fetch_data([{"url": "https://www.sidc.be/x.csv", "filename": "x.csv",
                         "what": ""}], tmp_path, cache_dir=tmp_path / "c")
+
+
+def test_schema_reads_real_columns(tmp_path):
+    from acero.portal.experiment_factory import _schema
+    p = tmp_path / "d.csv"
+    p.write_text("name,radius,period\nKepler-1,1.5,3.2\nKepler-2,2.1,4.5\n")
+    s = _schema(p)
+    assert s["columns"] == ["name", "radius", "period"] and s["n_rows"] == 2
+    # GEO-style comment lines are skipped
+    p2 = tmp_path / "g.txt"
+    p2.write_text('!Series_title\t"x"\nID\tval1\tval2\nA\t1\t2\n')
+    s2 = _schema(p2)
+    assert s2["columns"] == ["ID", "val1", "val2"] and s2["delimiter"] == "\t"

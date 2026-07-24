@@ -174,3 +174,34 @@ def test_nea_still_fires_for_stellar_chemistry():
         "cruzar radios de exoplanetas con abundancias de química estelar (host star)")
     accs = {s.get("accession") for s in specs}
     assert "pscomppars" in accs and "stellarhosts" in accs
+
+
+def test_domain_gating_blocks_astronomy_for_chemistry():
+    # even with strong astronomy signal, a CHEMISTRY project gets no NASA data
+    specs = dr.resolve_reference(
+        "radius valley Kepler DR25 KOI stellar hosts", domain="chemistry")
+    assert specs == []
+    # but astronomy domain still resolves it
+    specs2 = dr.resolve_reference("radius valley Kepler DR25 KOI", domain="astronomy")
+    assert any(s["repository"] == "NASA-NEA" for s in specs2)
+
+
+def test_domain_gating_blocks_geo_for_astronomy():
+    specs = dr.resolve_reference("GSE111629 methylation", domain="astronomy", verify=False)
+    assert specs == []
+    specs2 = dr.resolve_reference("GSE111629 methylation", domain="genetics", verify=False)
+    assert any(s["repository"] == "GEO" for s in specs2)
+
+
+def test_generalist_repos_work_in_any_domain(monkeypatch):
+    import json as _j
+
+    class Resp:
+        def read(self):
+            return _j.dumps({"files": [{"key": "d.csv",
+                "links": {"self": "https://zenodo.org/x/d.csv"}, "size": 1}]}).encode()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(dr.urllib.request, "urlopen", lambda req, timeout=0: Resp())
+    specs = dr.resolve_reference("10.5281/zenodo.99999", domain="chemistry")
+    assert specs and specs[0]["repository"] == "Zenodo"  # Zenodo serves all domains

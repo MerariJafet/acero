@@ -231,14 +231,31 @@ def _url_ok(url: str, *, timeout: float = 25.0, opener: Any | None = None) -> bo
         return False
 
 
+# which domains each domain-specific repository serves (generalist repos serve all)
+_DOMAIN_REPOS = {
+    "nea": ("astronomy", "physics"),
+    "geo": ("genetics", "genomics", "biology", "medicine", "chemistry"),
+}
+
+
+def _domain_ok(repo: str, domain: str) -> bool:
+    """A domain-specific resolver only fires for its domains; blank domain = allow."""
+    if not domain:
+        return True
+    allowed = _DOMAIN_REPOS.get(repo)
+    return allowed is None or domain.lower() in allowed
+
+
 def resolve_reference(text: str, *, verify: bool = True, want_data: bool = False,
-                      opener: Any | None = None) -> list[dict[str, Any]]:
+                      domain: str = "", opener: Any | None = None
+                      ) -> list[dict[str, Any]]:
     """Find an accession in free text → real download spec(s).
 
     Default: the series matrix (metadata, small). want_data=True also pulls the
-    processed DATA matrix from /suppl/ (the real betas/expression) — that's what a
-    strong reanalysis needs; storage/RAM permitting (both configurable).
+    processed DATA matrix from /suppl/. `domain` gates domain-specific resolvers so
+    a chemistry project never gets astronomy data (structural anti-contamination).
     """
+    # generalist repositories (Zenodo/Figshare/Dryad) serve ANY domain
     zen = _ZENODO_RE.search(text or "")
     if zen:
         files = zenodo_files(zen.group(1), opener=opener)
@@ -256,10 +273,11 @@ def resolve_reference(text: str, *, verify: bool = True, want_data: bool = False
         files = dryad_download(dry.group(1), opener=opener)
         if files:
             return files
-    nea = _resolve_nea(text)
-    if nea:
-        return nea
-    m = _GEO_RE.search(text or "")
+    if _domain_ok("nea", domain):
+        nea = _resolve_nea(text)
+        if nea:
+            return nea
+    m = _GEO_RE.search(text or "") if _domain_ok("geo", domain) else None
     if not m:
         return []
     acc = "GSE" + m.group(1)
@@ -278,7 +296,7 @@ def resolve_reference(text: str, *, verify: bool = True, want_data: bool = False
 
 
 def enrich_plan_urls(plan: dict[str, Any], *, verify: bool = True,
-                     want_data: bool = False,
+                     want_data: bool = False, domain: str = "",
                      opener: Any | None = None) -> dict[str, Any]:
     """Fill in missing/placeholder data URLs from accessions the plan mentions.
 
@@ -304,7 +322,7 @@ def enrich_plan_urls(plan: dict[str, Any], *, verify: bool = True,
             continue
         ref = acc or url or str(spec.get("what") or "")
         resolved = resolve_reference(ref, verify=verify, want_data=want_data,
-                                     opener=opener)
+                                     domain=domain, opener=opener)
         if resolved:
             human = str(spec.get("what") or "")
             for i, r in enumerate(resolved):
@@ -314,6 +332,7 @@ def enrich_plan_urls(plan: dict[str, Any], *, verify: bool = True,
             _add(spec)
     if not out:                              # mine the outline for an accession
         for r in resolve_reference(str(plan.get("analysis_outline") or ""),
-                                   verify=verify, want_data=want_data, opener=opener):
+                                   verify=verify, want_data=want_data,
+                                   domain=domain, opener=opener):
             _add(r)
     return {**plan, "data_urls": out}
