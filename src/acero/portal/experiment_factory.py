@@ -30,6 +30,7 @@ import hashlib
 import json
 import os
 import re
+import time
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
@@ -56,7 +57,10 @@ DATA_HOST_ALLOWLIST = {
 }
 
 # tuned to a real workstation (this machine has 62GB RAM); all overridable by env
-MAX_DOWNLOAD_BYTES = int(os.environ.get("ACERO_MAX_DOWNLOAD_MB", "4096")) * 1024 * 1024
+MAX_DOWNLOAD_BYTES = int(os.environ.get("ACERO_MAX_DOWNLOAD_MB", "2048")) * 1024 * 1024
+# per-file wall-clock budget: kills runaway/unbounded downloads (e.g. an
+# unbounded VizieR query) instead of hanging for tens of minutes.
+DOWNLOAD_DEADLINE_SEC = int(os.environ.get("ACERO_DOWNLOAD_DEADLINE_SEC", "300"))
 PRUNE_DATA_OVER_BYTES = int(os.environ.get("ACERO_PRUNE_OVER_MB", "50")) * 1024 * 1024
 CACHE_CAP_BYTES = int(os.environ.get("ACERO_CACHE_CAP_GB", "20")) * 1024 * 1024 * 1024
 
@@ -151,6 +155,7 @@ def fetch_data(urls: list[dict[str, Any]], dest: Path, *,
         req = urllib.request.Request(url, headers={"User-Agent": _UA})
         h = hashlib.sha256()
         n = 0
+        deadline = time.monotonic() + DOWNLOAD_DEADLINE_SEC
         with urllib.request.urlopen(req, timeout=timeout) as r, open(path, "wb") as f:
             while True:
                 chunk = r.read(1 << 16)
@@ -158,7 +163,11 @@ def fetch_data(urls: list[dict[str, Any]], dest: Path, *,
                     break
                 n += len(chunk)
                 if n > max_bytes:
-                    raise ValueError(f"descarga excede {max_bytes} bytes: {url[:80]}")
+                    raise ValueError(f"descarga excede {max_bytes} bytes "
+                                     f"(¿consulta sin límite?): {url[:80]}")
+                if time.monotonic() > deadline:      # runaway / very slow download
+                    raise ValueError(f"descarga excede el presupuesto de "
+                                     f"{DOWNLOAD_DEADLINE_SEC}s ({n} bytes): {url[:80]}")
                 h.update(chunk)
                 f.write(chunk)
         if n == 0:

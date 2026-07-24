@@ -190,3 +190,21 @@ def test_deepen_requires_prior_investigation(session_factory):
     fl = HypothesisFlow(session_factory)
     out = fl.deepen_literature(p.id, h["id"], snowballer=lambda *a, **k: [])
     assert out["ok"] is False and "investiga primero" in out["error"]
+
+
+def test_download_deadline_kills_runaway(tmp_path, monkeypatch):
+    """A slow/unbounded download must abort at the wall-clock budget, not hang."""
+    import acero.portal.experiment_factory as fx
+    monkeypatch.setattr(fx, "DOWNLOAD_DEADLINE_SEC", 0)  # trip immediately
+
+    class SlowResp:
+        def read(self, n):
+            return b"x" * 1024          # always returns data → would never end
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    import urllib.request as rq
+    monkeypatch.setattr(rq, "urlopen", lambda req, timeout=0: SlowResp())
+    import pytest
+    with pytest.raises(ValueError, match="presupuesto"):
+        fx.fetch_data([{"url": "https://www.sidc.be/x.csv", "filename": "x.csv",
+                        "what": ""}], tmp_path, cache_dir=tmp_path / "c")
