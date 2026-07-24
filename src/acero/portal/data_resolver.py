@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -22,6 +23,60 @@ _UA = "ACERO-data-resolver/0.1 (mailto:merari.jafet@gmail.com)"
 _GEO_RE = re.compile(r"\bGSE(\d{3,})\b", re.I)
 _ZENODO_RE = re.compile(r"(?:zenodo\.org/records?/|zenodo[:\s]+|10\.5281/zenodo\.)(\d{4,})",
                         re.I)
+
+
+_FIGSHARE_RE = re.compile(r"(?:figshare\.com/articles/[\w/]*?/|figshare[:\s]+"
+                          r"|10\.6084/m9\.figshare\.)(\d{5,})", re.I)
+_DRYAD_RE = re.compile(r"(?:datadryad\.org/[\w/]*|dryad[:\s]+|10\.5061/dryad\.)"
+                       r"([\w.]+)", re.I)
+
+
+def _get_json(url: str, opener: Any | None, timeout: float = 25.0) -> Any:
+    req = urllib.request.Request(url, headers={"User-Agent": _UA,
+                                               "Accept": "application/json"})
+    op = opener or urllib.request.urlopen
+    with op(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def figshare_files(article_id: str, *, opener: Any | None = None
+                   ) -> list[dict[str, Any]]:
+    """Figshare article → its downloadable data files (open, no auth to read)."""
+    try:
+        d = _get_json(f"https://api.figshare.com/v2/articles/{article_id}", opener)
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for f in (d.get("files") or []):
+        name, url = f.get("name") or "", f.get("download_url") or ""
+        if name and url and name.lower().endswith(
+                (".csv", ".tsv", ".txt", ".json", ".gz", ".zip", ".dat", ".h5",
+                 ".npy", ".fits")):
+            out.append({"url": url, "filename": name, "accession": article_id,
+                        "repository": "Figshare", "bytes_hint": f.get("size"),
+                        "is_data": bool(_DATA_HINT.search(name)),
+                        "what": f"Figshare {article_id}: {name}"})
+    out.sort(key=lambda f: not f["is_data"])
+    return out
+
+
+def dryad_download(doi_suffix: str, *, opener: Any | None = None
+                   ) -> list[dict[str, Any]]:
+    """Dryad dataset → its download bundle (a zip; the sandbox unzips with zipfile)."""
+    doi = f"doi:10.5061/dryad.{doi_suffix}" if not doi_suffix.startswith("doi:") \
+        else doi_suffix
+    enc = urllib.parse.quote(doi, safe="")
+    try:
+        d = _get_json(f"https://datadryad.org/api/v2/datasets/{enc}", opener)
+    except Exception:  # noqa: BLE001
+        return []
+    href = ((d.get("_links") or {}).get("stash:download") or {}).get("href")
+    if not href:
+        return []
+    return [{"url": "https://datadryad.org" + href,
+             "filename": f"dryad_{doi_suffix.replace('.', '_')}.zip",
+             "accession": doi, "repository": "Dryad", "is_data": True,
+             "what": f"Dryad {doi}: bundle de datos (zip)"}]
 
 
 def zenodo_files(record_id: str, *, timeout: float = 25.0,
@@ -182,9 +237,19 @@ def resolve_reference(text: str, *, verify: bool = True, want_data: bool = False
     if zen:
         files = zenodo_files(zen.group(1), opener=opener)
         if files:
-            # data files first + a couple of others, capped
             data = [f for f in files if f["is_data"]][:3]
             return (data or files[:2])
+    fig = _FIGSHARE_RE.search(text or "")
+    if fig:
+        files = figshare_files(fig.group(1), opener=opener)
+        if files:
+            data = [f for f in files if f["is_data"]][:3]
+            return (data or files[:2])
+    dry = _DRYAD_RE.search(text or "")
+    if dry:
+        files = dryad_download(dry.group(1), opener=opener)
+        if files:
+            return files
     nea = _resolve_nea(text)
     if nea:
         return nea

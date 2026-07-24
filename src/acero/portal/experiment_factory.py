@@ -51,9 +51,14 @@ DATA_HOST_ALLOWLIST = {
     # observatories / archives
     "www.sidc.be", "sidc.be", "cdsarc.u-strasbg.fr", "vizier.u-strasbg.fr",
     "cdsarc.cds.unistra.fr", "www.gw-openscience.org", "gwosc.org",
-    # general open science
+    # general open science / repositories
     "zenodo.org", "export.arxiv.org", "arxiv.org", "api.openalex.org",
     "raw.githubusercontent.com", "ftp.ncbi.nlm.nih.gov", "eutils.ncbi.nlm.nih.gov",
+    "api.figshare.com", "ndownloader.figshare.com", "figshare.com",
+    "datadryad.org", "pubchem.ncbi.nlm.nih.gov", "www.ebi.ac.uk",
+    "rest.uniprot.org", "data.rcsb.org", "files.rcsb.org",
+    # cloud open-data (public buckets over HTTPS)
+    "s3.amazonaws.com", "storage.googleapis.com",
 }
 
 # tuned to a real workstation (this machine has 62GB RAM); all overridable by env
@@ -152,37 +157,78 @@ def fetch_data(urls: list[dict[str, Any]], dest: Path, *,
                          "what": spec.get("what", ""), "cached": True,
                          "fetched_at": now_iso()})
             continue
-        req = urllib.request.Request(url, headers={"User-Agent": _UA})
+        # download with RETRIES on transient network errors (size/time-bounded)
         h = hashlib.sha256()
         n = 0
-        deadline = time.monotonic() + DOWNLOAD_DEADLINE_SEC
-        with urllib.request.urlopen(req, timeout=timeout) as r, open(path, "wb") as f:
-            while True:
-                chunk = r.read(1 << 16)
-                if not chunk:
-                    break
-                n += len(chunk)
-                if n > max_bytes:
-                    raise ValueError(f"descarga excede {max_bytes} bytes "
-                                     f"(¿consulta sin límite?): {url[:80]}")
-                if time.monotonic() > deadline:      # runaway / very slow download
-                    raise ValueError(f"descarga excede el presupuesto de "
-                                     f"{DOWNLOAD_DEADLINE_SEC}s ({n} bytes): {url[:80]}")
-                h.update(chunk)
-                f.write(chunk)
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            h = hashlib.sha256()
+            n = 0
+            deadline = time.monotonic() + DOWNLOAD_DEADLINE_SEC
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": _UA})
+                with urllib.request.urlopen(req, timeout=timeout) as r, \
+                        open(path, "wb") as f:
+                    while True:
+                        chunk = r.read(1 << 16)
+                        if not chunk:
+                            break
+                        n += len(chunk)
+                        if n > max_bytes:
+                            raise ValueError(f"descarga excede {max_bytes} bytes "
+                                             f"(¿consulta sin límite?): {url[:80]}")
+                        if time.monotonic() > deadline:
+                            raise ValueError(f"descarga excede el presupuesto de "
+                                             f"{DOWNLOAD_DEADLINE_SEC}s: {url[:80]}")
+                        h.update(chunk)
+                        f.write(chunk)
+                last_exc = None
+                break
+            except ValueError:
+                raise                            # size/time limits are not retried
+            except Exception as exc:  # noqa: BLE001 - transient network → retry
+                last_exc = exc
+                time.sleep(1.5 * (attempt + 1))
+        if last_exc is not None:
+            raise ValueError(f"descarga falló tras 3 intentos ({last_exc}): {url[:80]}")
         if n == 0:
             raise ValueError(f"descarga vacía: {url[:80]}")
         ckey.write_bytes(path.read_bytes())
         prov.append({"url": url, "filename": name, "bytes": n,
                      "sha256": h.hexdigest(), "what": spec.get("what", ""),
                      "cached": False, "fetched_at": now_iso()})
-    # gzip files are decompressed to a sibling the analysis script can read directly
+    # compressed files are extracted so the analysis script reads them directly
     for rec in prov:
-        if rec["filename"].endswith(".gz"):
-            plain = _gunzip(dest / rec["filename"])
+        fn = rec["filename"]
+        if fn.endswith(".gz"):
+            plain = _gunzip(dest / fn)
             if plain:
                 rec["decompressed_to"] = plain
+        elif fn.endswith(".zip"):
+            names = _unzip(dest / fn, dest)
+            if names:
+                rec["extracted"] = names[:20]
     return prov
+
+
+def _unzip(path: Path, dest: Path) -> list[str]:
+    """Extract a .zip bundle (e.g. a Dryad dataset) into dest; return file names."""
+    import zipfile
+    try:
+        out = []
+        with zipfile.ZipFile(path) as z:
+            for info in z.infolist():
+                if info.is_dir() or info.file_size > MAX_DOWNLOAD_BYTES:
+                    continue
+                safe = os.path.basename(info.filename)
+                if not safe:
+                    continue
+                with z.open(info) as src, open(dest / safe, "wb") as f:
+                    f.write(src.read())
+                out.append(safe)
+        return out
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _gunzip(path: Path) -> str:

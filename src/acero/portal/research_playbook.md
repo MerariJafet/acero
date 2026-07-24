@@ -15,6 +15,28 @@ El conocimiento nuevo NUNCA sale de re-testear lo asentado. Sale de cuatro fuent
 Antes de gastar experimentos, pregunta: ¿esto ya se sabe? Si la literatura ya lo
 responde, NO lo corras — busca el ángulo que sí es frontera.
 
+## Menú de fuentes que ACERO SÍ puede descargar (no inventes otras)
+Da la ACCESIÓN o una URL directa a un archivo de estos hosts; el resolvedor arma
+la URL real. NO pidas datos de sitios fuera de esta lista.
+- **NASA Exoplanet Archive** (astronomía): `exoplanetarchive.ipac.caltech.edu/TAP/
+  sync?query=select+...+from+pscomppars&format=csv` (o tabla q1_q17_dr25_koi,
+  stellarhosts). Da la tabla; el resolvedor arma la consulta.
+- **GEO** (genómica): accesión `GSE…` → series-matrix + suplementarios (betas).
+- **Zenodo** (cualquier campo): DOI `10.5281/zenodo.NNN` o record → archivos.
+- **Figshare**: `10.6084/m9.figshare.NNN` o id → archivos.
+- **Dryad**: `10.5061/dryad.XXXX` → bundle (zip, se extrae solo).
+- **PubChem** (química, SIN llave): `pubchem.ncbi.nlm.nih.gov/rest/pug/compound/
+  name/{nombre}/property/{props}/CSV`.
+- **SILSO** (solar), **GWOSC** (ondas gravitacionales), **arXiv data**.
+Consultas SIEMPRE ACOTADAS (columnas/filas/límite). Nunca un volcado sin filtro.
+
+## Cruce de catálogos: por COORDENADAS o ID normalizado (no por nombre)
+Al unir dos catálogos, NO cruces por nombre de estrella/objeto (los nombres
+difieren entre archivos y el cruce sale vacío — pasó de verdad). Cruza por
+**RA/Dec** (posición J2000, radio de arcosegundos) cuando ambos las tengan
+(NASA y VizieR sí), o por un ID compartido normalizado. Reporta cuántas filas
+casaron y cuántas no.
+
 ## Datos: el cuello de botella real
 - Prefiere **datos PÚBLICOS, PROCESADOS y directamente descargables** (CSV/TSV/
   FITS/JSON/gz): NASA Exoplanet Archive TAP, GEO series-matrix + suplementarios,

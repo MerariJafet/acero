@@ -112,3 +112,48 @@ def test_nea_resolver_builds_tap_urls():
 def test_nea_confirmed_planets_reference():
     specs = dr.resolve_reference("usar confirmed planets del exoplanet archive")
     assert specs and specs[0]["accession"] == "pscomppars"
+
+
+def test_figshare_resolver(monkeypatch):
+    import json as _j
+
+    class Resp:
+        def read(self):
+            return _j.dumps({"files": [
+                {"name": "data_processed.csv",
+                 "download_url": "https://ndownloader.figshare.com/files/999", "size": 50},
+                {"name": "photo.png", "download_url": "https://x/p.png"}]}).encode()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    specs = dr.figshare_files("1234567", opener=lambda req, timeout=0: Resp())
+    names = [s["filename"] for s in specs]
+    assert "data_processed.csv" in names and "photo.png" not in names
+    assert specs[0]["repository"] == "Figshare"
+
+
+def test_dryad_resolver(monkeypatch):
+    import json as _j
+
+    class Resp:
+        def read(self):
+            return _j.dumps({"_links": {"stash:download": {
+                "href": "/api/v2/datasets/doi%3A10.5061%2Fdryad.abc/download"}}}).encode()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    specs = dr.dryad_download("abc123", opener=lambda req, timeout=0: Resp())
+    assert specs and specs[0]["repository"] == "Dryad"
+    assert specs[0]["url"].startswith("https://datadryad.org/api/v2/datasets/")
+    assert specs[0]["filename"].endswith(".zip")
+
+
+def test_resolve_reference_routes_figshare_and_dryad(monkeypatch):
+    import json as _j
+
+    class FRsp:
+        def read(self):
+            return _j.dumps({"files": [{"name": "d.csv",
+                "download_url": "https://ndownloader.figshare.com/files/1", "size": 1}]}).encode()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(dr.urllib.request, "urlopen", lambda req, timeout=0: FRsp())
+    assert dr.resolve_reference("datos en 10.6084/m9.figshare.1234567")[0]["repository"] == "Figshare"
