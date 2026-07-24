@@ -157,3 +157,20 @@ def test_resolve_reference_routes_figshare_and_dryad(monkeypatch):
         def __exit__(self, *a): return False
     monkeypatch.setattr(dr.urllib.request, "urlopen", lambda req, timeout=0: FRsp())
     assert dr.resolve_reference("datos en 10.6084/m9.figshare.1234567")[0]["repository"] == "Figshare"
+
+
+def test_nea_does_not_hijack_molecular_chemistry():
+    # a DRUG chemistry experiment (Caco-2 permeability, lipophilicity) must NOT
+    # pull NASA exoplanet data just because it mentions 'chemical/elemental'
+    specs = dr.resolve_reference(
+        "correlación estructura-propiedad: permeabilidad Caco-2 vs lipofilicidad "
+        "y rigidez molecular en compuestos químicos, PubChem")
+    accs = {s.get("accession") for s in specs}
+    assert "pscomppars" not in accs and "stellarhosts" not in accs
+
+
+def test_nea_still_fires_for_stellar_chemistry():
+    specs = dr.resolve_reference(
+        "cruzar radios de exoplanetas con abundancias de química estelar (host star)")
+    accs = {s.get("accession") for s in specs}
+    assert "pscomppars" in accs and "stellarhosts" in accs

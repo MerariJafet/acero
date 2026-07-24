@@ -135,9 +135,15 @@ def _resolve_nea(text: str) -> list[dict[str, Any]]:
     exo = any(k in t for k in ("exoplanet archive", "nasa exoplanet", "koi",
                                "confirmed planet", "pscomppars", "kepler objects",
                                "radius valley", "valle de radios", "dr25", "exoplaneta"))
-    chem = any(k in t for k in ("abundanc", "abundance", "chemical", "química estelar",
-                                "quimica estelar", "mg/si", "fe/h fino", "hypatia",
-                                "elemental", "composición estelar", "composicion estelar"))
+    # STELLAR chemistry only — must have an ASTRONOMY signal, else generic
+    # molecular "chemical/elemental" (drug chemistry!) would wrongly pull NASA data.
+    astro = exo or any(k in t for k in ("stellar", "estelar", "star", "estrella",
+                                        "host star", "planet host", "kepler", "tess",
+                                        "gaia", "metallicity", "metalicidad"))
+    chem = astro and any(k in t for k in (
+        "abundanc", "abundance", "química estelar", "quimica estelar", "mg/si",
+        "fe/h", "hypatia", "composición estelar", "composicion estelar",
+        "stellar chemistry", "abundancias"))
     specs: list[dict[str, Any]] = []
     # a chemistry cross-match STILL needs the planet radii table — you can't test
     # radius-vs-chemistry without the radii. So chemistry implies the planet table.
