@@ -42,22 +42,35 @@ def _nea_url(table: str) -> str:
 
 def _resolve_nea(text: str) -> list[dict[str, Any]]:
     t = (text or "").lower()
-    if not any(k in t for k in ("exoplanet archive", "nasa exoplanet", "koi",
-                                "confirmed planet", "pscomppars", "kepler objects",
-                                "radius valley", "valle de radios", "dr25")):
-        return []
-    specs = []
-    if any(k in t for k in ("koi", "dr25", "kepler objects", "cumulative")):
-        specs.append({"url": _nea_url("q1_q17_dr25_koi"),
-                      "filename": "kepler_dr25_koi.csv",
-                      "accession": "q1_q17_dr25_koi", "repository": "NASA-NEA",
-                      "what": "Kepler DR25 KOI (radios, periodos, disposición, SNR)"})
-    # always offer the confirmed-planet composite table (radii + uncertainties)
-    specs.append({"url": _nea_url("pscomppars"),
-                  "filename": "nea_confirmed_planets.csv",
-                  "accession": "pscomppars", "repository": "NASA-NEA",
-                  "what": "NASA Exoplanet Archive planetas confirmados (radios±, "
-                          "periodos, params estelares)"})
+    exo = any(k in t for k in ("exoplanet archive", "nasa exoplanet", "koi",
+                               "confirmed planet", "pscomppars", "kepler objects",
+                               "radius valley", "valle de radios", "dr25", "exoplaneta"))
+    chem = any(k in t for k in ("abundanc", "abundance", "chemical", "química estelar",
+                                "quimica estelar", "mg/si", "fe/h fino", "hypatia",
+                                "elemental", "composición estelar", "composicion estelar"))
+    specs: list[dict[str, Any]] = []
+    if exo:
+        if any(k in t for k in ("koi", "dr25", "kepler objects", "cumulative")):
+            specs.append({"url": _nea_url("q1_q17_dr25_koi"),
+                          "filename": "kepler_dr25_koi.csv",
+                          "accession": "q1_q17_dr25_koi", "repository": "NASA-NEA",
+                          "what": "Kepler DR25 KOI (radios, periodos, disposición, SNR)"})
+        specs.append({"url": _nea_url("pscomppars"),
+                      "filename": "nea_confirmed_planets.csv",
+                      "accession": "pscomppars", "repository": "NASA-NEA",
+                      "what": "NASA Exoplanet Archive planetas confirmados (radios±, "
+                              "periodos, params estelares, hostname para CRUZAR)"})
+    # CROSS-CATALOG: stellar chemical abundances (join by host star) — the
+    # discovery-shaped angle that few have combined with planet radii.
+    if chem:
+        specs.append({
+            "url": ("https://exoplanetarchive.ipac.caltech.edu/TAP/sync?query="
+                    "select+hostname,st_met,st_teff,st_logg,st_mass,st_rad,st_age"
+                    "+from+stellarhosts&format=csv"),
+            "filename": "nea_stellar_hosts.csv", "accession": "stellarhosts",
+            "repository": "NASA-NEA",
+            "what": "Parámetros estelares de anfitriones (metalicidad, Teff, logg) "
+                    "para CRUZAR con radios planetarios por hostname"})
     return specs
 
 

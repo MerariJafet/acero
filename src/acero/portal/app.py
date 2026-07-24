@@ -553,6 +553,22 @@ def build_portal_router() -> APIRouter:
         from .lifecycle import Lifecycle
         return Lifecycle().active_processes()
 
+    @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/novelty")
+    def hyp_novelty(project_id: str, hyp_id: str,
+                    sess: Session = Depends(_require_session),
+                    x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Assess whether a hypothesis is frontier (discovery) or already settled."""
+        _require_csrf(sess, x_csrf_token)
+        from .novelty import NoveltyFilter
+        return NoveltyFilter().assess(project_id, hyp_id)
+
+    @r.post("/api/projects/{project_id}/novelty/assess-all")
+    def novelty_all(project_id: str, sess: Session = Depends(_require_session),
+                    x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .novelty import NoveltyFilter
+        return NoveltyFilter().assess_all(project_id)
+
     @r.post("/api/projects/{project_id}/vault/search")
     def vault_search(project_id: str, body: dict[str, Any],
                      sess: Session = Depends(_require_session),

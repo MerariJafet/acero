@@ -146,6 +146,8 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
                        "provider": h.get("provider", ""),
                        "critique": crits.get(h.get("id", "")),
                        "version": int(h.get("version", 1)),
+                       "novelty": h.get("novelty"),
+                       "discovery_angle": h.get("discovery_angle", ""),
                        "origin": h.get("origin", ""),
                        "anomaly_provenance": h.get("anomaly_provenance"),
                        "flag": "plantilla" if h.get("synthetic") else ""} for h in hyps],

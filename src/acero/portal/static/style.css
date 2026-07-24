@@ -485,3 +485,6 @@ caption { text-align: left; color: var(--muted); padding-bottom: .4rem; }
 .vault-search { display: flex; gap: .5rem; margin: .5rem 0 .3rem; flex-wrap: wrap; }
 .vault-search input { flex: 1; min-width: 280px; }
 #vault-out { width: 100%; }
+.hyp-card.settled { opacity: .72; border-left: 3px solid var(--bad); }
+.nov-detail { margin: .3rem 0 .1rem; }
+.act.small { font-size: .78rem; padding: .2rem .55rem; }

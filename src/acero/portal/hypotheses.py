@@ -26,14 +26,15 @@ HYP_SCHEMA = {
             "properties": {
                 "title": {"type": "string"},
                 "kind": {"type": "string"},   # established|theorized|novel|open_question
+                "discovery_angle": {"type": "string"},  # ver DISCOVERY_ANGLE
                 "trigger_question": {"type": "string"},
                 "argument": {"type": "string"},
                 "doubt": {"type": "string"},
                 "test_idea": {"type": "string"},
                 "competes_with": {"type": "string"},
             },
-            "required": ["title", "kind", "trigger_question", "argument", "doubt",
-                         "test_idea", "competes_with"],
+            "required": ["title", "kind", "discovery_angle", "trigger_question",
+                         "argument", "doubt", "test_idea", "competes_with"],
             "additionalProperties": False}},
     },
     "required": ["hypotheses"],
@@ -45,6 +46,14 @@ KIND_LABEL = {
     "theorized": "Ya teorizado (poner a prueba)",
     "novel": "Totalmente nuevo",
     "open_question": "Pregunta abierta",
+}
+
+# the four structural sources of NEW knowledge (not confirmation)
+DISCOVERY_ANGLE = {
+    "cross_data": "Cruce de datos — unir dos catálogos que nadie ha combinado",
+    "anomaly": "Anomalía/residuo — lo que NO encaja, sub-poblaciones, outliers",
+    "open_untested": "Pregunta abierta con datos disponibles y ángulo sin analizar",
+    "untested_prediction": "Predicción sin probar — un modelo dice X, nadie verificó X",
 }
 
 
@@ -76,20 +85,31 @@ class HypothesisService:
                 prov = CodexCliProvider(timeout_sec=220)
                 if prov.available():
                     prompt = (
-                        "Eres un científico ESCÉPTICO y CREATIVO en ACERO. Para la "
-                        f"investigación «{p.title}» (dominio {p.domain}) propón {n} hipótesis "
-                        "COMPETIDORAS y verificables computacionalmente. NO repitas "
-                        "conocimiento de libro: CUESTIÓNALO. Cubre las cuatro clases: "
-                        "'established' (algo dado por cierto que vale re-examinar), "
-                        "'theorized' (una teoría con predicción falsable), 'novel' (una "
-                        "relación o idea genuinamente nueva/atrevida) y 'open_question' "
-                        "(algo aún sin respuesta). Para CADA hipótesis da: title (la "
-                        "hipótesis), kind, trigger_question (la PREGUNTA DETONANTE que la "
-                        "origina — la duda concreta), argument (por qué es plausible), "
-                        "doubt (qué la haría falsa o qué la vuelve incierta), test_idea "
-                        "(cómo probarla con datos PÚBLICOS reales y controles/nulos), "
-                        "competes_with (a qué hipótesis se opone). En español. Sé "
-                        "provocador pero riguroso; nada es un descubrimiento. "
+                        "Eres un científico ESCÉPTICO y CREATIVO en ACERO. La META es "
+                        "DESCUBRIR conocimiento NUEVO, no confirmar lo ya sabido. El "
+                        "descubrimiento NUNCA sale de re-testear lo asentado; sale de "
+                        "cuatro fuentes — apunta a ellas con discovery_angle:\n"
+                        "  cross_data: cruzar DOS catálogos/datasets que nadie ha unido "
+                        "(ahí aparecen correlaciones nuevas).\n"
+                        "  anomaly: buscar lo que NO encaja — residuos, sub-poblaciones, "
+                        "outliers, correlaciones fuera de lo esperado.\n"
+                        "  open_untested: una pregunta ABIERTA donde los datos EXISTEN "
+                        "pero el análisis concreto no se ha hecho.\n"
+                        "  untested_prediction: una predicción específica de un modelo "
+                        "que NADIE ha verificado contra datos.\n\n"
+                        f"Investigación «{p.title}» (dominio {p.domain}). Propón {n} "
+                        "hipótesis COMPETIDORAS, verificables con datos PÚBLICOS reales, "
+                        "y SESGADAS HACIA LA FRONTERA: evita lo que la literatura ya "
+                        "resolvió; prefiere ángulos poco explorados. Para CADA una: "
+                        "title, kind (established|theorized|novel|open_question), "
+                        "discovery_angle (cross_data|anomaly|open_untested|"
+                        "untested_prediction), trigger_question (la duda concreta que "
+                        "la origina), argument (por qué es plausible Y por qué sería "
+                        "NUEVA si se confirma/refuta), doubt (qué la falsaría), test_idea "
+                        "(experimento concreto con datos reales, nombrando los "
+                        "catálogos/datasets a CRUZAR o el residuo a buscar, con "
+                        "controles/nulos), competes_with. En español. Provocador pero "
+                        "riguroso; nada es un descubrimiento hasta probarlo. "
                         + (f"Enfócate en: {focus}." if focus else ""))
                     out = prov.complete_json(prompt, HYP_SCHEMA, temperature=0.6)
                     hyps = out.get("hypotheses") if out else None
@@ -108,6 +128,7 @@ class HypothesisService:
             payload = {"id": hid, "tag": tag, "title": h.get("title", ""),
                        "description": h.get("title", ""),
                        "kind": h.get("kind", "open_question"),
+                       "discovery_angle": h.get("discovery_angle", ""),
                        "trigger_question": h.get("trigger_question", ""),
                        "argument": h.get("argument", ""), "doubt": h.get("doubt", ""),
                        "test_idea": h.get("test_idea", ""),
@@ -125,6 +146,9 @@ class HypothesisService:
                            f"Pregunta detonante: {c['trigger_question']}\n"
                            f"Argumento: {c['argument']}\nDuda: {c['doubt']}\n"
                            f"Idea de prueba: {c['test_idea']}", self._sf)
+        # novelty filter: flag which are frontier vs already-settled (async)
+        from .novelty import assess_async
+        assess_async(project_id, [c["id"] for c in created], self._sf)
         return {"ok": True, "provider": provider, "created": created,
                 "disclaimer": "Hipótesis generadas como candidatos a PROBAR; no son "
                               "evidencia ni descubrimientos."}

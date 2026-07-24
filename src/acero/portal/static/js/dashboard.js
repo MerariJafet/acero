@@ -258,15 +258,31 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
       const anom = i.origin === "anomaly" ? `<span class="pill bad">🔥 nacida de anomalía</span>` : "";
       const anomProv = i.anomaly_provenance
         ? `<p class="tag">🔥 Origen: discrepancia medida en «${esc(i.anomaly_provenance.exp_title || "")}» — ${esc((i.anomaly_provenance.anomaly || "").slice(0, 140))}</p>` : "";
-      return `<div class="card hyp-card">
+      // novelty filter: steer toward discovery (green = frontier, red = settled)
+      const N_COLOR = { asentada: "bad", en_debate: "warn", abierta: "ok", inexplorada: "ok", sin_evaluar: "warn" };
+      const N_ICON = { asentada: "🔴 asentada", en_debate: "🟠 en debate", abierta: "🟢 abierta", inexplorada: "🔵 inexplorada", sin_evaluar: "⚪ sin evaluar" };
+      const nv = i.novelty;
+      const novBadge = nv && nv.status
+        ? pill(N_ICON[nv.status] || nv.status, N_COLOR[nv.status] || "warn")
+        : `<button class="act ghost small" data-novelty="${esc(i.id)}">🎯 evaluar novedad</button>`;
+      const DA = { cross_data: "🔗 cruce de datos", anomaly: "🔥 anomalía/residuo", open_untested: "🧭 abierta sin analizar", untested_prediction: "🎲 predicción sin probar" };
+      const daBadge = i.discovery_angle && DA[i.discovery_angle] ? `<span class="src">${esc(DA[i.discovery_angle])}</span>` : "";
+      const novDetail = nv && nv.status && nv.status !== "sin_evaluar" ? `
+        <details class="nov-detail"><summary class="tag">🎯 novedad: ${esc(nv.status)} — ¿vale la pena?</summary>
+          <div class="hyp-field"><b>Ya se sabe:</b><p>${esc(nv.known || "")}</p></div>
+          <div class="hyp-field"><b>El hueco (lo que NO se ha hecho):</b><p>${esc(nv.gap || "")}</p></div>
+          <div class="hyp-field"><b>🚀 Camino a un descubrimiento:</b><p>${esc(nv.discovery_path || "")}</p></div>
+        </details>` : "";
+      return `<div class="card hyp-card${nv && nv.status === "asentada" ? " settled" : ""}">
         <div class="hyp-head">
           <b>${esc(i.tag)}: ${esc(i.title)}</b>
           ${verChip(`H v${i.version || 1}`, true, "versión actual de la hipótesis")}
+          ${novBadge} ${daBadge}
           ${klabel ? " " + pill(klabel, kcolor) : ""} ${anom}
           ${pill(i.meta || "", approved ? "ok" : "warn")}
           ${i.flag ? " " + pill(i.flag, "bad") : ""}
           ${reasoning ? `<button class="hyp-toggle" data-htoggle="${ix}">ver razonamiento ▾</button>` : ""}
-        </div>${anomProv}${actions}
+        </div>${novDetail}${anomProv}${actions}
         <div class="hyp-links">
           <button class="act ghost" data-htrace="${esc(i.id)}">🧭 Detalle</button>
           <a href="#" data-golit>→ ir a Literatura</a> ·
@@ -321,6 +337,7 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
          <button class="act" id="hyp-gen-btn">🧠 Generar hipótesis (crítica y creativa)</button>
          <button class="act ghost" id="hyp-gen-one">＋ Generar nueva hipótesis</button>
          <button class="act ghost" id="anom-harvest">🔥 Anomalías → hipótesis</button>
+         <button class="act ghost" id="nov-all">🎯 Evaluar novedad de todas</button>
          <span id="hyp-gen-out" class="tag" aria-live="polite"></span>
        </div>
        <p class="tag">El copiloto CUESTIONA (no repite): propone hipótesis ya probadas, teorizadas, nuevas y preguntas abiertas, cada una con su pregunta detonante, argumento, duda y cómo probarla.</p>` : ""}
@@ -376,6 +393,15 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
   wireAristoteles(view, pid, cb, () => cb.openPhase(pid, "hipotesis"));
   view.querySelectorAll("[data-htrace]").forEach((b) =>
     b.addEventListener("click", () => renderTrace(view, pid, b.dataset.htrace, cb)));
+  view.querySelectorAll("[data-novelty]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      b.textContent = "🎯 evaluando novedad (Codex)…";
+      const { ok, body } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.novelty}/novelty`, {});
+      if (ok && body.ok) cb.openPhase(pid, "hipotesis");
+      else { b.disabled = false; b.textContent = "🎯 evaluar novedad"; }
+    }));
   view.querySelectorAll("[data-golit]").forEach((a) =>
     a.addEventListener("click", (ev) => { ev.preventDefault(); cb.openPhase(pid, "literatura"); }));
   view.querySelectorAll("[data-goexp]").forEach((a) =>
@@ -391,6 +417,17 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
       } else alert("Error: " + ((body && body.error) || ""));
     }));
 
+  const novAll = view.querySelector("#nov-all");
+  if (novAll) novAll.addEventListener("click", async () => {
+    const out = view.querySelector("#hyp-gen-out");
+    novAll.disabled = true;
+    out.textContent = "🎯 El sistema evalúa la novedad de cada hipótesis (Codex)…";
+    const { ok, body } = await post(
+      `/portal/api/projects/${encodeURIComponent(pid)}/novelty/assess-all`, {});
+    novAll.disabled = false;
+    if (ok && body.ok) { out.textContent = `🎯 ${body.assessed.length} evaluadas — verde=frontera, rojo=ya se sabe`; cb.openPhase(pid, "hipotesis"); }
+    else out.textContent = "Error al evaluar novedad.";
+  });
   const anomBtn = view.querySelector("#anom-harvest");
   if (anomBtn) anomBtn.addEventListener("click", async () => {
     const out = view.querySelector("#hyp-gen-out");

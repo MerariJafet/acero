@@ -290,6 +290,15 @@ def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
         + f"): {d.get('what','')}\n  PRIMEROS CARACTERES:\n  " +
         previews.get(d.get("decompressed_to") or d["filename"], "")[:400].replace("\n", "\n  ")
         for d in data_files) or "(sin archivos: análisis autocontenido)"
+    multi = len(data_files) >= 2
+    join_hint = (
+        "\nCRUCE DE CATÁLOGOS (hay ≥2 datasets): el descubrimiento vive en UNIR "
+        "datos que nadie combinó. Une los archivos por una CLAVE común (p.ej. "
+        "'hostname'/nombre de la estrella anfitriona, o un ID compartido; "
+        "normaliza mayúsculas/espacios). Reporta cuántas filas casaron y cuántas "
+        "quedaron sin cruzar. La correlación/efecto que buscas SOLO aparece tras "
+        "el join; contra el nulo, permuta la clave para romper la asociación.\n"
+        if multi else "")
     geo = any("series_matrix" in (d.get("filename") or "") for d in data_files)
     geo_hint = (
         "\nFORMATO GEO series matrix: los FENOTIPOS/grupos están en líneas que "
@@ -310,7 +319,7 @@ def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
         f"Experimento: {exp.get('title','')}\nQué mide: {exp.get('what','')}\n"
         f"Método: {exp.get('how','')}\nControles: {exp.get('controls','')}\n"
         f"Discriminador: {exp.get('discriminator','')}\n\n"
-        f"ARCHIVOS DE DATOS:\n{files_txt}\n{geo_hint}\n{_CODE_RULES}{fb}",
+        f"ARCHIVOS DE DATOS:\n{files_txt}\n{join_hint}{geo_hint}\n{_CODE_RULES}{fb}",
         temperature=0.2, max_tokens=4000)
     code = r.text.strip()
     # strip accidental markdown fences
