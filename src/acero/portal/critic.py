@@ -214,9 +214,20 @@ class CriticAgent:
                 "pending": statuses.count("pending"), "statuses": statuses}
 
     def rigor_score(self, project_id: str) -> dict[str, Any]:
-        """Project rigor: objections resolved WITH EVIDENCE / total objections."""
+        """Project rigor: objections resolved WITH EVIDENCE over the objections that
+        CAN be resolved — i.e. the critic's LATEST standing critique per HYPOTHESIS.
+
+        Per-experiment critiques are advisory (never re-reviewed against evidence),
+        so counting them punished running more experiments. We exclude them and use
+        only the newest hypothesis-level critique per hypothesis; re-consulting a
+        hypothesis replaces (not accumulates) its counted objections.
+        """
+        hyp_ids = {h.get("id") for h in
+                   self.store.list_objects(project_id, kind="candidate")}
         total = resolved = n_crit = 0
-        for c in self.latest_by_target(project_id).values():
+        for tid, c in self.latest_by_target(project_id).items():
+            if tid not in hyp_ids:              # skip experiment/other critiques
+                continue
             objs = c.get("objections") or []
             if not objs:
                 continue
@@ -225,7 +236,7 @@ class CriticAgent:
             sts = c.get("objections_status") or []
             resolved += sum(1 for s in sts if s == "resolved")
         if total == 0:
-            return {"score": None, "note": "sin objeciones registradas aún",
+            return {"score": None, "note": "sin objeciones de hipótesis aún",
                     "resolved": 0, "total": 0}
         return {"score": round(10 * resolved / total, 1), "resolved": resolved,
                 "total": total, "critiques": n_crit}

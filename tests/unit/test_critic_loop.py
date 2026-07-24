@@ -70,6 +70,22 @@ def test_rigor_score_without_objections_is_none(session_factory):
     assert CriticAgent(session_factory).rigor_score(p.id)["score"] is None
 
 
+def test_rigor_ignores_experiment_critiques(session_factory):
+    """Running more experiments (each critiqued) must NOT dilute the rigor score."""
+    p, h, fl = _setup(session_factory)
+    ag = CriticAgent(session_factory)
+    ch = _crit_with(ag, p.id, h["id"], objections=["a", "b"])
+    ag.store.update_payload(ch["id"], {"objections_status": ["resolved", "pending"]})
+    # a per-experiment critique with its own (unresolved) objections
+    e = fl.propose_experiments(p.id, h["id"], use_ai=False)["created"][0]
+    ce = ag.critique_now(p.id, e["id"], "experimento_resultado", "x", use_ai=False)
+    ag.store.update_payload(ce["id"], {"objections": ["z1", "z2", "z3", "z4"],
+                                       "objections_status": ["pending"] * 4})
+    r = ag.rigor_score(p.id)
+    # only the hypothesis critique counts: 1 of 2 resolved → 5.0, not diluted by the 4
+    assert r["total"] == 2 and r["resolved"] == 1 and r["score"] == 5.0
+
+
 def test_dossier_soft_gate_blocks_on_critical_pending(session_factory):
     p, h, fl = _setup(session_factory)
     ag = CriticAgent(session_factory)
