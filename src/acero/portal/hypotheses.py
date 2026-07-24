@@ -84,7 +84,9 @@ class HypothesisService:
                 from ..llm.providers import CodexCliProvider
                 prov = CodexCliProvider(timeout_sec=220)
                 if prov.available():
+                    from .playbook import brief
                     prompt = (
+                        brief() + "\n\n---\n\n"
                         "Eres un científico ESCÉPTICO y CREATIVO en ACERO. La META es "
                         "DESCUBRIR conocimiento NUEVO, no confirmar lo ya sabido. El "
                         "descubrimiento NUNCA sale de re-testear lo asentado; sale de "

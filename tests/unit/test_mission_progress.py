@@ -13,27 +13,27 @@ def _mk(steps):
 
 
 def test_pct_weights_and_running_subfraction():
-    st = [{"name": n, "status": "PENDING", "sub_frac": 0.0}
-          for n in ("investigate", "experiments_propose", "experiments_run", "synthesize")]
+    names = ("investigate", "experiments_propose", "experiments_run",
+             "synthesize", "rigor_loop")
+    st = [{"name": n, "status": "PENDING", "sub_frac": 0.0} for n in names]
     m = _mk(st)
     assert MissionEngine._pct(m) == 0
-    m["steps"][0]["status"] = "DONE"                   # 15/100
-    assert MissionEngine._pct(m) == 15
-    m["steps"][1]["status"] = "DONE"                   # 30/100
+    m["steps"][0]["status"] = "DONE"                   # investigate 12
+    assert MissionEngine._pct(m) == 12
+    m["steps"][1]["status"] = "DONE"                   # +propose 12 → 24
     m["steps"][2]["status"] = "RUNNING"
-    m["steps"][2]["sub_frac"] = 0.5                    # +55*0.5 = 27.5 → 57 or 58
-    p = MissionEngine._pct(m)
-    assert 57 <= p <= 58
-    # everything but synth done → 45 + 55 = ... but running never hits 100
-    m["steps"][2]["status"] = "DONE"
+    m["steps"][2]["sub_frac"] = 0.5                    # +run 46*0.5 = 23 → 47
+    assert MissionEngine._pct(m) == 47
+    m["steps"][2]["status"] = "DONE"                   # 12+12+46 = 70
     m["steps"][2]["sub_frac"] = 1.0
-    assert MissionEngine._pct(m) == 85
+    assert MissionEngine._pct(m) == 70
 
 
 def test_pct_caps_at_99_until_done_then_100():
     st = [{"name": n, "status": "DONE", "sub_frac": 1.0}
-          for n in ("investigate", "experiments_propose", "experiments_run")]
-    st.append({"name": "synthesize", "status": "RUNNING", "sub_frac": 0.99})
+          for n in ("investigate", "experiments_propose", "experiments_run",
+                    "synthesize")]
+    st.append({"name": "rigor_loop", "status": "RUNNING", "sub_frac": 0.99})
     m = _mk(st)
     assert MissionEngine._pct(m) == 99                 # never 100 while RUNNING
     m["status"] = "DONE"

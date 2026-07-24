@@ -11,6 +11,7 @@ GET can retrieve. Unknown references resolve to nothing (honest: no fake URLs).
 
 from __future__ import annotations
 
+import json
 import re
 import urllib.request
 from typing import Any
@@ -19,6 +20,40 @@ _UA = "ACERO-data-resolver/0.1 (mailto:merari.jafet@gmail.com)"
 
 # accession patterns → resolver
 _GEO_RE = re.compile(r"\bGSE(\d{3,})\b", re.I)
+_ZENODO_RE = re.compile(r"(?:zenodo\.org/records?/|zenodo[:\s]+|10\.5281/zenodo\.)(\d{4,})",
+                        re.I)
+
+
+def zenodo_files(record_id: str, *, timeout: float = 25.0,
+                 opener: Any | None = None) -> list[dict[str, Any]]:
+    """List downloadable files of a Zenodo record via its public API.
+
+    Zenodo hosts a huge amount of open scientific data (incl. quantum-computing
+    benchmark/QEC datasets); the record's files have direct download URLs.
+    """
+    api = f"https://zenodo.org/api/records/{record_id}"
+    try:
+        req = urllib.request.Request(api, headers={"User-Agent": _UA,
+                                                   "Accept": "application/json"})
+        op = opener or urllib.request.urlopen
+        with op(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except Exception:  # noqa: BLE001
+        return []
+    out = []
+    for f in (data.get("files") or []):
+        name = f.get("key") or f.get("filename") or ""
+        url = ((f.get("links") or {}).get("self")
+               or (f.get("links") or {}).get("download") or "")
+        if name and url and name.lower().endswith(
+                (".csv", ".tsv", ".txt", ".json", ".gz", ".zip", ".dat", ".h5", ".npy")):
+            out.append({"url": url, "filename": name, "accession": record_id,
+                        "repository": "Zenodo",
+                        "is_data": bool(_DATA_HINT.search(name)),
+                        "bytes_hint": f.get("size"),
+                        "what": f"Zenodo {record_id}: {name}"})
+    out.sort(key=lambda f: not f["is_data"])
+    return out
 
 # NASA Exoplanet Archive TAP: build a real CSV query URL from a table reference
 _NEA_BASE = "https://exoplanetarchive.ipac.caltech.edu/TAP/sync"
@@ -143,6 +178,13 @@ def resolve_reference(text: str, *, verify: bool = True, want_data: bool = False
     processed DATA matrix from /suppl/ (the real betas/expression) — that's what a
     strong reanalysis needs; storage/RAM permitting (both configurable).
     """
+    zen = _ZENODO_RE.search(text or "")
+    if zen:
+        files = zenodo_files(zen.group(1), opener=opener)
+        if files:
+            # data files first + a couple of others, capped
+            data = [f for f in files if f["is_data"]][:3]
+            return (data or files[:2])
     nea = _resolve_nea(text)
     if nea:
         return nea

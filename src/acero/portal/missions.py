@@ -29,10 +29,11 @@ from ..ledger.db import default_session_factory
 from ..ledger.service import ResearchLedger
 from ..provenance.events import ProvenanceAction
 
-STEPS = ["investigate", "experiments_propose", "experiments_run", "synthesize"]
+STEPS = ["investigate", "experiments_propose", "experiments_run", "synthesize",
+         "rigor_loop"]
 # relative weights → a smooth 0-100% (experiments_run is by far the longest)
-STEP_WEIGHT = {"investigate": 15, "experiments_propose": 15,
-               "experiments_run": 55, "synthesize": 15}
+STEP_WEIGHT = {"investigate": 12, "experiments_propose": 12,
+               "experiments_run": 46, "synthesize": 10, "rigor_loop": 20}
 MAX_MISSIONS = 2                     # concurrent missions (each spawns Codex work)
 STALE_HEARTBEAT_SEC = 180.0
 
@@ -258,6 +259,36 @@ class MissionEngine:
             from .synthesis import synthesize_hypothesis
             r = synthesize_hypothesis(pid, hid, self._sf, use_ai=use_ai)
             return r.get("summary", "síntesis registrada")[:200]
+
+        if name == "rigor_loop":
+            # AUTONOMOUS "machacar a Aristóteles": consult the critic, turn its
+            # executable suggestions into experiments, run them, and re-synthesize
+            # so it re-reviews its own objections against the new evidence.
+            if not use_ai:
+                return "omitido (offline)"
+            from .critic import CriticAgent
+            from .synthesis import synthesize_hypothesis
+            ag = CriticAgent(self._sf)
+            step["sub"] = "Aristóteles revisa y propone cómo reforzar…"
+            self._save(m)
+            ag.critique_now(pid, hid, "literatura",
+                            f"Hipótesis: {(self.store.get(hid) or {}).get('title','')}. "
+                            "Revisa el trabajo ejecutado y propón experimentos "
+                            "concretos que refuercen o refuten con más rigor.",
+                            use_ai=True)
+            conv = ag.suggestions_to_experiments(pid, hid)
+            new = conv.get("created", []) if conv.get("ok") else []
+            ran = 0
+            for e in new[:2]:            # bounded: at most 2 extra experiments
+                step["sub"] = f"corriendo experimento de rigor: {e['title'][:45]}"
+                step["sub_frac"] = ran / max(1, len(new[:2]))
+                self._save(m)
+                fl.run_experiment(pid, e["id"], use_ai=use_ai)
+                ran += 1
+            synthesize_hypothesis(pid, hid, self._sf, use_ai=use_ai)  # re-review
+            rig = ag.rigor_score(pid)
+            return (f"Aristóteles: {ran} experimentos de rigor corridos; "
+                    f"objeciones resueltas {rig.get('resolved')}/{rig.get('total')}")
 
         raise RuntimeError(f"paso desconocido: {name}")
 

@@ -487,7 +487,9 @@ class HypothesisFlow:
                 from ..llm.providers import CodexCliProvider
                 prov = CodexCliProvider(timeout_sec=200)
                 if prov.available():
+                    from .playbook import brief
                     prompt = (
+                        brief() + "\n\n---\n\n"
                         f"Propón 2-3 EXPERIMENTOS COMPUTACIONALES concretos para probar la "
                         f"hipótesis «{h.get('title','')}» (duda: {h.get('doubt','')}).{seed_txt}\n"
                         "Prioriza cosas EJECUTABLES EN NUESTRA MÁQUINA: bajar datasets públicos "

@@ -201,11 +201,20 @@ def _gunzip(path: Path) -> str:
         return ""
 
 
+def _sanitize(s: str) -> str:
+    """Strip NULs and control bytes so a data preview never breaks the Codex call
+    (a real-data experiment failed with 'embedded null byte' on a binary CSV)."""
+    if not s:
+        return s
+    s = s.replace("\x00", "")
+    return "".join(c for c in s if c == "\n" or c == "\t" or ord(c) >= 32)
+
+
 def _head_preview(path: Path, chars: int = 500) -> str:
     try:
         raw = path.read_bytes()[: chars * 4]
-        txt = raw.decode("utf-8", "replace")
-        return txt[:chars]
+        txt = _sanitize(raw.decode("utf-8", "replace"))
+        return txt[:chars] or "(sin texto legible — datos binarios/comprimidos)"
     except Exception:  # noqa: BLE001
         return "(binario)"
 
@@ -322,14 +331,16 @@ def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
         if geo else "")
     fb = f"\n\nEL INTENTO ANTERIOR FALLÓ. Corrige la causa:\n{feedback[:1500]}\n" \
         if feedback else ""
-    r = prov.complete(
+    from .playbook import brief
+    prompt = (
+        brief(900) + "\n\n---\n\n"
         f"Escribe el script de análisis para este EXPERIMENTO.\n"
         f"Hipótesis: «{hyp.get('title','')}»\n"
         f"Experimento: {exp.get('title','')}\nQué mide: {exp.get('what','')}\n"
         f"Método: {exp.get('how','')}\nControles: {exp.get('controls','')}\n"
         f"Discriminador: {exp.get('discriminator','')}\n\n"
-        f"ARCHIVOS DE DATOS:\n{files_txt}\n{join_hint}{geo_hint}\n{_CODE_RULES}{fb}",
-        temperature=0.2, max_tokens=4000)
+        f"ARCHIVOS DE DATOS:\n{files_txt}\n{join_hint}{geo_hint}\n{_CODE_RULES}{fb}")
+    r = prov.complete(_sanitize(prompt), temperature=0.2, max_tokens=4000)
     code = r.text.strip()
     # strip accidental markdown fences
     code = re.sub(r"^```(?:python)?\s*", "", code)
