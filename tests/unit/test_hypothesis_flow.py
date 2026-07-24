@@ -102,3 +102,13 @@ def test_experiments_seed_from_confrontation_ideas(setup):
     assert created
     assert created[0]["title"] == "Bajar curvas de luz de MAST"
     assert created[0]["method_type"] == "download_data"
+
+
+def test_kepler_mission_experiment_not_hijacked_by_third_law_runner(setup):
+    sf, pid, h = setup
+    fl = HypothesisFlow(sf)
+    # a Kepler-MISSION experiment (radius valley) must NOT trigger the third-law study
+    assert fl._real_runner("Kepler DR25 radius valley completeness KOI table") is None
+    assert fl._real_runner("Kepler vs TESS radius valley depth") is None
+    # a genuine third-law experiment still routes to the study
+    assert fl._real_runner("verificar la tercera ley de kepler") is not None

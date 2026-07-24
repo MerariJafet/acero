@@ -97,3 +97,18 @@ def test_gunzip_roundtrip(tmp_path):
     name = _gunzip(gz)
     assert name == "data.txt"
     assert (tmp_path / "data.txt").read_text() == "col_a,col_b\n1,2\n3,4\n"
+
+
+def test_nea_resolver_builds_tap_urls():
+    specs = dr.resolve_reference("Kepler DR25 KOI del NASA Exoplanet Archive, radius valley")
+    repos = {s["repository"] for s in specs}
+    assert repos == {"NASA-NEA"}
+    assert any("q1_q17_dr25_koi" in s["url"] for s in specs)
+    assert any("pscomppars" in s["url"] for s in specs)
+    assert all(s["url"].startswith("https://exoplanetarchive.ipac.caltech.edu/TAP")
+               and "format=csv" in s["url"] for s in specs)
+
+
+def test_nea_confirmed_planets_reference():
+    specs = dr.resolve_reference("usar confirmed planets del exoplanet archive")
+    assert specs and specs[0]["accession"] == "pscomppars"

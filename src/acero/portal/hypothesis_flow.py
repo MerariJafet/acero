@@ -521,14 +521,20 @@ class HypothesisFlow:
 
     # available real analyses (mapped by keywords in data_source/title)
     def _real_runner(self, text: str):
-        # match on the DATA SOURCE / method keywords, specific enough to avoid false
-        # hits (e.g. the hypothesis tag "H0" must NOT trigger the Hubble runner).
+        # Only route to a hardcoded ACERO study when the experiment is SPECIFICALLY
+        # about it — never on a bare mission/keyword mention. "Kepler DR25 radius
+        # valley" uses the Kepler MISSION but is NOT the third-law study, so it must
+        # go to the factory (real download + analysis), not this runner.
         t = text.lower()
-        if any(w in t for w in ("kepler", "exoplanet", "exoplaneta", "tercera ley de kepler",
-                                "third law")):
+        third_law = any(p in t for p in (
+            "tercera ley de kepler", "third law", "kepler's third", "ley de kepler",
+            "period-distance", "período-distancia", "periodo-distancia",
+            "semi-major axis vs period", "eje semimayor"))
+        if third_law:
             from ..studies.kepler_law import verify
             return verify
-        if "hubble" in t or "tensión de hubble" in t or "hubble tension" in t:
+        if "tensión de hubble" in t or "hubble tension" in t or "h0 tension" in t or \
+                "constante de hubble" in t or "hubble constant" in t:
             from ..studies.hubble_tension import analyze
             return analyze
         return None

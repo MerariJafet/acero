@@ -20,6 +20,46 @@ _UA = "ACERO-data-resolver/0.1 (mailto:merari.jafet@gmail.com)"
 # accession patterns → resolver
 _GEO_RE = re.compile(r"\bGSE(\d{3,})\b", re.I)
 
+# NASA Exoplanet Archive TAP: build a real CSV query URL from a table reference
+_NEA_BASE = "https://exoplanetarchive.ipac.caltech.edu/TAP/sync"
+_NEA_TABLES = {
+    # confirmed-planet composite parameters (radii, periods, stellar params)
+    "pscomppars": ("pl_name,hostname,pl_rade,pl_radeerr1,pl_radeerr2,pl_orbper,"
+                   "pl_bmasse,st_teff,st_rad,st_mass,sy_kepmag,sy_gaiamag,"
+                   "disc_facility,discoverymethod"),
+    # Kepler DR25 KOI table (the classic radius-valley sample) — verified columns
+    "q1_q17_dr25_koi": ("kepoi_name,koi_disposition,koi_prad,koi_prad_err1,"
+                        "koi_prad_err2,koi_period,koi_steff,koi_srad,koi_kepmag,"
+                        "koi_model_snr,koi_score"),
+}
+
+
+def _nea_url(table: str) -> str:
+    cols = _NEA_TABLES[table]
+    q = f"select {cols} from {table}".replace(" ", "+").replace(",", ",")
+    return f"{_NEA_BASE}?query={q}&format=csv"
+
+
+def _resolve_nea(text: str) -> list[dict[str, Any]]:
+    t = (text or "").lower()
+    if not any(k in t for k in ("exoplanet archive", "nasa exoplanet", "koi",
+                                "confirmed planet", "pscomppars", "kepler objects",
+                                "radius valley", "valle de radios", "dr25")):
+        return []
+    specs = []
+    if any(k in t for k in ("koi", "dr25", "kepler objects", "cumulative")):
+        specs.append({"url": _nea_url("q1_q17_dr25_koi"),
+                      "filename": "kepler_dr25_koi.csv",
+                      "accession": "q1_q17_dr25_koi", "repository": "NASA-NEA",
+                      "what": "Kepler DR25 KOI (radios, periodos, disposición, SNR)"})
+    # always offer the confirmed-planet composite table (radii + uncertainties)
+    specs.append({"url": _nea_url("pscomppars"),
+                  "filename": "nea_confirmed_planets.csv",
+                  "accession": "pscomppars", "repository": "NASA-NEA",
+                  "what": "NASA Exoplanet Archive planetas confirmados (radios±, "
+                          "periodos, params estelares)"})
+    return specs
+
 
 def _geo_stub(acc: str) -> str:
     acc = acc.upper()
@@ -88,6 +128,9 @@ def resolve_reference(text: str, *, verify: bool = True, want_data: bool = False
     processed DATA matrix from /suppl/ (the real betas/expression) — that's what a
     strong reanalysis needs; storage/RAM permitting (both configurable).
     """
+    nea = _resolve_nea(text)
+    if nea:
+        return nea
     m = _GEO_RE.search(text or "")
     if not m:
         return []
