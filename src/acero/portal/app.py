@@ -59,6 +59,7 @@ class ProjectBody(BaseModel):
     title: str
     domain: str = "general"
     program_id: str | None = None
+    topic: str = ""          # free-text research topic/question that seeds hypotheses
 
 
 class QuestionBody(BaseModel):
@@ -1000,7 +1001,8 @@ def build_portal_router() -> APIRouter:
         _require_csrf(sess, x_csrf_token)
         if not body.title.strip():
             raise HTTPException(422, "title is required")
-        return _ws().create_project(body.title, domain=body.domain, program_id=body.program_id)
+        return _ws().create_project(body.title, domain=body.domain,
+                                    program_id=body.program_id, topic=body.topic)
 
     @r.post("/api/workspace/question")
     def ws_question(body: QuestionBody, sess: Session = Depends(_require_session),

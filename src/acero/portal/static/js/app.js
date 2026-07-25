@@ -129,8 +129,12 @@ function newProjectFlow() {
   const panel = $("#float-panel");
   $("#float-title").textContent = "＋ Nueva investigación";
   $("#float-body").innerHTML =
-    `<div class="field"><label for="np-title">Título de la investigación</label>
-       <input id="np-title" placeholder="p.ej.: Origen de los rayos cósmicos ultraenergéticos"></div>
+    `<div class="field"><label for="np-title">Nombre corto de la investigación</label>
+       <input id="np-title" placeholder="p.ej.: Valle de radios de exoplanetas"></div>
+     <div class="field"><label for="np-topic">Tema o pregunta de investigación
+         <small>(el prompt libre — esto guía las hipótesis que se generen)</small></label>
+       <textarea id="np-topic" rows="3"
+         placeholder="p.ej.: ¿La posición del valle de radios depende de la metalicidad estelar de forma que distinga fotoevaporación de pérdida impulsada por el núcleo?"></textarea></div>
      <div class="field"><label for="np-domain">Dominio</label>
        <select id="np-domain">
          <option value="astronomy">astronomy</option><option value="physics">physics</option>
@@ -141,11 +145,13 @@ function newProjectFlow() {
      <span id="np-out" class="tag" aria-live="polite"></span>`;
   panel.hidden = false;
   $("#np-create").addEventListener("click", async () => {
-    const title = $("#np-title").value.trim();
-    if (!title) { $("#np-out").textContent = "Escribe un título."; return; }
+    const topic = $("#np-topic").value.trim();
+    let title = $("#np-title").value.trim();
+    if (!title) title = topic.slice(0, 60);   // derive a short name from the topic
+    if (!title) { $("#np-out").textContent = "Escribe un tema o un nombre."; return; }
     $("#np-out").textContent = "Creando…";
     const { ok, body } = await post("/portal/api/workspace/project",
-      { title, domain: $("#np-domain").value });
+      { title, domain: $("#np-domain").value, topic });
     if (!ok) { $("#np-out").textContent = "Error: " + esc(body.detail || ""); return; }
     panel.hidden = true;
     await loadProjects();

@@ -615,3 +615,21 @@ button.hyp-step:hover { border-color: var(--accent); color: var(--fg); }
   align-items: baseline; justify-content: space-between;
   border-bottom: 1px dashed #1c242f; padding-bottom: .28rem; }
 .rhi-list li .tag { flex-shrink: 0; white-space: nowrap; }
+
+/* ---- Cerebro (Obsidian) — almacenamiento e índice primordial ------------- */
+.brain-strip { display: flex; align-items: center; gap: .7rem; margin: 0 0 .8rem;
+  padding: .55rem .8rem; border-radius: 12px;
+  background: linear-gradient(180deg, #201433, #14101f); border: 1px solid #3a2a5a; }
+.brain-strip .brain-ic { font-size: 1.5rem; }
+.brain-strip .brain-txt { display: flex; flex-direction: column; flex: 1; }
+.brain-strip .brain-txt b { color: #cdbcff; }
+.brain-strip .brain-txt small { color: var(--muted); font-size: .72rem; line-height: 1.2; }
+.brain-strip #brain-sync { border-color: #6f42c1; color: #cdbcff; }
+.brain-strip .brain-status { font-size: .78rem; color: var(--accent); white-space: nowrap; }
+
+/* nuevo-proyecto: textarea de tema */
+.float-panel textarea, #float-body textarea {
+  width: 100%; background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px; padding: .5rem .6rem;
+  font: inherit; font-size: .9rem; resize: vertical; }
+#float-body .field small { color: var(--muted); font-weight: 400; font-size: .72rem; }

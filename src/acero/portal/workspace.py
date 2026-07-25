@@ -41,14 +41,20 @@ class WorkspaceService:
         return {"id": p.id, "mission": p.mission, "status": p.status.value}
 
     def create_project(self, title: str, *, domain: str = "general",
-                       program_id: str | None = None) -> dict[str, Any]:
+                       program_id: str | None = None, topic: str = "") -> dict[str, Any]:
         proj = self.ledger.create_project(title, domain=domain)
+        if topic.strip():
+            # the research topic/question — the free-text prompt that seeds hypotheses
+            self.store.put(proj.id, "brief", new_id("brief"),
+                           {"topic": topic.strip()}, status="ISSUED", actor="human",
+                           summary=f"tema de investigación: {topic.strip()[:80]}")
         if program_id:
             self.store.put(proj.id, "program_link", new_id("link"),
                            {"program_id": program_id, "project_id": proj.id},
                            status="LINKED", actor="human",
                            summary=f"link project {proj.id} to program {program_id}")
-        return {"id": proj.id, "title": proj.title, "domain": proj.domain}
+        return {"id": proj.id, "title": proj.title, "domain": proj.domain,
+                "topic": topic.strip()}
 
     def add_question(self, program_id: str, text: str) -> dict[str, Any]:
         p = self.programs.add_question(program_id, text, QuestionRole.CENTRAL)

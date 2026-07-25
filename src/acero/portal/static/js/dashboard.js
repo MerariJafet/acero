@@ -93,8 +93,6 @@ const LAUNCH = [
     desc: "escanea papers nuevos y marca evidencia reciente" },
   { ep: "/deep-investigation", icon: "🌌", label: "Investigación a fondo",
     desc: "mapa profundo del conocimiento del tema" },
-  { ep: "/obsidian/sync", icon: "🧠", label: "Sincronizar a Obsidian",
-    desc: "exporta el conocimiento al vault (hipótesis, literatura, dossiers)" },
 ];
 
 async function pollProjectRun(pid, runId, statusEl) {
@@ -208,6 +206,15 @@ export async function renderProjectDash(view, pid, cb) {
        <h1>${esc(ph.title)}</h1>
        <span class="tag">${pill(ph.domain)} ${pill(ph.state, "ok")} · creado ${esc(today)}</span>
      </div>
+
+     <section class="brain-strip" aria-label="Cerebro de almacenamiento">
+       <span class="brain-ic">🧠</span>
+       <div class="brain-txt"><b>Cerebro — Obsidian</b>
+         <small>indexa TODO automáticamente (hipótesis, literatura, experimentos, dossiers)
+         tras cada acción; es el almacenamiento e índice del programa.</small></div>
+       <button class="act ghost" id="brain-sync" title="Forzar sincronización ahora">↻ Sincronizar ahora</button>
+       <span class="brain-status" id="brain-status" aria-live="polite"></span>
+     </section>
 
      <section class="process-map" aria-label="Mapa del proceso">
        <div class="pmap">${stepper}</div>
@@ -323,6 +330,19 @@ export async function renderProjectDash(view, pid, cb) {
       const s = b.closest(".phase-body").querySelector(".phase-answer");
       runFlow(b, b.dataset.run, s || statusEl);
     }));
+  // 🧠 Cerebro (Obsidian): sincroniza automáticamente; este botón fuerza un sync ahora
+  const brainBtn = view.querySelector("#brain-sync");
+  const brainStatus = view.querySelector("#brain-status");
+  if (brainBtn) brainBtn.addEventListener("click", async () => {
+    brainBtn.disabled = true; brainStatus.textContent = "🧠 indexando al vault…";
+    const { ok, body } = await post(
+      `/portal/api/projects/${encodeURIComponent(pid)}/obsidian/sync`, {});
+    brainBtn.disabled = false;
+    brainStatus.textContent = ok
+      ? `✓ sincronizado${body && body.written ? " · " + body.written + " notas" : ""}`
+      : "no se pudo sincronizar";
+  });
+
   // stepper → open the phase dashboard
   view.querySelectorAll(".pstep").forEach((b) =>
     b.addEventListener("click", () => cb.openPhase(pid, b.dataset.pstep)));

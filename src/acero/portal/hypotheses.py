@@ -77,6 +77,13 @@ class HypothesisService:
         p = self.ledger.get_project(project_id)
         if p is None:
             return {"ok": False, "error": "project not found"}
+        # the free-text topic/question the researcher gave at project creation
+        topic = focus.strip()
+        if not topic:
+            briefs = self.store.list_objects(project_id, kind="brief")
+            topic = str((briefs[0].get("topic") if briefs else "") or "")
+        topic_ctx = (f"\n\nTEMA/PREGUNTA del investigador (guía las hipótesis): "
+                     f"«{topic[:400]}».\n") if topic else ""
         hyps: list[dict[str, Any]] | None = None
         provider = "deterministic"
         if use_ai:
@@ -99,6 +106,7 @@ class HypothesisService:
                         "pero el análisis concreto no se ha hecho.\n"
                         "  untested_prediction: una predicción específica de un modelo "
                         "que NADIE ha verificado contra datos.\n\n"
+                        + topic_ctx +
                         f"Investigación «{p.title}» (dominio {p.domain}). Propón {n} "
                         "hipótesis COMPETIDORAS, verificables con datos PÚBLICOS reales, "
                         "y SESGADAS HACIA LA FRONTERA: evita lo que la literatura ya "
