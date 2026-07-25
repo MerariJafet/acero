@@ -1,0 +1,8 @@
+etapa,n,retencion_vs_previo
+total KOIs (q1_q17_dr25_koi),8054,
+CONFIRMED+CANDIDATE (excluye FALSE POSITIVE),4089,50.8%
++ metalicidad koi_smet no nula,4083,99.9%
++ radio koi_prad no nulo,4083,100.0%
++ periodo koi_period no nulo,4083,100.0%
+planetas pequeños (radio 1-4 Re): región del valle,3053,74.8%
++ periodo < 100 d (valle bien definido),2841,93.1%
