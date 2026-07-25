@@ -13,6 +13,7 @@ never stampede the machine with Codex processes.
 
 from __future__ import annotations
 
+import os
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -21,8 +22,19 @@ from typing import Any
 from ..core.clock import now_iso
 from ..core.ids import new_id
 
+
+def _max_subagents() -> int:
+    """Concurrent Codex subagents (each an independent ephemeral process).
+    Override with ACERO_MAX_SUBAGENTS. Default 5 (was 3); clamped to [1, 12]."""
+    try:
+        v = int(os.environ.get("ACERO_MAX_SUBAGENTS", "5"))
+    except ValueError:
+        v = 5
+    return max(1, min(v, 12))
+
+
 # Cap of concurrent Codex subagents (each is a full local model process).
-MAX_SUBAGENTS = 3
+MAX_SUBAGENTS = _max_subagents()
 
 _LOCK = threading.Lock()
 _RUNS: dict[str, dict[str, Any]] = {}          # in-memory registry (this process)

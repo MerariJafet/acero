@@ -96,10 +96,11 @@ class Lifecycle:
                                                         "at": now_iso()}})
                     kept_orphans.append(x.get("title", "")[:60])
                     continue
-                self.store.delete(x["id"])
+                self.store.delete(x["id"], force=True)
                 n += 1
             deleted[kind] = n
-        self.store.delete(hyp_id)
+        # archived to vault above → safe to remove even if REJECTED
+        self.store.delete(hyp_id, force=True)
         self.ledger.record_event(
             project_id, ProvenanceAction.UPDATE, "human",
             f"hipótesis {h.get('tag')} BORRADA (archivada en vault)"[:150],

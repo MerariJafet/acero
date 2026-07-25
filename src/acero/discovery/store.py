@@ -103,12 +103,18 @@ class DiscoveryStore:
             return payload
 
     # --- guardrail: discovery negatives and rejections are never deleted ---
-    def delete(self, obj_id: str) -> None:
+    # `force=True` bypasses it for the human's explicit delete, which archives a
+    # memory note to the vault FIRST (see Lifecycle.delete_hypothesis) — so the
+    # failure is preserved, just not left cluttering the live board.
+    def delete(self, obj_id: str, *, force: bool = False) -> None:
         with self._sf() as s:
             row = s.get(DiscoveryRow, obj_id)
             if row is None:
                 raise IntegrityError(f"Discovery object {obj_id} not found")
-            if row.kind == "negative" or (row.payload or {}).get("status") in {"REJECTED"}:
+            if not force and (
+                row.kind == "negative"
+                or (row.payload or {}).get("status") in {"REJECTED"}
+            ):
                 raise IntegrityError(
                     "Negative records and rejected candidates cannot be deleted "
                     "(preserve failures). Archive via status instead."

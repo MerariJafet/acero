@@ -272,6 +272,13 @@ ul.ideas > li { border-left: 2px solid #2b3444; padding: .1rem 0 .1rem .6rem; fo
   margin: .35rem 0; font-size: .85rem; }
 .hyp-links a { color: #4aa3ff; }
 .act.danger { border-color: #5c2323; color: #ff7b72; margin-left: auto; }
+.rejected-drawer { margin: 1rem 0 .4rem; border-top: 1px dashed #333; padding-top: .6rem; }
+.rejected-drawer > summary { cursor: pointer; color: #9aa0a6; font-size: .9rem;
+  padding: .3rem 0; list-style: revert; }
+.rejected-drawer[open] > summary { color: #c9d1d9; margin-bottom: .5rem; }
+.rej-card { opacity: .72; border-style: dashed; }
+.rej-card:hover { opacity: 1; }
+.rej-card .act.danger { margin-left: 0; }
 .exp-line.orphan { border-color: #4a3a1a; }
 #missions-strip { margin: .5rem 0 .8rem; display: grid; gap: .35rem; }
 .mission-line { font-size: .84rem; background: #101826; border: 1px solid #1d2a3a;

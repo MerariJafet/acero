@@ -88,12 +88,27 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
         return None
     store = DiscoveryStore(sf, ledger)
 
-    hyps = store.list_objects(project_id, kind="candidate")
-    lit = store.list_objects(project_id, kind="literature")
-    exps = store.list_objects(project_id, kind="experiment")
+    all_hyps = store.list_objects(project_id, kind="candidate")
+    # Rejected hypotheses (and everything derived from them) leave the ACTIVE
+    # dashboard: rejecting must visibly clear the board. They survive in the DB
+    # (and vault) so they can be restored — the frontend shows a collapsed list.
+    rejected = [h for h in all_hyps if (h.get("status") or "").upper() == "REJECTED"]
+    hyps = [h for h in all_hyps if (h.get("status") or "").upper() != "REJECTED"]
+    active_ids = {h.get("id", "") for h in hyps}
+
+    def _linked_active(x: dict[str, Any]) -> bool:
+        """Keep items tied to a live hypothesis, plus orphans (no hyp_id)."""
+        hid = x.get("hyp_id", "")
+        return (not hid) or (hid in active_ids)
+
+    lit = [li for li in store.list_objects(project_id, kind="literature")
+           if _linked_active(li)]
+    exps = [e for e in store.list_objects(project_id, kind="experiment")
+            if _linked_active(e)]
     real_exps = [e for e in exps if e.get("synthetic") is False]
     negs = store.list_objects(project_id, kind="negative")
-    dossiers = store.list_objects(project_id, kind="dossier")
+    dossiers = [d for d in store.list_objects(project_id, kind="dossier")
+                if _linked_active(d)]
     wm = WorldModel(sf, ledger, project_id)
     nodes = wm.page_nodes(offset=0, limit=25)
 
@@ -228,6 +243,10 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
                        "n_real_experiments": real_exps_by_hyp.get(h.get("id", ""), 0),
                        "has_dossier": h.get("id", "") in dossier_hyps,
                        "flag": "plantilla" if h.get("synthetic") else ""} for h in hyps],
+            "rejected": [{"id": h.get("id", ""), "tag": h.get("tag", "H?"),
+                          "title": h.get("title") or h.get("description", ""),
+                          "trigger_question": h.get("trigger_question", "")}
+                         for h in rejected],
         },
         "literatura": {
             **_status(len(lit), "papers reales con DOI + chequeo de retracción",

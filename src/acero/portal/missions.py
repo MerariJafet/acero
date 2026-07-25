@@ -34,7 +34,20 @@ STEPS = ["investigate", "experiments_propose", "experiments_run", "synthesize",
 # relative weights → a smooth 0-100% (experiments_run is by far the longest)
 STEP_WEIGHT = {"investigate": 12, "experiments_propose": 12,
                "experiments_run": 46, "synthesize": 10, "rigor_loop": 20}
-MAX_MISSIONS = 2                     # concurrent missions (each spawns Codex work)
+def _max_missions() -> int:
+    """Concurrent missions. Each spawns an INDEPENDENT ephemeral `codex exec`
+    (no shared session), so real parallelism is bounded by CPU/RAM and the
+    user's own Codex quota — not by the engine. Override with ACERO_MAX_MISSIONS.
+    Default 4 (was 2); clamped to [1, 12] to stay friendly to API rate limits.
+    """
+    try:
+        v = int(os.environ.get("ACERO_MAX_MISSIONS", "4"))
+    except ValueError:
+        v = 4
+    return max(1, min(v, 12))
+
+
+MAX_MISSIONS = _max_missions()       # concurrent missions (each spawns Codex work)
 STALE_HEARTBEAT_SEC = 180.0
 
 _POOL = ThreadPoolExecutor(max_workers=MAX_MISSIONS, thread_name_prefix="mission")

@@ -493,6 +493,22 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
     }).join("");
   }
 
+  // Rejected hypotheses live in a collapsed drawer — off the active board but
+  // recoverable (restore → PROPOSED) or purgeable (cascade delete + vault memory).
+  const rejected = (phaseKey === "hipotesis" && Array.isArray(f.rejected)) ? f.rejected : [];
+  const rejectedBlock = rejected.length ? `
+    <details class="rejected-drawer">
+      <summary>🗑 Rechazadas (${rejected.length}) — fuera del tablero, recuperables</summary>
+      ${rejected.map((h) => `<div class="card rej-card">
+        <div><b>${esc(h.tag)}: ${esc(h.title)}</b></div>
+        ${h.trigger_question ? `<div class="tag">${esc(h.trigger_question)}</div>` : ""}
+        <div class="hyp-links">
+          <button class="act ghost" data-hrestore="${esc(h.id)}" data-tag="${esc(h.tag)}">↩ Restaurar</button>
+          <button class="act ghost danger" data-hpurge="${esc(h.id)}" data-tag="${esc(h.tag)}">🗑 Borrar definitivamente</button>
+        </div>
+      </div>`).join("")}
+    </details>` : "";
+
   // KPI mini-strip contextual a la fase
   const k = ph.kpis || {};
   const kpiByPhase = {
@@ -535,6 +551,7 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
        <p class="tag">El copiloto CUESTIONA (no repite): propone hipótesis ya probadas, teorizadas, nuevas y preguntas abiertas, cada una con su pregunta detonante, argumento, duda y cómo probarla.</p>` : ""}
      <h3 style="margin:.4rem 0 .6rem">Detalle (${(f.items || []).length})</h3>
      ${items || "<p class='muted'>Sin items en esta fase todavía.</p>"}
+     ${rejectedBlock}
      <p class="tag" style="margin-top:.6rem">${esc(ph.honesty)}</p>`;
   view.querySelector("#ph-back").addEventListener("click", () => cb.openProject(pid));
 
@@ -621,6 +638,24 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
         alert(`Borrada. Archivo en vault: ${body.vault_note || "—"}. Experimentos guardados que sobreviven: ${(body.kept_orphans || []).length}`);
         cb.openPhase(pid, "hipotesis");
       } else alert("Error: " + ((body && body.error) || ""));
+    }));
+
+  // restore a rejected hypothesis back onto the active board
+  view.querySelectorAll("[data-hrestore]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const { ok } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.hrestore}/status`,
+        { status: "PROPOSED", reason: "restaurada por el humano" });
+      if (ok) cb.openPhase(pid, "hipotesis");
+    }));
+  // permanently delete a rejected hypothesis (cascade + vault archive)
+  view.querySelectorAll("[data-hpurge]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm(`¿Borrar DEFINITIVAMENTE ${b.dataset.tag} y todo lo suyo? El vault conserva la memoria.`)) return;
+      const { ok, body } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.hpurge}/delete`, {});
+      if (ok && body.ok) cb.openPhase(pid, "hipotesis");
+      else alert("Error: " + ((body && body.error) || ""));
     }));
 
   const novAll = view.querySelector("#nov-all");
