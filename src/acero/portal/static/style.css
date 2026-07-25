@@ -488,3 +488,62 @@ caption { text-align: left; color: var(--muted); padding-bottom: .4rem; }
 .hyp-card.settled { opacity: .72; border-left: 3px solid var(--bad); }
 .nov-detail { margin: .3rem 0 .1rem; }
 .act.small { font-size: .78rem; padding: .2rem .55rem; }
+
+/* ---- process map / stepper (dónde vas en el proceso) -------------------- */
+.process-map { margin: .6rem 0 1rem; }
+.stepper { display: flex; align-items: stretch; gap: .25rem; flex-wrap: wrap; }
+.step {
+  display: flex; flex-direction: column; align-items: center; gap: .15rem;
+  min-width: 96px; padding: .5rem .55rem; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--muted); position: relative; transition: border-color .15s, color .15s;
+}
+.step:hover { border-color: var(--accent); color: var(--fg); }
+.step .step-ico { font-size: 1.15rem; }
+.step .step-name { font-size: .72rem; text-align: center; line-height: 1.1; }
+.step .step-count { font-size: .78rem; font-weight: 700; }
+.step .step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.step.done { color: var(--fg); border-color: rgba(46,160,67,.5); }
+.step.done .step-dot { background: var(--ok); }
+.step.active { color: var(--fg); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.step.active .step-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.step.pending { opacity: .7; }
+.step-arrow { align-self: center; color: #37414f; font-size: 1rem; padding: 0 .1rem; }
+.step-arrow.on { color: var(--ok); }
+.process-guide { margin: .5rem 0 0; font-size: .82rem; color: var(--muted); }
+.process-guide b { color: var(--fg); }
+
+/* ---- launch bar (todos los flujos arrancan aquí) ----------------------- */
+.launch-bar {
+  background: linear-gradient(180deg, #172232, var(--panel));
+  border: 1px solid #29405e; border-radius: 12px; padding: .7rem .8rem; margin: 0 0 1rem;
+}
+.launch-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .55rem; }
+.launch-head b { color: var(--fg); }
+.launch-status { margin-left: auto; font-size: .8rem; color: var(--accent); }
+.launch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .5rem; }
+.launch-btn {
+  display: flex; align-items: center; gap: .55rem; text-align: left; cursor: pointer;
+  background: #121926; border: 1px solid var(--border); border-radius: 10px;
+  color: var(--fg); padding: .55rem .65rem; transition: border-color .15s, transform .05s;
+}
+.launch-btn:hover { border-color: var(--accent); }
+.launch-btn:active { transform: translateY(1px); }
+.launch-btn.primary { border-color: var(--accent); background: #14263c; }
+.launch-btn.running { opacity: .6; cursor: wait; }
+.launch-btn .lb-ico { font-size: 1.3rem; }
+.launch-btn .lb-txt { display: flex; flex-direction: column; }
+.launch-btn .lb-txt b { font-size: .85rem; }
+.launch-btn .lb-txt small { color: var(--muted); font-size: .7rem; line-height: 1.15; }
+
+/* ---- connected phase cards --------------------------------------------- */
+.phase-row.is-current { border-left: 3px solid var(--accent); }
+.phase-head .ph-badge { margin-left: .1rem; }
+.flow-note {
+  display: block; font-size: .74rem; color: var(--muted);
+  padding: .1rem 0 .5rem; border-bottom: 1px dashed var(--border); margin-bottom: .5rem;
+}
+.flow-note b { color: var(--fg); }
+.phase-cta { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+.act.phase-primary { background: #14263c; border-color: var(--accent); }
+.act.phase-primary.running { opacity: .6; cursor: wait; }

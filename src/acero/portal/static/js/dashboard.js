@@ -69,6 +69,46 @@ function barRows(bars) {
        <span class="bar-right">${esc(b.right || b.value)}</span></div>`).join("");
 }
 
+// per-phase: what launches its work, and how the phases feed each other.
+const PHASE_RUN = {
+  hipotesis: { ep: "/hypotheses/generate", label: "🧠 Generar hipótesis" },
+  literatura: { ep: "/investigate-all", label: "📚 Investigar literatura" },
+  experimentos: { ep: "/experiments/run-all", label: "⚗️ Proponer + correr experimentos" },
+};
+// the essential "start the research" actions — every real flow launches from here.
+const LAUNCH = [
+  { ep: "/missions/start-all", icon: "🚀", label: "Misión completa",
+    desc: "corre TODO el ciclo por cada hipótesis aprobada (autónomo)", primary: true },
+  { ep: "/hypotheses/generate", icon: "🧠", label: "Generar hipótesis",
+    desc: "propone hipótesis nuevas orientadas a descubrimiento" },
+  { ep: "/investigate-all", icon: "📚", label: "Investigar literatura",
+    desc: "busca papers reales (DOI + retracción) para cada hipótesis" },
+  { ep: "/experiments/run-all", icon: "⚗️", label: "Correr experimentos",
+    desc: "propone y ejecuta experimentos con datos reales" },
+  { ep: "/novelty/assess-all", icon: "🎯", label: "Evaluar novedad",
+    desc: "clasifica cada hipótesis (asentada→frontera)" },
+  { ep: "/anomalies/harvest", icon: "🔥", label: "Cazar anomalías",
+    desc: "convierte discrepancias medidas en hipótesis nuevas" },
+  { ep: "/watch/scan", icon: "🛰️", label: "Vigilar literatura nueva",
+    desc: "escanea papers nuevos y marca evidencia reciente" },
+  { ep: "/deep-investigation", icon: "🌌", label: "Investigación a fondo",
+    desc: "mapa profundo del conocimiento del tema" },
+  { ep: "/obsidian/sync", icon: "🧠", label: "Sincronizar a Obsidian",
+    desc: "exporta el conocimiento al vault (hipótesis, literatura, dossiers)" },
+];
+
+async function pollProjectRun(pid, runId, statusEl) {
+  for (let i = 0; i < 240; i++) {
+    await new Promise((r) => setTimeout(r, 2500));
+    const { ok, body } = await get(`/portal/api/runs/${encodeURIComponent(runId)}`);
+    if (!ok || !body) continue;
+    const items = body.items || [];
+    const done = items.filter((x) => x.status === "DONE" || x.status === "ERROR").length;
+    if (statusEl) statusEl.textContent = `subagentes ${done}/${items.length}…`;
+    if (body.status !== "RUNNING") return;
+  }
+}
+
 export async function renderProjectDash(view, pid, cb) {
   view.innerHTML = "<p class='loading'>Cargando investigación…</p>";
   const [{ ok, body: ph }, { body: st }] = await Promise.all([
@@ -77,25 +117,71 @@ export async function renderProjectDash(view, pid, cb) {
   if (!ok) { view.innerHTML = "<p class='err'>No se pudo cargar la investigación.</p>"; return; }
   const k = ph.kpis || {};
   const today = (ph.created_at || "").slice(0, 10);
+  const phases = ph.phases || [];
 
-  // --- full-width horizontal phase sections (read top → bottom) ------------
-  const phaseRows = ph.phases.map((f) => {
-    const items = (f.items || []).slice(0, 4).map((i) =>
-      `<div class="kv"><span>${esc((i.title || "").slice(0, 70))}</span>` +
-      `<b class="tag">${esc(i.meta || "")}${i.flag ? " · " + esc(i.flag) : ""}</b></div>`).join("");
-    return `<section class="phase-row" data-phase="${esc(f.key)}" aria-label="${esc(f.title)}">
+  // --- process stepper: WHERE ARE WE + how phases feed each other -----------
+  let currentIdx = phases.findIndex((f) => f.state !== "done");
+  if (currentIdx < 0) currentIdx = phases.length;   // all done
+  const stepState = (i) => (i < currentIdx ? "done" : i === currentIdx ? "active" : "pending");
+  const stepper = phases.map((f, i) => {
+    const cls = stepState(i);
+    const arrow = i < phases.length - 1
+      ? `<span class="step-arrow ${i < currentIdx ? "on" : ""}" aria-hidden="true">→</span>` : "";
+    return `<button class="step ${cls}" data-step="${esc(f.key)}"
+        aria-label="Fase ${esc(f.title)} (${cls})">
+        <span class="step-ico">${esc(f.icon)}</span>
+        <span class="step-name">${esc(f.title.replace("Investigación de ", ""))}</span>
+        <span class="step-count">${f.count}</span>
+        <span class="step-dot" aria-hidden="true"></span>
+      </button>${arrow}`;
+  }).join("");
+  const cur = phases[currentIdx];
+  const guide = cur
+    ? `Vas en <b>${esc(cur.icon)} ${esc(cur.title)}</b>. Siguiente paso natural: correr su flujo o revisar sus tarjetas.`
+    : "Flujo completo: las 6 fases tienen trabajo. Revisa los dossiers o lanza otra misión.";
+
+  // --- elemental launch bar: EVERY flow starts here -------------------------
+  const launchBtns = LAUNCH.map((a) =>
+    `<button class="launch-btn${a.primary ? " primary" : ""}" data-ep="${esc(a.ep)}"
+        data-label="${esc(a.label)}" title="${esc(a.desc)}">
+       <span class="lb-ico">${esc(a.icon)}</span>
+       <span class="lb-txt"><b>${esc(a.label)}</b><small>${esc(a.desc)}</small></span>
+     </button>`).join("");
+
+  // --- connected phase cards (feeds-from / feeds-into + primary action) ------
+  const phaseRows = phases.map((f, i) => {
+    const prev = phases[i - 1], next = phases[i + 1];
+    const flow = `<span class="flow-note">
+        ${prev ? `⬅ se nutre de <b>${esc(prev.icon)} ${esc(prev.title.replace("Investigación de ", ""))}</b>` : "🁢 inicio del flujo"}
+        &nbsp;·&nbsp;
+        ${next ? `alimenta a <b>${esc(next.icon)} ${esc(next.title.replace("Investigación de ", ""))}</b> ➡` : "🏁 fin del flujo"}
+      </span>`;
+    const st2 = f.state === "done" ? ["ok", "con trabajo"] : (i === currentIdx ? ["warn", "aquí vas"] : ["", "pendiente"]);
+    const items = (f.items || []).slice(0, 4).map((it) =>
+      `<div class="kv"><span>${esc((it.title || "").slice(0, 70))}</span>` +
+      `<b class="tag">${esc(it.meta || "")}${it.flag ? " · " + esc(it.flag) : ""}</b></div>`).join("");
+    const run = PHASE_RUN[f.key];
+    const primary = run
+      ? `<button class="act phase-primary" data-run="${esc(run.ep)}" data-label="${esc(run.label)}">${esc(run.label)}</button>`
+      : "";
+    return `<section class="phase-row ${i === currentIdx ? "is-current" : ""}" data-phase="${esc(f.key)}" aria-label="${esc(f.title)}">
       <button class="phase-head" aria-expanded="true" data-toggle="${esc(f.key)}">
         <span class="phase-state ${esc(f.state)}" aria-hidden="true"></span>
         <span class="ph-title">${esc(f.icon)} ${esc(f.title)}</span>
+        <span class="ph-badge">${pill(st2[1], st2[0])}</span>
         <span class="ph-note">${esc(f.note)}</span>
         <span class="ph-count">${f.count}</span>
         <span class="chev">▾</span>
       </button>
       <div class="phase-body" data-body="${esc(f.key)}">
+        ${flow}
         <div class="phase-cols">
           <div class="phase-viz">${barRows(f.bars)}</div>
-          <div class="phase-items">${items || "<p class='muted tag'>sin items</p>"}
-            <button class="phase-open" data-open="${esc(f.key)}">Ver dashboard completo →</button>
+          <div class="phase-items">${items || "<p class='muted tag'>sin items aún — lanza su flujo arriba</p>"}
+            <div class="phase-cta">
+              ${primary}
+              <button class="phase-open" data-open="${esc(f.key)}">Abrir dashboard de esta fase →</button>
+            </div>
           </div>
         </div>
         <div class="phase-comment">
@@ -108,22 +194,24 @@ export async function renderProjectDash(view, pid, cb) {
     </section>`;
   }).join("");
 
-  // --- acciones recomendadas (from real next steps) -------------------------
-  const steps = ((st || {}).next_steps || []).slice(0, 3);
-  const prio = ["high", "high", "medium"];
-  const actions = steps.map((s, i) =>
-    `<div class="action-card">
-       <div><span class="prio ${prio[i] || "medium"}">prioridad ${prio[i] === "high" ? "HIGH" : "MEDIUM"}</span></div>
-       <p>${esc(s.text)}</p>
-       <button class="act ghost" data-goto-tabx="${esc(s.tab || "")}" data-pidx="${esc(pid)}">Ir →</button>
-     </div>`).join("");
-
   view.innerHTML =
     `<p class="eyebrow">Pulso de la investigación</p>
      <div class="pulse-head">
        <h1>${esc(ph.title)}</h1>
        <span class="tag">${pill(ph.domain)} ${pill(ph.state, "ok")} · creado ${esc(today)}</span>
      </div>
+
+     <section class="process-map" aria-label="Mapa del proceso">
+       <div class="stepper">${stepper}</div>
+       <p class="process-guide">${guide}</p>
+     </section>
+
+     <section class="launch-bar" aria-label="Arrancar la investigación">
+       <div class="launch-head"><b>▶ Arranca la investigación</b>
+         <span class="tag">todo el ciclo se lanza desde aquí</span>
+         <span class="launch-status" id="launch-status" aria-live="polite"></span></div>
+       <div class="launch-grid">${launchBtns}</div>
+     </section>
 
      <div class="kpi-strip">
        <div class="kpi">${ring(ph.progress_pct, "#4aa3ff")}
@@ -143,29 +231,38 @@ export async function renderProjectDash(view, pid, cb) {
 
      <div class="narrative-row">
        <p class="narrative">${esc(ph.narrative || "")}</p>
-       <div class="narrative-actions">
-         <button class="act" id="deep-run">🌌 Investigación a fondo</button>
-         <button class="act ghost" id="dash-refresh">↻ Actualizar</button>
-       </div>
+       <button class="act ghost" id="dash-refresh">↻ Actualizar</button>
      </div>
 
      ${phaseRows}
-
-     <section class="panel actions-panel" aria-label="Acciones recomendadas">
-       <p class="eyebrow">★ Acciones recomendadas</p>
-       <div class="actions-grid">${actions || "<p class='muted'>sin recomendaciones</p>"}</div>
-     </section>
      <p class="tag">${esc(ph.honesty)}</p>`;
 
-  // acciones "Ir →": navegan a la parte correspondiente
-  view.querySelectorAll("[data-goto-tabx]").forEach((b) =>
+  // --- launch handlers: every flow runs from the dashboard ------------------
+  const statusEl = view.querySelector("#launch-status");
+  async function runFlow(btn, ep, sEl) {
+    const orig = btn.innerHTML;
+    btn.disabled = true; btn.classList.add("running");
+    if (sEl) sEl.textContent = `⏳ ${btn.dataset.label || "corriendo"}…`;
+    const { ok: rok, body } = await post(
+      `/portal/api/projects/${encodeURIComponent(pid)}${ep}`, {});
+    const run = body && (body.run || (body.id && body.status ? body : null));
+    if (rok && run && run.id) await pollProjectRun(pid, run.id, sEl);
+    btn.disabled = false; btn.classList.remove("running"); btn.innerHTML = orig;
+    if (sEl) sEl.textContent = rok
+      ? "✓ listo — actualizando…"
+      : "error: " + ((body && (body.detail || body.error)) || "flujo");
+    cb.openProject(pid);
+  }
+  view.querySelectorAll(".launch-btn").forEach((b) =>
+    b.addEventListener("click", () => runFlow(b, b.dataset.ep, statusEl)));
+  view.querySelectorAll(".phase-primary").forEach((b) =>
     b.addEventListener("click", () => {
-      const t = b.dataset.gotoTabx;
-      if (t === "lit") cb.openPhase(pid, "literatura");
-      else if (t === "learn") cb.openPhase(pid, "conclusiones");
-      else if (t === "chat") document.querySelector("#question").focus();
-      else cb.openPhase(pid, "experimentos");
+      const s = b.closest(".phase-body").querySelector(".phase-answer");
+      runFlow(b, b.dataset.run, s || statusEl);
     }));
+  // stepper → open the phase dashboard
+  view.querySelectorAll(".step").forEach((b) =>
+    b.addEventListener("click", () => cb.openPhase(pid, b.dataset.step)));
 
   // minimize/expand
   view.querySelectorAll("[data-toggle]").forEach((b) =>
@@ -199,15 +296,6 @@ export async function renderProjectDash(view, pid, cb) {
       input.value = "";
     }));
   view.querySelector("#dash-refresh").addEventListener("click", () => cb.openProject(pid));
-  view.querySelector("#deep-run").addEventListener("click", async () => {
-    const btn = view.querySelector("#deep-run");
-    btn.disabled = true; btn.textContent = "Investigando (1–3 min)…";
-    const { ok: dok, body: b } = await post(
-      `/portal/api/projects/${encodeURIComponent(pid)}/deep-investigation`, {});
-    btn.disabled = false; btn.textContent = "🌌 Investigación a fondo";
-    if (dok && b.ok) cb.openProject(pid);
-    else alert("Error en la investigación a fondo: " + ((b && (b.detail || b.error)) || ""));
-  });
 }
 
 const KIND_STYLE = {
