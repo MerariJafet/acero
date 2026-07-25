@@ -8,6 +8,7 @@ Read-only and defensive: never mutates the project, never raises to the caller.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from ..discovery.store import DiscoveryStore
@@ -21,8 +22,56 @@ from ..epistemic.pipeline import run_pipeline
 from ..ledger.db import default_session_factory
 from ..ledger.service import ResearchLedger
 
+# An extractor turns ONE hypothesis dict into a dict of ClaimRecord semantic fields
+# (exposure_or_input, outcome_or_prediction, mechanism, assumptions, boundary_conditions,
+# population_or_domain). A real one calls Codex per hypothesis; the default is the
+# deterministic heuristic below. Injectable so the portal can wire Codex and tests stay
+# offline. Returns (fields, provenance) where provenance ∈ {"llm","heuristic","fallback"}.
+Extractor = Callable[[dict[str, Any]], "tuple[dict[str, Any], str]"]
 
-def _claim_from_hypothesis(h: dict[str, Any], exps: list[dict[str, Any]]) -> ClaimRecord:
+_CONF_BY_PROVENANCE = {"llm": 1.0, "heuristic": 0.7, "fallback": 0.5}
+
+
+def _sentences(text: str, n: int = 1) -> str:
+    parts = [s.strip() for s in str(text).replace(";", ".").split(".") if s.strip()]
+    return ". ".join(parts[:n])
+
+
+def heuristic_extract(h: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    """Deterministic per-hypothesis field extraction from its OWN structured content.
+
+    Each hypothesis carries a different argument/doubt/competes_with, so the assumptions
+    and mechanism below differ per claim — which makes the downstream vulnerabilities
+    claim-specific instead of an identical template. No LLM, no network.
+    """
+    fields: dict[str, Any] = {}
+    argument = str(h.get("argument") or "")
+    doubt = str(h.get("doubt") or "")
+    tq = str(h.get("trigger_question") or "")
+    test_idea = str(h.get("test_idea") or "")
+    competes = str(h.get("competes_with") or "")
+    if argument:
+        fields["mechanism"] = _sentences(argument, 2)[:220]
+    assumptions: list[str] = []
+    if doubt:
+        assumptions.append(f"no se cumple lo que la falsaría: {_sentences(doubt, 1)[:150]}")
+    if competes:
+        assumptions.append(f"las rivales quedan descartadas: {_sentences(competes, 1)[:120]}")
+    if tq:
+        assumptions.append(f"la pregunta detonante está bien planteada: {_sentences(tq, 1)[:120]}")
+    if assumptions:
+        fields["assumptions"] = tuple(assumptions[:3])
+    # a test idea that names a range/population gives a real boundary condition
+    if test_idea and any(k in test_idea.lower() for k in
+                         ("rango", "población", "poblacion", "sub", "bin", "cohorte",
+                          "entre", "límite", "limite", "borde")):
+        fields["boundary_conditions"] = (_sentences(test_idea, 1)[:140],)
+    return fields, "heuristic"
+
+
+def _claim_from_hypothesis(h: dict[str, Any], exps: list[dict[str, Any]],
+                           *, extractor: Extractor | None = None
+                           ) -> tuple[ClaimRecord, str, float]:
     supports = [e for e in exps if (e.get("result") or {}).get("verdict") == "supports"]
     roots = {str(e.get("data_source") or "").split(":")[0] for e in supports
              if e.get("data_source")}
@@ -33,18 +82,36 @@ def _claim_from_hypothesis(h: dict[str, Any], exps: list[dict[str, Any]]) -> Cla
     else:
         rep = ReplicationStatus.NONE
     title = str(h.get("title") or h.get("description") or "")
-    return ClaimRecord(
+    # per-hypothesis semantic enrichment (LLM if wired, else deterministic heuristic)
+    try:
+        fields, provenance = (extractor or heuristic_extract)(h)
+    except Exception:  # noqa: BLE001 - a failing LLM extractor degrades, never breaks
+        fields, provenance = heuristic_extract(h)
+        provenance = "fallback"
+    claim = ClaimRecord(
         claim_id=str(h.get("id") or h.get("tag") or "h"),
         claim_text=title, normalized_claim=title[:160],
-        exposure_or_input="", outcome_or_prediction="",
-        effect_direction="observada" if supports else "",
+        population_or_domain=str(fields.get("population_or_domain", "")),
+        exposure_or_input=str(fields.get("exposure_or_input", "")),
+        outcome_or_prediction=str(fields.get("outcome_or_prediction", "")),
+        effect_direction=str(fields.get("effect_direction",
+                                        "observada" if supports else "")),
+        mechanism=str(fields.get("mechanism", "")),
+        assumptions=tuple(fields.get("assumptions", ()) or ()),
+        boundary_conditions=tuple(fields.get("boundary_conditions", ()) or ()),
         evidence_type=EvidenceType.OBSERVATIONAL,
         provenance_roots=tuple(sorted(roots)) or (("mixto",) if supports else ()),
         replication_status=rep)
+    return claim, provenance, _CONF_BY_PROVENANCE.get(provenance, 0.5)
 
 
-def run_epistemic(project_id: str, session_factory: Any | None = None) -> dict[str, Any]:
-    """Run the epistemic pipeline over the project's approved/candidate hypotheses."""
+def run_epistemic(project_id: str, session_factory: Any | None = None,
+                  *, extractor: Extractor | None = None) -> dict[str, Any]:
+    """Run the epistemic pipeline over the project's approved/candidate hypotheses.
+
+    `extractor` (optional) does per-hypothesis semantic reconstruction; when None the
+    deterministic `heuristic_extract` is used. The portal can pass a Codex-backed one.
+    """
     try:
         sf = session_factory or default_session_factory()
         ledger = ResearchLedger(sf)
@@ -57,12 +124,29 @@ def run_epistemic(project_id: str, session_factory: Any | None = None) -> dict[s
         all_exps = [e for e in store.list_objects(project_id, kind="experiment")]
         claims = []
         eva_by_claim: dict[str, list[dict[str, Any]]] = {}
+        reasoning: dict[str, dict[str, Any]] = {}
+        vuln_sets: dict[str, frozenset[str]] = {}
         for h in target_hyps[:8]:
             exps = [e for e in all_exps if e.get("hyp_id") == h.get("id")]
-            c = _claim_from_hypothesis(h, exps)
+            c, provenance, confidence = _claim_from_hypothesis(h, exps, extractor=extractor)
             claims.append(c)
             rep = audit_external(c)
             eva_by_claim[c.claim_id] = [v.summary() for v in rep.vulnerabilities[:5]]
+            vuln_sets[c.claim_id] = frozenset(v.type.value for v in rep.vulnerabilities)
+            reasoning[c.claim_id] = {
+                "provenance": provenance, "confidence": confidence,
+                "n_assumptions": len(c.assumptions), "has_mechanism": bool(c.mechanism),
+                "vuln_types": sorted(vuln_sets[c.claim_id])}
+        # semantic de-dup: flag claims that received an IDENTICAL vulnerability type-set
+        dup_groups: list[list[str]] = []
+        seen: dict[frozenset[str], list[str]] = {}
+        for cid, vs in vuln_sets.items():
+            seen.setdefault(vs, []).append(cid)
+        for cids in seen.values():
+            if len(cids) > 1:
+                dup_groups.append(cids)
+                for cid in cids:
+                    reasoning[cid]["duplicate_with"] = [x for x in cids if x != cid]
         if not claims:
             return {"ok": False, "error": "sin hipótesis para analizar; genera hipótesis primero"}
         topic = (project.title if project else "investigación")
@@ -84,6 +168,8 @@ def run_epistemic(project_id: str, session_factory: Any | None = None) -> dict[s
             "state": res.state.name, "ready": res.ready_for_exploratory,
             "questions": questions,
             "eva": eva_by_claim,
+            "reasoning": reasoning,
+            "duplicate_groups": dup_groups,
             "discriminating_test": ({
                 "bits": round(test.expected_information_gain(), 2),
                 "decisive": test.decisive,

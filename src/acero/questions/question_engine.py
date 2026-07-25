@@ -128,11 +128,13 @@ def question_from_vulnerability(vuln: EpistemicVulnerability, claim: ClaimRecord
     """Build a question TARGETED at a vulnerability (never a generic prompt)."""
     fam = _VULN_TO_FAMILY.get(vuln.type, QuestionFamily.MISSING_EVIDENCE)
     templates = {
-        QuestionFamily.TRANSPORTABILITY:
+        QuestionFamily.TRANSPORTABILITY: (
             f"¿El efecto '{claim.effect_direction or 'observado'}' entre "
-            f"{claim.exposure_or_input or 'la exposición'} y "
-            f"{claim.outcome_or_prediction or 'el outcome'} se reproduce en una fuente de "
-            f"raíz de curación INDEPENDIENTE?",
+            f"{claim.exposure_or_input} y {claim.outcome_or_prediction} se reproduce en "
+            f"una fuente de raíz de curación INDEPENDIENTE?"
+            if (claim.exposure_or_input and claim.outcome_or_prediction) else
+            f"¿La relación afirmada en «{(claim.normalized_claim or claim.claim_text)[:90]}» "
+            f"se reproduce en una fuente de raíz de curación INDEPENDIENTE?"),
         QuestionFamily.METHOD_DEPENDENCE:
             "¿El efecto sobrevive al ajustar por el confusor candidato o al cambiar la "
             "definición del endpoint/preprocesamiento?",
