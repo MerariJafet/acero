@@ -113,6 +113,14 @@ def _upsert_dossier(project_id: str, h: dict[str, Any], standing: str,
     readiness = ("BLOQUEADO — objeciones críticas del Revisor sin resolver; "
                  "responde con evidencia antes de revisar"
                  if blocked else "BORRADOR_AUTOMATICO — requiere revisión humana")
+    # CCC: computable scientific governance — allowed claim, over-claims, exploration
+    # debt, state ceiling, missing controls. Additive; never blocks the existing flow.
+    governance: dict[str, Any] = {}
+    try:
+        from ..science.integration import govern_dossier
+        governance = govern_dossier(h, exps, standing, latest_crit)
+    except Exception:  # noqa: BLE001 - governance is best-effort, never fatal
+        governance = {}
     payload = {
         "hyp_id": h["id"], "hyp_tag": h.get("tag", ""),
         "claim": h.get("title", ""),
@@ -124,6 +132,7 @@ def _upsert_dossier(project_id: str, h: dict[str, Any], standing: str,
         "belief_confidence": belief.get("confidence"),
         "world_node_id": belief.get("node_id", ""),
         "readiness": readiness,
+        "governance": governance,
         "status": "DRAFT", "updated_at": now_iso(),
     }
     if existing:
