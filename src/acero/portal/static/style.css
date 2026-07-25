@@ -594,3 +594,24 @@ button.hyp-step:hover { border-color: var(--accent); color: var(--fg); }
 .launch-adv > summary:hover { color: var(--accent); }
 .launch-adv[open] > summary { color: var(--fg); }
 .launch-adv .launch-grid { margin-top: .5rem; }
+
+/* ---- ficha de fase como MINI-REPORTE ------------------------------------ */
+.rkpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: .45rem; margin: .55rem 0; }
+.rkpi { background: #10151d; border: 1px solid var(--border); border-radius: 9px;
+  padding: .45rem .55rem; text-align: center; }
+.rkpi b { display: block; font-size: 1.3rem; line-height: 1.1; color: var(--fg); }
+.rkpi span { display: block; font-size: .66rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em; }
+.rkpi em { display: block; font-size: .62rem; color: #6f7d8c; font-style: normal; margin-top: .1rem; }
+.rnext { background: #12202e; border: 1px solid #29405e; border-radius: 8px;
+  padding: .4rem .6rem; font-size: .84rem; margin: .1rem 0 .55rem; }
+.rnext .rnext-ic { color: var(--accent); font-weight: 700; }
+.rnext b { color: var(--fg); }
+.rhi-head { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--muted); margin: .2rem 0 .3rem; }
+.rhi-list { list-style: none; margin: 0 0 .5rem; padding: 0; display: grid; gap: .3rem; }
+.rhi-list li { font-size: .84rem; color: var(--fg); display: flex; gap: .5rem;
+  align-items: baseline; justify-content: space-between;
+  border-bottom: 1px dashed #1c242f; padding-bottom: .28rem; }
+.rhi-list li .tag { flex-shrink: 0; white-space: nowrap; }

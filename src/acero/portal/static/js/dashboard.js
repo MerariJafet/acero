@@ -157,9 +157,16 @@ export async function renderProjectDash(view, pid, cb) {
         ${next ? `alimenta a <b>${esc(next.icon)} ${esc(next.title.replace("Investigación de ", ""))}</b> ➡` : "🏁 fin del flujo"}
       </span>`;
     const st2 = f.state === "done" ? ["ok", "con trabajo"] : (i === currentIdx ? ["warn", "aquí vas"] : ["", "pendiente"]);
-    const items = (f.items || []).slice(0, 4).map((it) =>
-      `<div class="kv"><span>${esc((it.title || "").slice(0, 70))}</span>` +
-      `<b class="tag">${esc(it.meta || "")}${it.flag ? " · " + esc(it.flag) : ""}</b></div>`).join("");
+    const rep = f.report || {};
+    // report KPIs as chips (más conocimiento de un vistazo)
+    const kpis = (rep.kpis || []).map((kp) =>
+      `<div class="rkpi"><b>${esc(String(kp.value))}</b><span>${esc(kp.label)}</span>${
+        kp.hint ? `<em>${esc(kp.hint)}</em>` : ""}</div>`).join("");
+    // concise highlights (top 3 items, one line each)
+    const hi = (f.items || []).slice(0, 3).map((it) =>
+      `<li>${esc((it.title || "").slice(0, 90))}${
+        it.flag ? ` <span class="pill bad">${esc(it.flag)}</span>` : ""}
+        <span class="tag">${esc((it.meta || "").slice(0, 48))}</span></li>`).join("");
     const run = PHASE_RUN[f.key];
     const primary = run
       ? `<button class="act phase-primary" data-run="${esc(run.ep)}" data-label="${esc(run.label)}">${esc(run.label)}</button>`
@@ -175,13 +182,14 @@ export async function renderProjectDash(view, pid, cb) {
       </button>
       <div class="phase-body" data-body="${esc(f.key)}">
         ${flow}
-        <div class="phase-cols">
-          <div class="phase-viz">${barRows(f.bars)}</div>
-          <div class="phase-items">${items || "<p class='muted tag'>sin items aún — lanza su flujo arriba</p>"}
-            <div class="phase-cta">
-              ${primary}
-              <button class="phase-open" data-open="${esc(f.key)}">Abrir dashboard de esta fase →</button>
-            </div>
+        ${kpis ? `<div class="rkpis">${kpis}</div>` : ""}
+        ${rep.next_step ? `<div class="rnext"><span class="rnext-ic">➜</span> <b>Próximo paso:</b> ${esc(rep.next_step)}</div>` : ""}
+        <div class="rhi">
+          ${hi ? `<div class="rhi-head">Lo más reciente</div><ul class="rhi-list">${hi}</ul>`
+               : `<p class="muted tag">Sin datos aún — lanza su flujo (misión o paso individual).</p>`}
+          <div class="phase-cta">
+            ${primary}
+            <button class="phase-open" data-open="${esc(f.key)}">Abrir dashboard de esta fase →</button>
           </div>
         </div>
         <div class="phase-comment">

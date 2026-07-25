@@ -141,6 +141,69 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
             real_exps_by_hyp[hid] = real_exps_by_hyp.get(hid, 0) + 1
     dossier_hyps = {d.get("hyp_id", "") for d in dossiers}
 
+    # --- per-phase REPORT: meaningful KPIs + next step (a mini report card) ---
+    vc = {"supports": 0, "refutes": 0, "inconclusive": 0, "plan": 0}
+    for e in exps:
+        v = (e.get("result") or {}).get("verdict")
+        if v in vc:
+            vc[v] += 1
+        elif (e.get("status") or "") == "PLANNED":
+            vc["plan"] += 1
+    frontier = sum(1 for h in hyps
+                   if (h.get("novelty") or {}).get("status") in ("abierta", "inexplorada"))
+    from_anomaly = sum(1 for h in hyps if h.get("origin") == "anomaly")
+    with_doi = sum(1 for li in lit if li.get("doi"))
+    retracted = sum(1 for li in lit if li.get("integrity") == "retracted")
+    confs = [n.get("confidence") for n in nodes["items"] if isinstance(n.get("confidence"), (int, float))]
+    avg_conf = round(sum(confs) / len(confs), 2) if confs else 0
+    ready_dossiers = sum(1 for d in dossiers if not d.get("blocked_by_critic"))
+
+    def _kpi(label: str, value: Any, hint: str = "") -> dict[str, Any]:
+        return {"label": label, "value": value, "hint": hint}
+
+    reports = {
+        "hipotesis": {
+            "kpis": [_kpi("total", len(hyps)), _kpi("aprobadas", len(approved), "listas para misión"),
+                     _kpi("en frontera", frontier, "🟢 abierta/inexplorada"),
+                     _kpi("de anomalía", from_anomaly, "🔥 nacidas de discrepancias")],
+            "next_step": ("Genera hipótesis para empezar." if not hyps
+                          else "Aprueba las mejores y lanza la misión." if not approved
+                          else "Lanza la Misión completa sobre las aprobadas."),
+        },
+        "literatura": {
+            "kpis": [_kpi("papers", len(lit)), _kpi("con DOI", with_doi),
+                     _kpi("retractados", retracted, "excluidos" if retracted else ""),
+                     _kpi("hipótesis cubiertas", len({li.get("hyp_id") for li in lit if li.get("hyp_id")}))],
+            "next_step": ("Investiga literatura (o lanza la misión)." if not lit
+                          else "Profundiza la literatura o pasa a experimentos."),
+        },
+        "teorias": {
+            "kpis": [_kpi("nodos", int(nodes["total"])), _kpi("confianza media", avg_conf, "máx < 1 por diseño")],
+            "next_step": "Se llena solo al sintetizar los experimentos.",
+        },
+        "experimentos": {
+            "kpis": [_kpi("total", len(exps)), _kpi("datos reales", len(real_exps)),
+                     _kpi("apoyan", vc["supports"]), _kpi("refutan", vc["refutes"]),
+                     _kpi("inconclusos", vc["inconclusive"])],
+            "next_step": ("Propón y corre experimentos (o misión)." if not exps
+                          else "Corre con datos reales." if not real_exps
+                          else "Revisa veredictos y procedencia."),
+        },
+        "resultados": {
+            "kpis": [_kpi("resultados", len(results_items)),
+                     _kpi("negativos preservados", len(negs), "no se borran"),
+                     _kpi("apoyan/refutan", f"{vc['supports']}/{vc['refutes']}")],
+            "next_step": ("Aparecen al correr experimentos." if not results_items
+                          else "Revisa negativos e inconclusos con honestidad."),
+        },
+        "conclusiones": {
+            "kpis": [_kpi("dossiers", len(dossiers)), _kpi("listos", ready_dossiers, "para revisión humana"),
+                     _kpi("bloqueados", len(dossiers) - ready_dossiers, "por el Revisor" if dossiers else "")],
+            "next_step": ("Se generan al sintetizar." if not dossiers
+                          else "Revisión HUMANA: el techo. Nada es un descubrimiento."),
+        },
+    }
+
     phases = {
         "hipotesis": {
             **_status(len(hyps), f"{len(approved)} aprobada(s) de {len(hyps)}",
@@ -246,6 +309,7 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
         ph["title"] = _TITLES[key]
         ph["icon"] = _ICONS[key]
         ph["methodology"] = _METHODOLOGY.get(key, {})
+        ph["report"] = reports.get(key, {})
 
     # KPIs for the top strip
     kpis = {
