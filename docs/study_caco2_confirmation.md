@@ -48,3 +48,26 @@ SMILES) predice una **menor permeabilidad Caco-2**? (Relación conocida: regla d
 
 ## Reproducible
 Script: `scripts/study_caco2_confirmation.py` (descarga real; correr con red).
+
+## Panel adversarial plural EN VIVO (8 voces vía Codex)
+
+Corrido sobre el resultado del estudio. Cada persona en su mandato, **desacuerdo
+preservado**:
+
+| Voz | Veredicto | Objeción clave |
+|---|---|---|
+| Estadístico | prometedor | dicotomizar por mediana pierde info; sin ajuste por covariables |
+| **Causalista** | **defectuoso [BLOQUEA]** | estimando asociacional; confusión no controlada (peso molecular, lipofilia, clase química) |
+| Experto de dominio | prometedor | O+N es proxy crudo de TPSA (ignora carga, donadores/aceptores, zwitteriones) |
+| Replicador | prometedor | reproduce el contraste pero con el mismo pipeline/corte |
+| Detective de datos | prometedor | sin auditoría de duplicados/sales/tautómeros → posible fuga entre splits |
+| Revisor de novedad | prometedor | NO novedoso: recapitula TPSA / Veber-Lipinski |
+| Abogado del mecanismo alt. | prometedor | modelos rivales: tamaño molecular; lipofilia (logD) |
+| Redactor hostil | prometedor | el abstract debe ser asociativo, no causal ni universal |
+
+**Agregado:** en disputa · desacuerdo=2 · peor veredicto=defectuoso · **bloqueado por el
+causalista (mandato duro)**.
+
+El panel es más exigente que el crítico único: cazó la confusión (peso molecular/lipofilia),
+la no-novedad, la posible fuga por sales/tautómeros, y **bloqueó el lenguaje causal** — que
+es exactamente la disciplina que pedía el revisor externo.
