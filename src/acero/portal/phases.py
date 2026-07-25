@@ -131,6 +131,16 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
                 "state": "done" if count else "pending",
                 "note": active_note if count else empty_note}
 
+    # per-hypothesis process signals (where each hypothesis is in ITS pipeline)
+    exps_by_hyp: dict[str, int] = {}
+    real_exps_by_hyp: dict[str, int] = {}
+    for e in exps:
+        hid = e.get("hyp_id", "")
+        exps_by_hyp[hid] = exps_by_hyp.get(hid, 0) + 1
+        if e.get("synthetic") is False:
+            real_exps_by_hyp[hid] = real_exps_by_hyp.get(hid, 0) + 1
+    dossier_hyps = {d.get("hyp_id", "") for d in dossiers}
+
     phases = {
         "hipotesis": {
             **_status(len(hyps), f"{len(approved)} aprobada(s) de {len(hyps)}",
@@ -150,6 +160,10 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
                        "discovery_angle": h.get("discovery_angle", ""),
                        "origin": h.get("origin", ""),
                        "anomaly_provenance": h.get("anomaly_provenance"),
+                       "lit_count": int(h.get("lit_count", 0) or 0),
+                       "n_experiments": exps_by_hyp.get(h.get("id", ""), 0),
+                       "n_real_experiments": real_exps_by_hyp.get(h.get("id", ""), 0),
+                       "has_dossier": h.get("id", "") in dossier_hyps,
                        "flag": "plantilla" if h.get("synthetic") else ""} for h in hyps],
         },
         "literatura": {

@@ -211,6 +211,13 @@ export async function renderProjectDash(view, pid, cb) {
          <span class="tag">todo el ciclo se lanza desde aquí</span>
          <span class="launch-status" id="launch-status" aria-live="polite"></span></div>
        <div class="launch-grid">${launchBtns}</div>
+       <div class="launch-eva">
+         <button class="act" id="epistemic-run"
+           title="Convierte tus hipótesis en preguntas fértiles priorizadas + prueba discriminante">
+           🧭 Generar preguntas científicas (EVA)</button>
+         <span class="tag">encuentra vulnerabilidades → preguntas de mayor valor informativo</span>
+       </div>
+       <div id="epistemic-out" aria-live="polite"></div>
      </section>
 
      <div class="kpi-strip">
@@ -255,6 +262,47 @@ export async function renderProjectDash(view, pid, cb) {
   }
   view.querySelectorAll(".launch-btn").forEach((b) =>
     b.addEventListener("click", () => runFlow(b, b.dataset.ep, statusEl)));
+
+  // 🧭 EVA + Question Engine: hypotheses → fertile questions + discriminating test
+  const evaBtn = view.querySelector("#epistemic-run");
+  const evaOut = view.querySelector("#epistemic-out");
+  const FAM = { transportabilidad: "🌐 transportabilidad", mecanismo: "⚙️ mecanismo",
+    dependencia_metodologica: "🔧 dependencia de método", frontera: "📐 frontera",
+    teoria_rival: "⚔️ teoría rival", contradiccion: "🔀 contradicción",
+    anomalia: "🔥 anomalía", evidencia_faltante: "🧩 evidencia faltante",
+    resultado_negativo: "➖ resultado negativo" };
+  evaBtn.addEventListener("click", async () => {
+    evaBtn.disabled = true; const o = evaBtn.textContent;
+    evaBtn.textContent = "🧭 Analizando hipótesis…";
+    evaOut.innerHTML = "<p class='loading'>Buscando vulnerabilidades y generando preguntas…</p>";
+    const { ok: eok, body } = await post(
+      `/portal/api/projects/${encodeURIComponent(pid)}/epistemic/questions`, {});
+    evaBtn.disabled = false; evaBtn.textContent = o;
+    if (!eok || !body || !body.ok) {
+      evaOut.innerHTML = `<p class='err'>${esc((body && (body.error || body.detail)) || "no se pudo")}</p>`;
+      return;
+    }
+    const t = body.discriminating_test;
+    const qs = (body.questions || []).slice(0, 6).map((q, i) =>
+      `<div class="eva-q">
+        <div class="eva-q-head"><span class="eva-fam">${esc(FAM[q.family] || q.family)}</span>
+          <span class="eva-prio" title="prioridad = valor × discriminación × factibilidad ÷ riesgo">prioridad ${q.priority}</span></div>
+        <p class="eva-q-text">${esc(q.text)}</p>
+        ${q.why_it_matters ? `<p class="tag">porque: ${esc(q.why_it_matters)}</p>` : ""}
+      </div>`).join("");
+    evaOut.innerHTML =
+      `<section class="eva-panel">
+        <div class="eva-top">
+          <b>🧭 ${body.n_vulnerabilities} vulnerabilidades → ${(body.questions || []).length} preguntas fértiles</b>
+          <span class="pill ${body.ready ? "ok" : "warn"}">${esc(body.state)}</span>
+          ${t ? `<span class="pill">prueba discriminante: ${t.bits} bits · separa ${t.separates}</span>` : ""}
+        </div>
+        <div class="eva-questions">${qs || "<p class='muted'>sin preguntas que pasen el filtro</p>"}</div>
+        <p class="tag">${esc(body.honesty || "")}</p>
+      </section>`;
+    evaOut.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+
   view.querySelectorAll(".phase-primary").forEach((b) =>
     b.addEventListener("click", () => {
       const s = b.closest(".phase-body").querySelector(".phase-answer");
@@ -336,9 +384,30 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
           <div class="hyp-answer" data-hans="${ix}" aria-live="polite"></div>
         </div>` : "";
       const approved = i.meta === "APPROVED";
+      // per-hypothesis PROCESS pipeline: where this hypothesis is in its own lifecycle
+      const litN = i.lit_count || 0, expN = i.n_experiments || 0, realN = i.n_real_experiments || 0;
+      const pipe = [
+        { ic: "💡", name: "Propuesta", done: true },
+        { ic: "✅", name: "Aprobada", done: approved },
+        { ic: "📚", name: `Literatura${litN ? " (" + litN + ")" : ""}`, done: litN > 0, go: "literatura" },
+        { ic: "⚗️", name: `Experimentos${expN ? " (" + expN + ")" : ""}`, done: expN > 0, go: "experimentos" },
+        { ic: "📜", name: "Dossier", done: !!i.has_dossier },
+      ];
+      let curStep = pipe.findIndex((s) => !s.done); if (curStep < 0) curStep = pipe.length;
+      const hypPipe = `<div class="hyp-pipe" role="list" aria-label="Progreso de la hipótesis">${
+        pipe.map((s, si) => {
+          const cls = s.done ? "done" : (si === curStep ? "active" : "pending");
+          const tag = s.go ? "button" : "span";
+          const attr = s.go ? ` data-pipego="${s.go}"` : "";
+          return `<${tag} class="hyp-step ${cls}"${attr} role="listitem" title="${esc(s.name)}">
+              <span class="hs-ic">${s.ic}</span><span class="hs-name">${esc(s.name)}</span>
+            </${tag}>${si < pipe.length - 1 ? `<span class="hs-arrow ${s.done ? "on" : ""}">›</span>` : ""}`;
+        }).join("")}</div>`;
       const actions = `<div class="hyp-actions">
           ${approved
             ? `<span class="pill ok">✓ Aprobada</span>
+               <button class="act phase-primary" data-hmission="${esc(i.id)}" data-tag="${esc(i.tag)}"
+                 title="Corre el ciclo completo para esta hipótesis (investigar→experimentos→sintetizar→rigor)">🚀 Lanzar misión</button>
                <button class="act ghost" data-hstatus="${esc(i.id)}" data-to="PROPOSED">Desaprobar</button>`
             : `<button class="act" data-happrove="${esc(i.id)}" data-tag="${esc(i.tag)}">✓ Aprobar</button>
                <button class="act ghost" data-hstatus="${esc(i.id)}" data-to="REJECTED">Rechazar</button>`}
@@ -370,7 +439,7 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
           ${pill(i.meta || "", approved ? "ok" : "warn")}
           ${i.flag ? " " + pill(i.flag, "bad") : ""}
           ${reasoning ? `<button class="hyp-toggle" data-htoggle="${ix}">ver razonamiento ▾</button>` : ""}
-        </div>${novDetail}${anomProv}${actions}
+        </div>${hypPipe}${novDetail}${anomProv}${actions}
         <div class="hyp-links">
           <button class="act ghost" data-htrace="${esc(i.id)}">🧭 Detalle</button>
           <a href="#" data-golit>→ ir a Literatura</a> ·
@@ -494,6 +563,20 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
     a.addEventListener("click", (ev) => { ev.preventDefault(); cb.openPhase(pid, "literatura"); }));
   view.querySelectorAll("[data-goexp]").forEach((a) =>
     a.addEventListener("click", (ev) => { ev.preventDefault(); cb.openPhase(pid, "experimentos"); }));
+  // hypothesis mini-pipeline: clickable stages jump to that phase
+  view.querySelectorAll("[data-pipego]").forEach((b) =>
+    b.addEventListener("click", () => cb.openPhase(pid, b.dataset.pipego)));
+  // 🚀 launch the FULL mission for one hypothesis, from its card
+  view.querySelectorAll("[data-hmission]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      const o = b.textContent; b.disabled = true; b.textContent = "🚀 misión en curso…";
+      const { ok, body } = await post(
+        `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.hmission}/mission`, {});
+      b.disabled = false; b.textContent = o;
+      if (!ok || (body && body.error && !body.ok))
+        alert("Error al lanzar misión: " + ((body && (body.error || body.detail)) || ""));
+      cb.openPhase(pid, "hipotesis");
+    }));
   view.querySelectorAll("[data-hdel]").forEach((b) =>
     b.addEventListener("click", async () => {
       if (!confirm(`¿BORRAR ${b.dataset.tag} y todo lo que depende de ella (literatura, experimentos no guardados, críticas)? El vault conservará la memoria de lo que se hizo.`)) return;

@@ -814,6 +814,15 @@ def build_portal_router() -> APIRouter:
         from ..studies.place_in_universe import investigate
         return investigate(project_id)
 
+    @r.post("/api/projects/{project_id}/epistemic/questions")
+    def project_epistemic_questions(project_id: str, sess: Session = Depends(_require_session),
+                                    x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """EVA + Question Engine: turn the project's hypotheses into fertile, prioritized
+        questions and a discriminating test (topic→vulnerabilities→questions)."""
+        _require_csrf(sess, x_csrf_token)
+        from .epistemic_bridge import run_epistemic
+        return run_epistemic(project_id)
+
     @r.get("/api/mesh/search")
     def mesh_search(q: str, rows: int = 5, sess: Session = Depends(_require_session)
                     ) -> dict[str, Any]:

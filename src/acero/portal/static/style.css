@@ -547,3 +547,37 @@ caption { text-align: left; color: var(--muted); padding-bottom: .4rem; }
 .phase-cta { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
 .act.phase-primary { background: #14263c; border-color: var(--accent); }
 .act.phase-primary.running { opacity: .6; cursor: wait; }
+
+/* ---- EVA + preguntas científicas panel ---------------------------------- */
+.launch-eva { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-top: .6rem;
+  padding-top: .55rem; border-top: 1px dashed var(--border); }
+.launch-eva #epistemic-run { background: #201433; border-color: #6f42c1; }
+.eva-panel { margin-top: .7rem; background: #14101f; border: 1px solid #3a2a5a;
+  border-radius: 12px; padding: .7rem .8rem; }
+.eva-top { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .6rem; }
+.eva-top b { color: var(--fg); }
+.eva-questions { display: grid; gap: .5rem; }
+.eva-q { background: #120f1a; border: 1px solid #322447; border-left: 3px solid #8a63d2;
+  border-radius: 8px; padding: .5rem .65rem; }
+.eva-q-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.eva-fam { font-size: .74rem; color: #b79aff; font-weight: 600; }
+.eva-prio { font-size: .72rem; color: var(--muted); }
+.eva-q-text { margin: .25rem 0 .1rem; font-size: .9rem; color: var(--fg); }
+
+/* ---- per-hypothesis mini-pipeline (dónde va cada hipótesis) -------------- */
+.hyp-pipe { display: flex; align-items: center; gap: .12rem; flex-wrap: wrap;
+  margin: .5rem 0; padding: .4rem .5rem; background: #10151d;
+  border: 1px solid var(--border); border-radius: 8px; }
+.hyp-step { display: inline-flex; align-items: center; gap: .28rem;
+  padding: .2rem .45rem; border-radius: 6px; font-size: .74rem; color: var(--muted);
+  background: transparent; border: 1px solid transparent; }
+button.hyp-step { cursor: pointer; }
+button.hyp-step:hover { border-color: var(--accent); color: var(--fg); }
+.hyp-step .hs-ic { filter: grayscale(1) opacity(.6); }
+.hyp-step.done { color: var(--fg); }
+.hyp-step.done .hs-ic { filter: none; }
+.hyp-step.active { color: var(--fg); border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset; }
+.hyp-step.active .hs-ic { filter: none; }
+.hs-arrow { color: #37414f; font-size: .9rem; }
+.hs-arrow.on { color: var(--ok); }
