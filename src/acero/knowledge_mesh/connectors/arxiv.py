@@ -13,7 +13,7 @@ from xml.etree import ElementTree as ET
 
 from ..models import ObjectType, ScientificObject
 
-_UA = "ACERO-knowledge-mesh/0.1 (mailto:merari.jafet@gmail.com)"
+_UA = "ACERO-knowledge-mesh/0.1 (+https://github.com/MerariJafet/acero)"
 _BASE = "https://export.arxiv.org/api/query"
 _ATOM = "{http://www.w3.org/2005/Atom}"
 

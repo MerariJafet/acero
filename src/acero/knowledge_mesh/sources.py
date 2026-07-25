@@ -12,7 +12,7 @@ from typing import Any
 
 from .models import AuthorityLevel, HealthStatus, SourceRecord
 
-_UA = "ACERO-knowledge-mesh/0.1 (mailto:merari.jafet@gmail.com)"
+_UA = "ACERO-knowledge-mesh/0.1 (+https://github.com/MerariJafet/acero)"
 
 # Seed registry. Domains/licenses from each provider's official documentation.
 SEED_SOURCES: list[SourceRecord] = [

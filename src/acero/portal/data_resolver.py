@@ -17,7 +17,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-_UA = "ACERO-data-resolver/0.1 (mailto:merari.jafet@gmail.com)"
+_UA = "ACERO-data-resolver/0.1 (+https://github.com/MerariJafet/acero)"
 
 # accession patterns → resolver
 _GEO_RE = re.compile(r"\bGSE(\d{3,})\b", re.I)

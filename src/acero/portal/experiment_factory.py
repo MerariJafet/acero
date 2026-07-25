@@ -89,7 +89,7 @@ SANDBOX_TIMEOUT = int(os.environ.get("ACERO_SANDBOX_TIMEOUT", "600"))   # s
 SANDBOX_MEMORY_MB = int(os.environ.get("ACERO_SANDBOX_MEMORY_MB", "12288"))  # 12GB
 MAX_REPAIRS = 2
 
-_UA = "ACERO-experiment-factory/0.1 (mailto:merari.jafet@gmail.com)"
+_UA = "ACERO-experiment-factory/0.1 (+https://github.com/MerariJafet/acero)"
 _RESULT_RE = re.compile(r"^RESULT_JSON:\s*(\{.*\})\s*$", re.MULTILINE)
 _VERDICTS = {"supports", "refutes", "inconclusive"}
 

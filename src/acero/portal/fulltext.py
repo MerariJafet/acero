@@ -20,7 +20,7 @@ from typing import Any
 MAX_PDF_BYTES = 40 * 1024 * 1024        # 40 MB per PDF
 FETCH_TIMEOUT = 90.0
 MAX_PAGES = 40                          # cap extraction cost
-_UA = "ACERO-fulltext/0.1 (mailto:merari.jafet@gmail.com)"
+_UA = "ACERO-fulltext/0.1 (+https://github.com/MerariJafet/acero)"
 
 
 def _cache_dir() -> Path:

@@ -17,7 +17,7 @@ from typing import Any
 
 from ..models import ObjectType, ScientificObject
 
-_UA = "ACERO-knowledge-mesh/0.1 (mailto:merari.jafet@gmail.com)"
+_UA = "ACERO-knowledge-mesh/0.1 (+https://github.com/MerariJafet/acero)"
 _BASE = "https://api.openalex.org/works"
 
 _TYPE_MAP = {
