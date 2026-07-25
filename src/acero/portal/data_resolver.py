@@ -121,6 +121,87 @@ def _resolve_chembl(text: str, *, opener: Any | None = None) -> list[dict[str, A
                       f"bioensayos reales, ≤1000 registros (JSON)")}]
 
 
+# TDC (Therapeutics Data Commons) ADME/Tox — curated single-task datasets on Harvard
+# Dataverse. Each is a tab file "Drug_ID  Drug(SMILES)  Y(measured endpoint)". This is
+# the MEASURED ADME/Tox layer (e.g. Caco-2 permeability) PubChem/ChEMBL don't cover.
+# IDs verified by real download (all return the expected Drug/SMILES/Y header).
+_TDC_BASE = "https://dataverse.harvard.edu/api/access/datafile/"
+_TDC_IDS = {
+    "caco2_wang": 4259569, "solubility_aqsoldb": 4259610,
+    "lipophilicity_astrazeneca": 4259595, "bbb_martins": 4259566,
+    "hia_hou": 4259591, "bioavailability_ma": 4259567,
+    "pgp_broccatelli": 4259597, "ppbr_az": 6413140, "vdss_lombardo": 4267387,
+    "half_life_obach": 4266799, "clearance_hepatocyte_az": 4266187,
+    "clearance_microsome_az": 4266186, "herg": 4259588, "ames": 4259564,
+    "dili": 4259585, "ld50_zhu": 4267146, "cyp2d6_veith": 4259580,
+    "cyp3a4_veith": 4259582, "cyp2c9_veith": 4259577, "pampa_ncats": 6695858,
+    "hydrationfreeenergy_freesolv": 4259594, "skin_reaction": 4259609,
+}
+# STRONG aliases: dataset-specific terms that map on their own (fire w/o extra context).
+_TDC_STRONG = [
+    (r"caco-?2", "caco2_wang"), (r"pampa", "pampa_ncats"),
+    (r"\bbbb\b|blood-?brain|barrera hematoencef", "bbb_martins"),
+    (r"p-?gp\b|p-?glyco|glicoprote[ií]na p", "pgp_broccatelli"),
+    (r"\bherg\b|cardiotox", "herg"), (r"\bames\b|mutagen", "ames"),
+    (r"\bdili\b|hepatotox|liver injury|da[nñ]o hep", "dili"),
+    (r"\bld50\b", "ld50_zhu"), (r"\bvdss\b", "vdss_lombardo"),
+    (r"\bppbr\b", "ppbr_az"), (r"freesolv|hydration free energy", "hydrationfreeenergy_freesolv"),
+    (r"cyp\s?2d6", "cyp2d6_veith"), (r"cyp\s?3a4", "cyp3a4_veith"),
+    (r"cyp\s?2c9", "cyp2c9_veith"), (r"\bhia\b|intestinal absorption|absorci[oó]n intestinal",
+                                     "hia_hou"),
+    (r"bioavailab|biodisponib", "bioavailability_ma"),
+    (r"aqsol", "solubility_aqsoldb"),
+]
+# WEAK aliases: generic terms; only route to TDC when an ADME/Tox/dataset context exists,
+# so they don't steal a PubChem-descriptor or unrelated request.
+_TDC_WEAK = [
+    (r"solubilit|solubilidad", "solubility_aqsoldb"),
+    (r"permeab", "caco2_wang"),
+    (r"lipophilic|lipofilic|logd\b", "lipophilicity_astrazeneca"),
+    (r"plasma protein bind|uni[oó]n a prote[ií]nas", "ppbr_az"),
+    (r"volume of distribution|volumen de distribuci", "vdss_lombardo"),
+    (r"half-?life|vida media", "half_life_obach"),
+    (r"hepatocyte clearance|aclaramiento hepatoc", "clearance_hepatocyte_az"),
+    (r"microsom", "clearance_microsome_az"),
+    (r"\bclearance\b|aclaramiento", "clearance_hepatocyte_az"),
+    (r"skin reaction|reacci[oó]n cut[aá]nea|irritaci", "skin_reaction"),
+]
+_TDC_CTX = re.compile(r"\btdc\b|therapeutics data commons|\badme[t]?\b|\btox|dataset|"
+                      r"benchmark|experimental|medid|measured|endpoint", re.I)
+
+
+def tdc_dataset_url(name: str) -> str:
+    return f"{_TDC_BASE}{_TDC_IDS[name]}"
+
+
+def _resolve_tdc(text: str) -> list[dict[str, Any]]:
+    """Map an ADME/Tox request to a verified TDC dataset (SMILES + measured Y)."""
+    t = text or ""
+    tl = t.lower()
+    name = ""
+    for n in _TDC_IDS:                       # explicit dataset name wins
+        if n in tl:
+            name = n
+            break
+    if not name:
+        for pat, n in _TDC_STRONG:
+            if re.search(pat, t, re.I):
+                name = n
+                break
+    if not name and _TDC_CTX.search(t):
+        for pat, n in _TDC_WEAK:
+            if re.search(pat, t, re.I):
+                name = n
+                break
+    if not name:
+        return []
+    return [{"url": tdc_dataset_url(name), "filename": f"tdc_{name}.tab",
+             "accession": f"tdc:{name}", "repository": "TDC", "is_data": True,
+             "what": (f"TDC {name} (Therapeutics Data Commons / Harvard Dataverse): "
+                      f"tabla tab-separada Drug_ID + Drug(SMILES) + Y (endpoint ADME/Tox "
+                      f"MEDIDO); split estándar del benchmark")}]
+
+
 def _get_json(url: str, opener: Any | None, timeout: float = 25.0) -> Any:
     req = urllib.request.Request(url, headers={"User-Agent": _UA,
                                                "Accept": "application/json"})
@@ -368,6 +449,8 @@ _DOMAIN_REPOS = {
     "pubchem": ("chemistry", "biology", "medicine", "genetics", "genomics",
                 "biochemistry", "pharmacology"),
     "chembl": ("chemistry", "biology", "medicine", "biochemistry", "pharmacology"),
+    "tdc": ("chemistry", "biology", "medicine", "biochemistry", "pharmacology",
+            "toxicology"),
 }
 
 
@@ -445,6 +528,10 @@ def resolve_reference(text: str, *, verify: bool = True, want_data: bool = False
         cb = _resolve_chembl(text, opener=opener)
         if cb:
             return cb
+    if _domain_ok("tdc", domain):
+        td = _resolve_tdc(text)
+        if td:
+            return td
     if _domain_ok("pubchem", domain):
         pc = _resolve_pubchem(text)
         if pc:

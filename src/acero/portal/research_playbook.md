@@ -35,6 +35,14 @@ la URL real. NO pidas datos de sitios fuera de esta lista.
   o por nombre ("target: EGFR"), o una molécula ("molécula CHEMBL25"), y el tipo
   (IC50/Ki/…). Baja hasta 1000 actividades reales en JSON (canonical_smiles,
   standard_value, standard_units, pchembl_value). Úsalo para estructura-ACTIVIDAD.
+- **TDC** (ADME/Tox, SIN llave): datasets curados de Therapeutics Data Commons con
+  SMILES + endpoint MEDIDO (columna Y). Nómbralos: `caco2_wang` (permeabilidad),
+  `solubility_aqsoldb`, `lipophilicity_astrazeneca`, `bbb_martins`, `hia_hou`,
+  `bioavailability_ma`, `pgp_broccatelli`, `ppbr_az`, `vdss_lombardo`,
+  `half_life_obach`, `clearance_hepatocyte_az`, `clearance_microsome_az`, `herg`,
+  `ames`, `dili`, `ld50_zhu`, `cyp2d6_veith`, `cyp3a4_veith`, `cyp2c9_veith`,
+  `pampa_ncats`, `hydrationfreeenergy_freesolv`, `skin_reaction`. También responde a
+  "permeabilidad Caco-2", "solubilidad", "hERG", etc. Es la capa ADME/Tox medida.
 - **SILSO** (solar), **GWOSC** (ondas gravitacionales), **arXiv data**.
 Consultas SIEMPRE ACOTADAS (columnas/filas/límite). Nunca un volcado sin filtro.
 

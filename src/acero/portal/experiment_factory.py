@@ -58,6 +58,7 @@ DATA_HOST_ALLOWLIST = {
     "api.figshare.com", "ndownloader.figshare.com", "figshare.com",
     "datadryad.org", "pubchem.ncbi.nlm.nih.gov", "www.ebi.ac.uk",
     "rest.uniprot.org", "data.rcsb.org", "files.rcsb.org",
+    "dataverse.harvard.edu",
     # cloud open-data (public buckets over HTTPS)
     "s3.amazonaws.com", "storage.googleapis.com",
 }

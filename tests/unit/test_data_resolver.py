@@ -305,6 +305,54 @@ def test_chembl_does_not_shadow_pubchem_descriptors():
     assert specs and specs[0]["repository"] == "PubChem"
 
 
+def test_tdc_dataset_url_uses_verified_id():
+    assert dr.tdc_dataset_url("caco2_wang") == \
+        "https://dataverse.harvard.edu/api/access/datafile/4259569"
+
+
+def test_resolve_tdc_explicit_name():
+    specs = dr._resolve_tdc("usa el dataset caco2_wang de TDC")
+    assert specs and specs[0]["repository"] == "TDC"
+    assert specs[0]["filename"] == "tdc_caco2_wang.tab"
+    assert "4259569" in specs[0]["url"]
+
+
+def test_resolve_tdc_strong_alias_fires_alone():
+    # 'Caco-2' is specific enough to route without extra context
+    specs = dr._resolve_tdc("permeabilidad Caco-2 de moléculas")
+    assert specs and specs[0]["accession"] == "tdc:caco2_wang"
+    assert dr._resolve_tdc("cardiotoxicidad hERG")[0]["accession"] == "tdc:herg"
+
+
+def test_resolve_tdc_weak_alias_needs_context():
+    # 'solubility' alone should NOT fire (could be a PubChem-descriptor request)
+    assert dr._resolve_tdc("relación con la solubility de las moléculas") == []
+    # with an ADME/dataset context it routes to the measured dataset
+    specs = dr._resolve_tdc("dataset ADME de solubility acuosa medida")
+    assert specs and specs[0]["accession"] == "tdc:solubility_aqsoldb"
+
+
+def test_domain_gating_tdc_chemistry_yes_astronomy_no():
+    txt = "permeabilidad Caco-2 medida"
+    specs = dr.resolve_reference(txt, domain="chemistry", verify=False)
+    assert specs and specs[0]["repository"] == "TDC"
+    assert dr.resolve_reference(txt, domain="astronomy", verify=False) == []
+
+
+def test_tdc_does_not_steal_pubchem_descriptor_request():
+    specs = dr.resolve_reference(
+        "descriptores moleculares de PubChem de 100 compuestos",
+        domain="chemistry", verify=False)
+    assert specs and specs[0]["repository"] == "PubChem"
+
+
+def test_all_tdc_ids_present():
+    # the map must stay non-empty and every entry must build a URL
+    assert len(dr._TDC_IDS) >= 20
+    for name in dr._TDC_IDS:
+        assert dr.tdc_dataset_url(name).startswith(dr._TDC_BASE)
+
+
 def test_generalist_repos_work_in_any_domain(monkeypatch):
     import json as _j
 
