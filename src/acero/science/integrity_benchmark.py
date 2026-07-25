@@ -1,8 +1,15 @@
-"""ACERO Scientific Integrity Benchmark — does the Constitution reduce false positives?
+"""ACERO Scientific Integrity Benchmark — PRELIMINARY INTERNAL ABLATION.
 
-The reviewer's single most important request: demonstrate, by ablation, that ACERO with
-its scientific constitution lets through FEWER indefensible positive claims than the same
-pipeline without it. This is that evidence.
+IMPORTANT (per external review): this is a **preliminary internal ablation**, not a
+definitive validation. It shows the constitution behaves correctly on nine KNOWN cases
+constructed during development. It does NOT yet demonstrate control of false positives in
+open, adaptive, previously-unseen research. That requires a blinded benchmark with
+development/calibration/evaluation splits, external evaluators, ambiguous cases, and
+repetition across models — see docs. Keep this result, but label it as preliminary.
+
+The reviewer's request: demonstrate, by ablation, that ACERO with its scientific
+constitution lets through FEWER indefensible positive claims than the same pipeline
+without it. This is that (preliminary) evidence.
 
 Each case is a positive result (an effect was 'found') with a KNOWN flaw and a ground
 truth about whether a confirmatory/strong claim is defensible. Two pipelines judge each:
@@ -166,6 +173,9 @@ class BenchmarkReport:
             "FPR_sin_gobernanza": round(self.fpr_without, 3),
             "FPR_con_gobernanza": round(self.fpr_with, 3),
             "reduccion_FP": round(self.fpr_without - self.fpr_with, 3),
+            "estatus": "ablación interna preliminar (9 casos conocidos) — NO es "
+                       "validación definitiva; falta benchmark ciego con splits y "
+                       "evaluadores externos",
         }
 
 

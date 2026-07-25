@@ -2233,6 +2233,35 @@ def science_independence() -> None:
     typer.echo(f"  Caco-2 vs PAMPA : {v2.explain()}  → replicación: {v2.is_replication_capable}")
 
 
+@science_app.command("eva")
+def science_eva() -> None:
+    """EVA vulnerability benchmark: recall of real flaws + specificity on a strong claim."""
+    from ..epistemic.vulnerability_benchmark import evaluate
+
+    rep = evaluate()
+    for k, v in rep.summary().items():
+        typer.echo(f"  {k}: {v}")
+
+
+@science_app.command("ask")
+def science_ask() -> None:
+    """Demo: from a claim → vulnerabilities → fertile questions (offline)."""
+    from ..epistemic.claim_reconstructor import ClaimRecord, EvidenceType, ReplicationStatus
+    from ..epistemic.vulnerability import scan_vulnerabilities
+    from ..questions.question_engine import generate_portfolio
+
+    claim = ClaimRecord(
+        claim_id="caco2", claim_text="polaridad → menor permeabilidad Caco-2",
+        exposure_or_input="polaridad", outcome_or_prediction="permeabilidad",
+        effect_direction="negativa", evidence_type=EvidenceType.OBSERVATIONAL,
+        provenance_roots=("TDC",), replication_status=ReplicationStatus.INTERNAL_ONLY)
+    vs = scan_vulnerabilities(claim)
+    typer.echo(f"vulnerabilidades: {[v.type.value for v in vs[:5]]}")
+    for r in [r for r in generate_portfolio(vs, claim) if r.verdict.passed][:3]:
+        typer.echo(f"  prio={r.priority:.3f} [{r.question.family.value}] "
+                   f"{r.question.question_text[:70]}")
+
+
 @science_app.command("find-replication")
 def science_find_replication(
     phenomenon: str = typer.Argument(..., help="fenómeno a replicar, p. ej. 'permeabilidad Caco-2'"),
