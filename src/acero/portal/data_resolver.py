@@ -246,6 +246,35 @@ def _domain_ok(repo: str, domain: str) -> bool:
     return allowed is None or domain.lower() in allowed
 
 
+# hosts that only serve a specific science domain — a direct URL to one of these
+# is dropped when the project domain doesn't match (anti-contamination for the
+# case where Codex hard-codes e.g. an exoplanetarchive URL in a chemistry plan).
+_HOST_DOMAINS = {
+    "exoplanetarchive.ipac.caltech.edu": ("astronomy", "physics"),
+    "mast.stsci.edu": ("astronomy", "physics"),
+    "irsa.ipac.caltech.edu": ("astronomy", "physics"),
+    "vizier.cds.unistra.fr": ("astronomy", "physics"),
+    "vizier.u-strasbg.fr": ("astronomy", "physics"),
+    "simbad.cds.unistra.fr": ("astronomy", "physics"),
+    "gea.esac.esa.int": ("astronomy", "physics"),
+    "gwosc.org": ("astronomy", "physics"),
+}
+
+
+def _host_domain_ok(url: str, domain: str) -> bool:
+    """A direct URL to a domain-specific host is only allowed for its domains."""
+    if not domain:
+        return True
+    try:
+        host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    except Exception:  # noqa: BLE001
+        return True
+    for h, allowed in _HOST_DOMAINS.items():
+        if host == h or host.endswith("." + h):
+            return domain.lower() in allowed
+    return True
+
+
 def resolve_reference(text: str, *, verify: bool = True, want_data: bool = False,
                       domain: str = "", opener: Any | None = None
                       ) -> list[dict[str, Any]]:
@@ -318,7 +347,8 @@ def enrich_plan_urls(plan: dict[str, Any], *, verify: bool = True,
         acc = str(spec.get("accession") or "")
         url = str(spec.get("url") or "").strip()
         if url.lower().startswith("https://") and not acc:
-            _add(spec)                       # already a direct fetchable file URL
+            if _host_domain_ok(url, domain):
+                _add(spec)                   # already a direct fetchable file URL
             continue
         ref = acc or url or str(spec.get("what") or "")
         resolved = resolve_reference(ref, verify=verify, want_data=want_data,
@@ -328,7 +358,7 @@ def enrich_plan_urls(plan: dict[str, Any], *, verify: bool = True,
             for i, r in enumerate(resolved):
                 # keep the human description on the primary (series-matrix) spec
                 _add({**r, "what": (human if i == 0 and human else r["what"])})
-        elif url.lower().startswith("https://"):
+        elif url.lower().startswith("https://") and _host_domain_ok(url, domain):
             _add(spec)
     if not out:                              # mine the outline for an accession
         for r in resolve_reference(str(plan.get("analysis_outline") or ""),

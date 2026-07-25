@@ -546,6 +546,16 @@ class HypothesisFlow:
         e = self.store.get(exp_id)
         if not e:
             return {"ok": False, "error": "experiment not found"}
+        # STATE HYGIENE: a re-run must never keep the OUTPUT artifacts of a prior
+        # attempt. Otherwise a card can show data/provenance (e.g. a NASA file) that
+        # this run never actually produced — a correctness/honesty bug. Clear them
+        # up front so every path (real runner / factory / plan-only) starts clean.
+        if any(e.get(k) for k in ("provenance", "result", "claim", "code_path",
+                                  "artifacts_dir", "factory", "factory_error")):
+            self.store.update_payload(exp_id, {
+                "provenance": [], "result": None, "claim": "", "code_path": "",
+                "artifacts_dir": "", "factory": None, "factory_error": None})
+            e = self.store.get(exp_id) or e
         runner = self._real_runner(f"{e.get('title','')} {e.get('data_source','')} "
                                    f"{e.get('what','')}")
         from .critic import critique_async

@@ -193,6 +193,29 @@ def test_domain_gating_blocks_geo_for_astronomy():
     assert any(s["repository"] == "GEO" for s in specs2)
 
 
+def test_enrich_drops_direct_astro_url_for_chemistry():
+    # Codex hard-codes a direct NASA URL in a CHEMISTRY plan → must be dropped
+    plan = {"data_urls": [{"url": "https://exoplanetarchive.ipac.caltech.edu/"
+                           "TAP/sync?query=select+*+from+pscomppars&format=csv"}]}
+    out = dr.enrich_plan_urls(plan, verify=False, domain="chemistry")
+    assert out["data_urls"] == []
+    # same URL is kept for an astronomy project
+    out2 = dr.enrich_plan_urls(plan, verify=False, domain="astronomy")
+    assert len(out2["data_urls"]) == 1
+
+
+def test_enrich_keeps_direct_url_when_no_domain():
+    plan = {"data_urls": [{"url": "https://exoplanetarchive.ipac.caltech.edu/TAP/x"}]}
+    out = dr.enrich_plan_urls(plan, verify=False, domain="")
+    assert len(out["data_urls"]) == 1  # blank domain = no gate
+
+
+def test_host_domain_ok_unknown_host_allowed():
+    assert dr._host_domain_ok("https://zenodo.org/record/1/files/x.csv", "chemistry")
+    assert not dr._host_domain_ok(
+        "https://mast.stsci.edu/api/x", "chemistry")
+
+
 def test_generalist_repos_work_in_any_domain(monkeypatch):
     import json as _j
 

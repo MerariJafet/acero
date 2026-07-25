@@ -164,3 +164,29 @@ def test_flow_factory_failure_falls_back_to_plan(session_factory, monkeypatch):
     stored = fl.store.get(e["id"])
     assert stored["status"] == "PLANNED"
     assert stored["factory_error"]["stage"] == "run"   # y queda el porqué
+
+
+def test_rerun_clears_stale_output_artifacts(session_factory, monkeypatch):
+    # a re-run that FAILS must not keep the provenance/result of a prior attempt
+    lg = ResearchLedger(session_factory)
+    p = lg.create_project("Fact3", domain="chemistry")
+    h = HypothesisService(session_factory).generate(p.id, use_ai=False)["created"][0]
+    fl = HypothesisFlow(session_factory)
+    fl.set_status(p.id, h["id"], "APPROVED", "x")
+    e = fl.propose_experiments(p.id, h["id"], use_ai=False)["created"][0]
+    # simulate a prior run that left a NASA file in the record
+    fl.store.update_payload(e["id"], {
+        "provenance": [{"url": "https://exoplanetarchive.ipac.caltech.edu/x",
+                        "filename": "nea_confirmed_planets.csv"}],
+        "result": {"verdict": "supports"}, "claim": "viejo"}, status="COMPLETE")
+
+    import acero.portal.experiment_factory as fx
+    monkeypatch.setattr(fx, "run_generated", lambda *a, **k: {
+        "ok": False, "stage": "fetch", "error": "sin datos de química", "attempts": 2})
+    monkeypatch.setattr(HypothesisFlow, "_plan",
+                        lambda self, ex, use_ai: "plan base offline")
+    fl.run_experiment(p.id, e["id"], use_ai=True)
+    stored = fl.store.get(e["id"])
+    assert stored["provenance"] == []                  # NASA viejo LIMPIADO
+    assert not stored.get("result")
+    assert not stored.get("claim")

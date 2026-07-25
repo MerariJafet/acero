@@ -30,6 +30,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import time
 import urllib.parse
 import urllib.request
@@ -502,6 +503,9 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
     exp_id = exp.get("id") or "exp_unknown"
     workdir = artifacts_root() / exp_id
     data_dir = workdir / "data"
+    # start every run with a clean data dir so stale downloads from a previous
+    # run (possibly a different domain) can never leak into this experiment
+    shutil.rmtree(data_dir, ignore_errors=True)
     workdir.mkdir(parents=True, exist_ok=True)
 
     # 1-2) plan → trusted fetch; on fetch failure RE-PLAN with alternatives (2 rounds)
