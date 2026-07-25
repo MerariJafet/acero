@@ -25,8 +25,11 @@ la URL real. NO pidas datos de sitios fuera de esta lista.
 - **Zenodo** (cualquier campo): DOI `10.5281/zenodo.NNN` o record → archivos.
 - **Figshare**: `10.6084/m9.figshare.NNN` o id → archivos.
 - **Dryad**: `10.5061/dryad.XXXX` → bundle (zip, se extrae solo).
-- **PubChem** (química, SIN llave): `pubchem.ncbi.nlm.nih.gov/rest/pug/compound/
-  name/{nombre}/property/{props}/CSV`.
+- **PubChem** (química, SIN llave): el resolvedor baja una tabla REAL de descriptores
+  fisicoquímicos (MW, XLogP, TPSA, HBD/HBA, rotables, complejidad, fórmula, SMILES)
+  para un conjunto DEFINIDO de compuestos. Pide "descriptores moleculares de PubChem
+  de N compuestos" (N≤400) o da una lista explícita "CIDs 2244, 1983, 3672". Son
+  descriptores CALCULADOS, no ensayos medidos (Caco-2, IC50… NO están aquí).
 - **SILSO** (solar), **GWOSC** (ondas gravitacionales), **arXiv data**.
 Consultas SIEMPRE ACOTADAS (columnas/filas/límite). Nunca un volcado sin filtro.
 

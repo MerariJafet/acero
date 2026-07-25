@@ -216,6 +216,43 @@ def test_host_domain_ok_unknown_host_allowed():
         "https://mast.stsci.edu/api/x", "chemistry")
 
 
+def test_pubchem_property_url_shape():
+    u = dr.pubchem_property_url([2244, 1983])
+    assert u.startswith("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/2244,1983/")
+    assert u.endswith("/CSV") and "MolecularWeight" in u and "XLogP" in u
+
+
+def test_resolve_pubchem_fires_on_hints_default_range():
+    specs = dr._resolve_pubchem("descriptores moleculares de PubChem, 150 compuestos")
+    assert specs and specs[0]["repository"] == "PubChem"
+    assert specs[0]["accession"] == "pubchem-cid-1..150"
+    assert "cid/1,2,3" in specs[0]["url"]
+
+
+def test_resolve_pubchem_explicit_cid_list():
+    specs = dr._resolve_pubchem("propiedades fisicoquímicas de CIDs 2244, 1983, 3672")
+    assert specs and "cid/2244,1983,3672/" in specs[0]["url"]
+    assert specs[0]["accession"] == "pubchem-cids"
+
+
+def test_resolve_pubchem_silent_without_hints():
+    assert dr._resolve_pubchem("un texto cualquiera sin química") == []
+
+
+def test_domain_gating_pubchem_chemistry_yes_astronomy_no():
+    txt = "estudio estructura-propiedad con descriptores moleculares de PubChem"
+    specs = dr.resolve_reference(txt, domain="chemistry", verify=False)
+    assert specs and specs[0]["repository"] == "PubChem"
+    # an astronomy project must NEVER get PubChem chemistry data
+    assert dr.resolve_reference(txt, domain="astronomy", verify=False) == []
+
+
+def test_host_domain_gate_pubchem():
+    u = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/1/property/XLogP/CSV"
+    assert dr._host_domain_ok(u, "chemistry")
+    assert not dr._host_domain_ok(u, "astronomy")
+
+
 def test_generalist_repos_work_in_any_domain(monkeypatch):
     import json as _j
 

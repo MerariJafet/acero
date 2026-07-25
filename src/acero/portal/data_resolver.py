@@ -30,6 +30,19 @@ _FIGSHARE_RE = re.compile(r"(?:figshare\.com/articles/[\w/]*?/|figshare[:\s]+"
 _DRYAD_RE = re.compile(r"(?:datadryad\.org/[\w/]*|dryad[:\s]+|10\.5061/dryad\.)"
                        r"([\w.]+)", re.I)
 
+# PubChem PUG-REST — free, no key. A chemistry structure-property study fetches a
+# reproducible table of physicochemical descriptors for a DEFINED set of compounds.
+_PUBCHEM_HINT = re.compile(
+    r"\bpubchem\b|pug[-\s]?rest|\bcids?\b|drug-?like|lipinski|"
+    r"molecular (?:propert|descriptor|weight)|\bxlogp\b|\btpsa\b|\blogp\b|"
+    r"h-?bond|structure[-\s]property|physicochem|fisicoquím|descriptor(?:es)?\s+molecular",
+    re.I)
+_CID_RE = re.compile(r"\bcids?[:\s]*([\d,\s]+)", re.I)
+# descriptors present for the vast majority of small molecules
+_PUBCHEM_PROPS = ("MolecularWeight,XLogP,TPSA,HBondDonorCount,HBondAcceptorCount,"
+                  "RotatableBondCount,HeavyAtomCount,Complexity,Charge,"
+                  "MolecularFormula,CanonicalSMILES")
+
 
 def _get_json(url: str, opener: Any | None, timeout: float = 25.0) -> Any:
     req = urllib.request.Request(url, headers={"User-Agent": _UA,
@@ -109,6 +122,46 @@ def zenodo_files(record_id: str, *, timeout: float = 25.0,
                         "what": f"Zenodo {record_id}: {name}"})
     out.sort(key=lambda f: not f["is_data"])
     return out
+
+
+def pubchem_property_url(cids: list[int]) -> str:
+    """PUG-REST URL for a physicochemical-descriptor CSV over an explicit CID list."""
+    ids = ",".join(str(c) for c in cids)
+    return (f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{ids}/property/"
+            f"{_PUBCHEM_PROPS}/CSV")
+
+
+def _resolve_pubchem(text: str, *, n_default: int = 250) -> list[dict[str, Any]]:
+    """Chemistry structure-property data from PubChem — real, free, reproducible.
+
+    Either an explicit CID list in the text, or a DEFINED sample (CIDs 1..N) so the
+    dataset is deterministic and re-fetchable. PUG-REST GET caps at a few hundred
+    CIDs, so N is bounded. Honest scope: these are computed descriptors (MW, XLogP,
+    TPSA, H-bond counts, …), NOT measured bioassay endpoints.
+    """
+    t = text or ""
+    if not _PUBCHEM_HINT.search(t):
+        return []
+    cids: list[int] = []
+    m = _CID_RE.search(t)
+    if m:
+        cids = [int(x) for x in re.findall(r"\d+", m.group(1))][:400]
+    contiguous = not cids
+    if not cids:
+        n = n_default
+        mnum = re.search(r"(\d{2,4})\s*(?:compuestos|mol[eé]culas|compounds|"
+                         r"molecules|cids?)", t, re.I)
+        if mnum:
+            n = max(20, min(400, int(mnum.group(1))))
+        cids = list(range(1, n + 1))
+    acc = f"pubchem-cid-1..{cids[-1]}" if contiguous else "pubchem-cids"
+    return [{"url": pubchem_property_url(cids),
+             "filename": "pubchem_properties.csv", "accession": acc,
+             "repository": "PubChem", "is_data": True,
+             "what": (f"PubChem PUG-REST: descriptores fisicoquímicos (MW, XLogP, TPSA, "
+                      f"HBD/HBA, rotables, complejidad, fórmula, SMILES) de {len(cids)} "
+                      f"compuestos — descriptores calculados, no ensayos medidos")}]
+
 
 # NASA Exoplanet Archive TAP: build a real CSV query URL from a table reference
 _NEA_BASE = "https://exoplanetarchive.ipac.caltech.edu/TAP/sync"
@@ -235,6 +288,8 @@ def _url_ok(url: str, *, timeout: float = 25.0, opener: Any | None = None) -> bo
 _DOMAIN_REPOS = {
     "nea": ("astronomy", "physics"),
     "geo": ("genetics", "genomics", "biology", "medicine", "chemistry"),
+    "pubchem": ("chemistry", "biology", "medicine", "genetics", "genomics",
+                "biochemistry", "pharmacology"),
 }
 
 
@@ -258,6 +313,8 @@ _HOST_DOMAINS = {
     "simbad.cds.unistra.fr": ("astronomy", "physics"),
     "gea.esac.esa.int": ("astronomy", "physics"),
     "gwosc.org": ("astronomy", "physics"),
+    "pubchem.ncbi.nlm.nih.gov": ("chemistry", "biology", "medicine", "genetics",
+                                 "genomics", "biochemistry", "pharmacology"),
 }
 
 
@@ -306,6 +363,10 @@ def resolve_reference(text: str, *, verify: bool = True, want_data: bool = False
         nea = _resolve_nea(text)
         if nea:
             return nea
+    if _domain_ok("pubchem", domain):
+        pc = _resolve_pubchem(text)
+        if pc:
+            return pc
     m = _GEO_RE.search(text or "") if _domain_ok("geo", domain) else None
     if not m:
         return []
