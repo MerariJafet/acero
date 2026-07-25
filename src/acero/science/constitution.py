@@ -130,10 +130,13 @@ def govern(gi: GovernanceInput) -> GovernanceReport:
         reasons.append(f"{len(overclaims)} sobreafirmación(es) en el borrador")
 
     # 3) exploration debt without confirmation
+    high_debt = False
     if gi.search_ledger is not None:
         debt = gi.search_ledger.debt_level()
         if debt in ("alta", "severa") and regime is Regime.DISCOVERY:
-            reasons.append(f"deuda de exploración {debt} sin confirmación congelada")
+            high_debt = True
+            reasons.append(f"deuda de exploración {debt} sin confirmación congelada "
+                           f"→ solo exploratorio")
 
     # 4) scientific state (bounded by ceiling and by panel blocks)
     state = acero_max_state(gi.state_evidence)
@@ -151,7 +154,7 @@ def govern(gi: GovernanceInput) -> GovernanceReport:
 
     # 6) advancement decision
     advance = (not overclaims and not panel_blocked and not crit_missing
-               and profile.has_null_test)
+               and profile.has_null_test and not high_debt)
     if not profile.has_null_test:
         reasons.append("sin prueba nula → degradado, no avanza")
     if advance and not reasons:

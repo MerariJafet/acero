@@ -2198,6 +2198,41 @@ def science_states() -> None:
         typer.echo(f"  {int(s):2d}  {s.name}{mark}")
 
 
+@science_app.command("integrity")
+def science_integrity() -> None:
+    """Ablation: false positives WITHOUT vs WITH the scientific constitution."""
+    from ..science.integrity_benchmark import evaluate
+
+    rep = evaluate()
+    for k, v in rep.summary().items():
+        typer.echo(f"  {k}: {v}")
+    typer.secho(f"\nla constitución redujo la tasa de falsos positivos de "
+                f"{rep.fpr_without:.0%} a {rep.fpr_with:.0%} sin bloquear casos "
+                f"defendibles.", fg=typer.colors.GREEN)
+
+
+@science_app.command("independence")
+def science_independence() -> None:
+    """Show that a holdout split is never counted as independent replication."""
+    from ..science.independence_graph import (
+        DatasetProvenance,
+        IndependenceGraph,
+    )
+
+    g = IndependenceGraph()
+    g.add(DatasetProvenance("caco2_full", study_id="caco2_wang", provenance_root="TDC"))
+    g.add(DatasetProvenance("caco2_holdout", is_partition_of="caco2_full",
+                            study_id="caco2_wang", provenance_root="TDC"))
+    g.add(DatasetProvenance("pampa", assay_source="pampa_ncats", cohort="B",
+                            instrument="PAMPA", laboratory="lab2"))
+    g.add(DatasetProvenance("caco2_lab", assay_source="caco2_wang", cohort="A",
+                            instrument="Caco-2", laboratory="lab1"))
+    v1 = g.independence("caco2_full", "caco2_holdout")
+    v2 = g.independence("caco2_lab", "pampa")
+    typer.echo(f"  holdout vs full : {v1.explain()}  → replicación: {v1.is_replication_capable}")
+    typer.echo(f"  Caco-2 vs PAMPA : {v2.explain()}  → replicación: {v2.is_replication_capable}")
+
+
 @science_app.command("demo")
 def science_demo() -> None:
     """Govern a toy result through the constitution (offline, deterministic)."""
