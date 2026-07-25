@@ -489,29 +489,30 @@ caption { text-align: left; color: var(--muted); padding-bottom: .4rem; }
 .nov-detail { margin: .3rem 0 .1rem; }
 .act.small { font-size: .78rem; padding: .2rem .55rem; }
 
-/* ---- process map / stepper (dónde vas en el proceso) -------------------- */
+/* ---- process map (dónde vas) — GRID robusto, clases sin colisión -------- */
 .process-map { margin: .6rem 0 1rem; }
-.stepper { display: flex; align-items: stretch; gap: .25rem; flex-wrap: wrap; }
-.step {
-  display: flex; flex-direction: column; align-items: center; gap: .15rem;
-  min-width: 96px; padding: .5rem .55rem; cursor: pointer;
+.pmap { display: grid; grid-template-columns: repeat(6, 1fr); gap: .4rem; }
+.pstep {
+  display: flex; flex-direction: column; align-items: center; gap: .12rem;
+  padding: .5rem .35rem; cursor: pointer; text-align: center;
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-  color: var(--muted); position: relative; transition: border-color .15s, color .15s;
+  color: var(--muted); transition: border-color .15s, color .15s, transform .05s;
 }
-.step:hover { border-color: var(--accent); color: var(--fg); }
-.step .step-ico { font-size: 1.15rem; }
-.step .step-name { font-size: .72rem; text-align: center; line-height: 1.1; }
-.step .step-count { font-size: .78rem; font-weight: 700; }
-.step .step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.step.done { color: var(--fg); border-color: rgba(46,160,67,.5); }
-.step.done .step-dot { background: var(--ok); }
-.step.active { color: var(--fg); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-.step.active .step-dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
-.step.pending { opacity: .7; }
-.step-arrow { align-self: center; color: #37414f; font-size: 1rem; padding: 0 .1rem; }
-.step-arrow.on { color: var(--ok); }
+.pstep:hover { border-color: var(--accent); color: var(--fg); transform: translateY(-1px); }
+.pstep .ps-ico { font-size: 1.2rem; filter: grayscale(1) opacity(.55); }
+.pstep .ps-name { font-size: .72rem; line-height: 1.05; }
+.pstep .ps-count { font-size: 1rem; font-weight: 700; }
+.pstep .ps-state { font-size: .66rem; }
+.pstep.done { color: var(--fg); border-color: rgba(46,160,67,.45); }
+.pstep.done .ps-ico { filter: none; }
+.pstep.done .ps-state { color: var(--ok); }
+.pstep.active { color: var(--fg); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.pstep.active .ps-ico { filter: none; }
+.pstep.active .ps-state { color: var(--accent); font-weight: 700; }
+.pstep.pending { opacity: .65; }
 .process-guide { margin: .5rem 0 0; font-size: .82rem; color: var(--muted); }
 .process-guide b { color: var(--fg); }
+@media (max-width: 720px) { .pmap { grid-template-columns: repeat(3, 1fr); } }
 
 /* ---- launch bar (todos los flujos arrancan aquí) ----------------------- */
 .launch-bar {
@@ -581,3 +582,15 @@ button.hyp-step:hover { border-color: var(--accent); color: var(--fg); }
 .hyp-step.active .hs-ic { filter: none; }
 .hs-arrow { color: #37414f; font-size: .9rem; }
 .hs-arrow.on { color: var(--ok); }
+
+/* ---- launch: un primario grande + avanzado colapsado -------------------- */
+.launch-primary { display: flex; flex-direction: column; gap: .2rem; margin-bottom: .5rem; }
+.launch-primary .launch-btn.primary { padding: .8rem 1rem; font-size: 1rem; }
+.launch-primary .launch-btn.primary .lb-ico { font-size: 1.7rem; }
+.launch-primary .launch-btn.primary .lb-txt b { font-size: 1.02rem; }
+.launch-adv { margin: .3rem 0; }
+.launch-adv > summary { cursor: pointer; font-size: .82rem; color: var(--muted);
+  padding: .35rem 0; list-style: none; user-select: none; }
+.launch-adv > summary:hover { color: var(--accent); }
+.launch-adv[open] > summary { color: var(--fg); }
+.launch-adv .launch-grid { margin-top: .5rem; }

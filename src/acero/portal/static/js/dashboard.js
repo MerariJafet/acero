@@ -125,28 +125,28 @@ export async function renderProjectDash(view, pid, cb) {
   const stepState = (i) => (i < currentIdx ? "done" : i === currentIdx ? "active" : "pending");
   const stepper = phases.map((f, i) => {
     const cls = stepState(i);
-    const arrow = i < phases.length - 1
-      ? `<span class="step-arrow ${i < currentIdx ? "on" : ""}" aria-hidden="true">→</span>` : "";
-    return `<button class="step ${cls}" data-step="${esc(f.key)}"
+    return `<button class="pstep ${cls}" data-pstep="${esc(f.key)}"
         aria-label="Fase ${esc(f.title)} (${cls})">
-        <span class="step-ico">${esc(f.icon)}</span>
-        <span class="step-name">${esc(f.title.replace("Investigación de ", ""))}</span>
-        <span class="step-count">${f.count}</span>
-        <span class="step-dot" aria-hidden="true"></span>
-      </button>${arrow}`;
+        <span class="ps-ico">${esc(f.icon)}</span>
+        <span class="ps-name">${esc(f.title.replace("Investigación de ", ""))}</span>
+        <span class="ps-count">${f.count}</span>
+        <span class="ps-state ps-${cls}">${cls === "done" ? "✓" : cls === "active" ? "▶ aquí" : "•"}</span>
+      </button>`;
   }).join("");
   const cur = phases[currentIdx];
   const guide = cur
     ? `Vas en <b>${esc(cur.icon)} ${esc(cur.title)}</b>. Siguiente paso natural: correr su flujo o revisar sus tarjetas.`
     : "Flujo completo: las 6 fases tienen trabajo. Revisa los dossiers o lanza otra misión.";
 
-  // --- elemental launch bar: EVERY flow starts here -------------------------
-  const launchBtns = LAUNCH.map((a) =>
+  // --- launch bar: ONE big autonomous flow + advanced individual steps ------
+  const mkBtn = (a) =>
     `<button class="launch-btn${a.primary ? " primary" : ""}" data-ep="${esc(a.ep)}"
         data-label="${esc(a.label)}" title="${esc(a.desc)}">
        <span class="lb-ico">${esc(a.icon)}</span>
        <span class="lb-txt"><b>${esc(a.label)}</b><small>${esc(a.desc)}</small></span>
-     </button>`).join("");
+     </button>`;
+  const primaryBtn = mkBtn(LAUNCH.find((a) => a.primary));
+  const advBtns = LAUNCH.filter((a) => !a.primary).map(mkBtn).join("");
 
   // --- connected phase cards (feeds-from / feeds-into + primary action) ------
   const phaseRows = phases.map((f, i) => {
@@ -202,15 +202,22 @@ export async function renderProjectDash(view, pid, cb) {
      </div>
 
      <section class="process-map" aria-label="Mapa del proceso">
-       <div class="stepper">${stepper}</div>
+       <div class="pmap">${stepper}</div>
        <p class="process-guide">${guide}</p>
      </section>
 
      <section class="launch-bar" aria-label="Arrancar la investigación">
        <div class="launch-head"><b>▶ Arranca la investigación</b>
-         <span class="tag">todo el ciclo se lanza desde aquí</span>
          <span class="launch-status" id="launch-status" aria-live="polite"></span></div>
-       <div class="launch-grid">${launchBtns}</div>
+       <div class="launch-primary">
+         ${primaryBtn}
+         <p class="tag">Un solo botón: por cada hipótesis aprobada corre investigar →
+           proponer experimentos → ejecutar → sintetizar → rigor. Absorbe los pasos de abajo.</p>
+       </div>
+       <details class="launch-adv">
+         <summary>⚙️ Pasos individuales (avanzado) — corre solo una parte del ciclo</summary>
+         <div class="launch-grid">${advBtns}</div>
+       </details>
        <div class="launch-eva">
          <button class="act" id="epistemic-run"
            title="Convierte tus hipótesis en preguntas fértiles priorizadas + prueba discriminante">
@@ -309,8 +316,8 @@ export async function renderProjectDash(view, pid, cb) {
       runFlow(b, b.dataset.run, s || statusEl);
     }));
   // stepper → open the phase dashboard
-  view.querySelectorAll(".step").forEach((b) =>
-    b.addEventListener("click", () => cb.openPhase(pid, b.dataset.step)));
+  view.querySelectorAll(".pstep").forEach((b) =>
+    b.addEventListener("click", () => cb.openPhase(pid, b.dataset.pstep)));
 
   // minimize/expand
   view.querySelectorAll("[data-toggle]").forEach((b) =>
