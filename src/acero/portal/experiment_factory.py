@@ -365,7 +365,12 @@ def default_plan(exp: dict[str, Any], hyp: dict[str, Any], domain: str,
         "reformula el análisis con datos PÚBLICOS PROCESADOS que sí bajen (p.ej. la "
         "matriz de betas del propio GEO) o como simulación/matemático autocontenido. "
         "accession vacío si no aplica; url vacío si solo das accession. NO inventes "
-        "URLs. analysis_outline: 3-6 pasos con controles nulos.",
+        "URLs. Si UNA sola tabla pública ya contiene TODAS las variables que "
+        "necesitas (p.ej. el KOI DR25 del NASA Exoplanet Archive ya trae koi_smet "
+        "[Fe/H], koi_prad, koi_period, koi_steff en la MISMA tabla), pide UN solo "
+        "dataset con esas columnas; NO agregues una segunda tabla sólo para traer "
+        "columnas que ya existen (un join innecesario pierde filas). "
+        "analysis_outline: 3-6 pasos con controles nulos.",
         PLAN_SCHEMA, temperature=0.2)
     return out
 
@@ -407,12 +412,11 @@ _SECOND_IMPL = (
     "para poder comparar. No copies la implementación típica.")
 
 
-def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
-                    data_files: list[dict[str, Any]],
-                    previews: dict[str, str],
-                    feedback: str | None = None) -> str:
-    prov = _codex()
-
+def build_codegen_prompt(exp: dict[str, Any], hyp: dict[str, Any],
+                         data_files: list[dict[str, Any]],
+                         previews: dict[str, str],
+                         feedback: str | None = None) -> str:
+    """Assemble the codegen prompt (pure, no network) so it can be unit-tested."""
     def _fdesc(d: dict[str, Any]) -> str:
         name = d.get("decompressed_to") or d["filename"]
         head = previews.get(name, "")[:300].replace("\n", "\n  ")
@@ -434,13 +438,26 @@ def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
     files_txt = "\n".join(_fdesc(d) for d in data_files) \
         or "(sin archivos: análisis autocontenido)"
     multi = len(data_files) >= 2
+    # Anti-antipattern: prefer columns that already live in ONE table; only join when a
+    # variable is genuinely absent, and then by a STABLE ID (never by object name), with
+    # a coverage guardrail that refuses a biased matched subset. This is the fix for the
+    # DR25 cross-match defect (koi_smet was in-table; the name-join kept 0.56% of rows).
     join_hint = (
-        "\nCRUCE DE CATÁLOGOS (hay ≥2 datasets): el descubrimiento vive en UNIR "
-        "datos que nadie combinó. Une los archivos por una CLAVE común (p.ej. "
-        "'hostname'/nombre de la estrella anfitriona, o un ID compartido; "
-        "normaliza mayúsculas/espacios). Reporta cuántas filas casaron y cuántas "
-        "quedaron sin cruzar. La correlación/efecto que buscas SOLO aparece tras "
-        "el join; contra el nulo, permuta la clave para romper la asociación.\n"
+        "\nINTEGRACIÓN DE DATOS (hay ≥2 datasets) — evita el antipatrón de cross-match:\n"
+        "1) PRIMERO revisa el ESQUEMA REAL de cada tabla. Si TODAS las variables que "
+        "necesitas ya están en UNA sola tabla, úsala y NO hagas join (un join "
+        "innecesario tira filas). Añade una segunda tabla SOLO si aporta una variable "
+        "que no existe en la primera.\n"
+        "2) Si el join es imprescindible, une por un IDENTIFICADOR ESTABLE (p.ej. kepid, "
+        "kepoi_name, un ID de catálogo compartido), NUNCA por nombre de objeto salvo "
+        "que no exista ningún ID; normaliza formato.\n"
+        "3) GUARDARRAÍL DE COBERTURA: reporta filas_casadas, filas_sin_cruzar y la "
+        "retención en metrics. Si la retención < 0.60 o quedan menos filas que el "
+        "tamaño mínimo del análisis, NO analices el subconjunto casado (está sesgado): "
+        "verdict='inconclusive' y en verdict_reason di EXPLÍCITAMENTE 'posible defecto "
+        "de cross-match (clave/formato), no ausencia de señal', e intenta la clave "
+        "correcta.\n"
+        "4) Contra el nulo, permuta la clave para romper la asociación.\n"
         if multi else "")
     geo = any("series_matrix" in (d.get("filename") or "") for d in data_files)
     geo_hint = (
@@ -457,7 +474,7 @@ def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
     fb = f"\n\nEL INTENTO ANTERIOR FALLÓ. Corrige la causa:\n{feedback[:1500]}\n" \
         if feedback else ""
     from .playbook import brief
-    prompt = (
+    return (
         brief(900) + "\n\n---\n\n"
         f"Escribe el script de análisis para este EXPERIMENTO.\n"
         f"Hipótesis: «{hyp.get('title','')}»\n"
@@ -465,6 +482,14 @@ def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
         f"Método: {exp.get('how','')}\nControles: {exp.get('controls','')}\n"
         f"Discriminador: {exp.get('discriminator','')}\n\n"
         f"ARCHIVOS DE DATOS:\n{files_txt}\n{join_hint}{geo_hint}\n{_CODE_RULES}{fb}")
+
+
+def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
+                    data_files: list[dict[str, Any]],
+                    previews: dict[str, str],
+                    feedback: str | None = None) -> str:
+    prov = _codex()
+    prompt = build_codegen_prompt(exp, hyp, data_files, previews, feedback)
     r = prov.complete(_sanitize(prompt), temperature=0.2, max_tokens=4000)
     code = r.text.strip()
     # strip accidental markdown fences
