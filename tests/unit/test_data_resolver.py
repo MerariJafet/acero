@@ -253,6 +253,58 @@ def test_host_domain_gate_pubchem():
     assert not dr._host_domain_ok(u, "astronomy")
 
 
+def test_chembl_activity_url_shape():
+    u = dr.chembl_activity_url("CHEMBL240", "IC50")
+    assert u.startswith("https://www.ebi.ac.uk/chembl/api/data/activity.json?")
+    assert "target_chembl_id=CHEMBL240" in u and "standard_type=IC50" in u
+
+
+def test_resolve_chembl_explicit_target_id_and_type():
+    specs = dr._resolve_chembl("bioactividades Ki para la diana CHEMBL204 (trombina)")
+    assert specs and specs[0]["repository"] == "ChEMBL"
+    assert "target_chembl_id=CHEMBL204" in specs[0]["url"]
+    assert "standard_type=Ki" in specs[0]["url"]
+    assert specs[0]["filename"] == "chembl_CHEMBL204_Ki.json"
+
+
+def test_resolve_chembl_molecule_when_text_says_so():
+    specs = dr._resolve_chembl("IC50 de la molécula CHEMBL25")
+    assert "molecule_chembl_id=CHEMBL25" in specs[0]["url"]
+
+
+def test_resolve_chembl_target_name_search(monkeypatch):
+    import json as _j
+
+    class Resp:
+        def read(self):
+            return _j.dumps({"targets": [
+                {"target_chembl_id": "CHEMBL9999", "target_type": "SINGLE PROTEIN"}]}).encode()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(dr.urllib.request, "urlopen", lambda req, timeout=0: Resp())
+    specs = dr._resolve_chembl("inhibidor IC50 target: EGFR")
+    assert specs and "target_chembl_id=CHEMBL9999" in specs[0]["url"]
+
+
+def test_resolve_chembl_silent_without_hint_or_id():
+    assert dr._resolve_chembl("un texto sin farmacología") == []
+
+
+def test_domain_gating_chembl_chemistry_yes_astronomy_no():
+    txt = "IC50 medidas para la diana CHEMBL240"
+    specs = dr.resolve_reference(txt, domain="chemistry", verify=False)
+    assert specs and specs[0]["repository"] == "ChEMBL"
+    assert dr.resolve_reference(txt, domain="astronomy", verify=False) == []
+
+
+def test_chembl_does_not_shadow_pubchem_descriptors():
+    # a pure descriptor request must still go to PubChem, not ChEMBL
+    specs = dr.resolve_reference(
+        "descriptores moleculares de PubChem de 100 compuestos",
+        domain="chemistry", verify=False)
+    assert specs and specs[0]["repository"] == "PubChem"
+
+
 def test_generalist_repos_work_in_any_domain(monkeypatch):
     import json as _j
 

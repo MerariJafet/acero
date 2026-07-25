@@ -30,6 +30,11 @@ la URL real. NO pidas datos de sitios fuera de esta lista.
   para un conjunto DEFINIDO de compuestos. Pide "descriptores moleculares de PubChem
   de N compuestos" (N≤400) o da una lista explícita "CIDs 2244, 1983, 3672". Son
   descriptores CALCULADOS, no ensayos medidos (Caco-2, IC50… NO están aquí).
+- **ChEMBL** (química/farmacología, SIN llave): bioactividades MEDIDAS (IC50, Ki, EC50,
+  Kd) con estructura — lo que PubChem no da. Da una DIANA por id ("target CHEMBL240")
+  o por nombre ("target: EGFR"), o una molécula ("molécula CHEMBL25"), y el tipo
+  (IC50/Ki/…). Baja hasta 1000 actividades reales en JSON (canonical_smiles,
+  standard_value, standard_units, pchembl_value). Úsalo para estructura-ACTIVIDAD.
 - **SILSO** (solar), **GWOSC** (ondas gravitacionales), **arXiv data**.
 Consultas SIEMPRE ACOTADAS (columnas/filas/límite). Nunca un volcado sin filtro.
 

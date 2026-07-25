@@ -43,6 +43,83 @@ _PUBCHEM_PROPS = ("MolecularWeight,XLogP,TPSA,HBondDonorCount,HBondAcceptorCount
                   "RotatableBondCount,HeavyAtomCount,Complexity,Charge,"
                   "MolecularFormula,CanonicalSMILES")
 
+# ChEMBL REST (EBI) — free, no key. MEASURED bioactivities (IC50/Ki/EC50/Kd) with
+# structures: the endpoint PubChem can't give. This is structure-ACTIVITY, real
+# assay data, not computed descriptors.
+_CHEMBL_BASE = "https://www.ebi.ac.uk/chembl/api/data"
+_CHEMBL_ID_RE = re.compile(r"\b(CHEMBL\d+)\b", re.I)
+_CHEMBL_HINT = re.compile(
+    r"\bchembl\b|\bic50\b|\bki\b|\bec50\b|\bkd\b|bioact|bioassay|bioensayo|"
+    r"potency|potencia|binding affinity|afinidad|structure[-\s]activity|\bsar\b|"
+    r"pchembl|dose[-\s]response|dosis[-\s]respuesta|inhibitor|inhibidor", re.I)
+_CHEMBL_STD_TYPES = ("IC50", "Ki", "EC50", "Kd", "Potency")
+
+
+def chembl_activity_url(chembl_id: str, standard_type: str = "IC50",
+                        field: str = "target_chembl_id", limit: int = 1000) -> str:
+    """PUG-style URL for MEASURED activities of a target/molecule as JSON."""
+    return (f"{_CHEMBL_BASE}/activity.json?{field}={chembl_id}"
+            f"&standard_type={standard_type}&limit={limit}")
+
+
+def chembl_target_search(name: str, *, opener: Any | None = None) -> str:
+    """Resolve a target NAME (e.g. 'EGFR') to a CHEMBL target id, preferring a
+    single protein (search[0] can be a protein complex)."""
+    if not name:
+        return ""
+    url = f"{_CHEMBL_BASE}/target/search.json?q={urllib.parse.quote(name)}&limit=8"
+    try:
+        d = _get_json(url, opener)
+    except Exception:  # noqa: BLE001
+        return ""
+    targs = d.get("targets") or []
+    for tt in targs:
+        if tt.get("target_type") == "SINGLE PROTEIN":
+            return str(tt.get("target_chembl_id") or "")
+    return str((targs[0].get("target_chembl_id") if targs else "") or "")
+
+
+def _detect_std_type(t: str) -> str:
+    for s in _CHEMBL_STD_TYPES:
+        if re.search(rf"\b{s}\b", t, re.I):
+            return s
+    return "IC50"
+
+
+def _resolve_chembl(text: str, *, opener: Any | None = None) -> list[dict[str, Any]]:
+    """Chemistry/pharmacology MEASURED bioactivity from ChEMBL — real, free.
+
+    Needs an explicit CHEMBL id (target by default; molecule if the text says so)
+    or a named target we can search. Otherwise silent (no arbitrary dump).
+    """
+    t = text or ""
+    if not (_CHEMBL_HINT.search(t) or _CHEMBL_ID_RE.search(t)):
+        return []
+    std = _detect_std_type(t)
+    idm = _CHEMBL_ID_RE.search(t)
+    if idm:
+        cid = idm.group(1).upper()
+        pre = t[max(0, idm.start() - 25):idm.start()].lower()
+        if any(k in pre for k in ("molecul", "compound", "molécul", "fármaco",
+                                  "ligand", "drug")):
+            field, label = "molecule_chembl_id", f"molécula {cid}"
+        else:
+            field, label = "target_chembl_id", f"diana {cid}"
+        target = cid
+    else:
+        nm = re.search(r"(?:target|diana|prote[ií]na|receptor|enzima)[:\s]+"
+                       r"([A-Za-z0-9][A-Za-z0-9\- ]{1,38})", t, re.I)
+        target = chembl_target_search(nm.group(1).strip(), opener=opener) if nm else ""
+        field, label = "target_chembl_id", f"diana {target}"
+        if not target:
+            return []
+    return [{"url": chembl_activity_url(target, std, field),
+             "filename": f"chembl_{target}_{std}.json", "accession": target,
+             "repository": "ChEMBL", "is_data": True,
+             "what": (f"ChEMBL: actividades {std} MEDIDAS para {label} (canonical_smiles, "
+                      f"standard_value/units, pchembl_value, molecule_chembl_id) — "
+                      f"bioensayos reales, ≤1000 registros (JSON)")}]
+
 
 def _get_json(url: str, opener: Any | None, timeout: float = 25.0) -> Any:
     req = urllib.request.Request(url, headers={"User-Agent": _UA,
@@ -290,6 +367,7 @@ _DOMAIN_REPOS = {
     "geo": ("genetics", "genomics", "biology", "medicine", "chemistry"),
     "pubchem": ("chemistry", "biology", "medicine", "genetics", "genomics",
                 "biochemistry", "pharmacology"),
+    "chembl": ("chemistry", "biology", "medicine", "biochemistry", "pharmacology"),
 }
 
 
@@ -363,6 +441,10 @@ def resolve_reference(text: str, *, verify: bool = True, want_data: bool = False
         nea = _resolve_nea(text)
         if nea:
             return nea
+    if _domain_ok("chembl", domain):
+        cb = _resolve_chembl(text, opener=opener)
+        if cb:
+            return cb
     if _domain_ok("pubchem", domain):
         pc = _resolve_pubchem(text)
         if pc:

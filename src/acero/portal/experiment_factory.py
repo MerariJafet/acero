@@ -266,13 +266,49 @@ def _head_preview(path: Path, chars: int = 500) -> str:
         return "(binario)"
 
 
+def _json_schema(path: Path) -> dict[str, Any]:
+    """If the file is a JSON record-array, return its record keys + count.
+
+    Recognizes a top-level list of objects, or a dict wrapping the records in a
+    list value (ChEMBL: {"activities": [...]}, Zenodo: {"files": [...]}). Reads a
+    bounded prefix so a huge file doesn't blow up memory.
+    """
+    try:
+        with open(path, "rb") as f:
+            head = f.read(64)
+        if head.strip()[:1] not in (b"{", b"["):
+            return {}
+        with open(path, encoding="utf-8", errors="replace") as f:
+            data = json.load(f)
+    except Exception:  # noqa: BLE001
+        return {}
+    records: Any = None
+    if isinstance(data, list):
+        records = data
+    elif isinstance(data, dict):
+        # the biggest list-of-objects value is the record set
+        best: list[Any] = []
+        for v in data.values():
+            if isinstance(v, list) and v and isinstance(v[0], dict) and len(v) >= len(best):
+                best = v
+        records = best
+    if not isinstance(records, list) or not records or not isinstance(records[0], dict):
+        return {}
+    cols = list(records[0].keys())[:60]
+    return {"columns": cols, "n_rows": len(records), "delimiter": "json"}
+
+
 def _schema(path: Path) -> dict[str, Any]:
     """Read a CSV/TSV/table's REAL columns + row count so codegen isn't blind.
 
     Feeding Codex the actual column names/count (not a 400-char blob) is what
     turns 'column not found' failures into working analyses. Skips GEO-style '!'
-    comment lines. Returns {columns, n_rows, delimiter} or {} if not tabular.
+    comment lines. Handles JSON record-arrays (e.g. ChEMBL {"activities":[…]}) too.
+    Returns {columns, n_rows, delimiter?} or {} if not introspectable.
     """
+    js = _json_schema(path)
+    if js:
+        return js
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
             header = ""
@@ -382,8 +418,12 @@ def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
         # REAL schema (columns + row count) beats a blind text preview
         if d.get("columns"):
             cols = ", ".join(d["columns"][:40])
-            schema = (f"\n  COLUMNAS REALES ({len(d['columns'])}, {d.get('n_rows','?')} "
-                      f"filas): {cols}\n  Usa EXACTAMENTE estos nombres de columna.")
+            kind = ("ARRAY JSON de registros (cárgalo con json.load; los campos van "
+                    "en cada objeto de la lista)" if d.get("fmt") == "json"
+                    else "tabla")
+            schema = (f"\n  ESQUEMA REAL — {kind} ({len(d['columns'])} campos, "
+                      f"{d.get('n_rows','?')} registros): {cols}\n  Usa EXACTAMENTE "
+                      f"estos nombres.")
         else:
             schema = ""
         return (f"- ./data/{name} ({d['bytes']} bytes, sha256 {d['sha256'][:12]}…"
@@ -561,6 +601,7 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
         sch = _schema(data_dir / readable)   # REAL columns + row count for codegen
         if sch:
             d["columns"], d["n_rows"] = sch["columns"], sch["n_rows"]
+            d["fmt"] = sch.get("delimiter")
 
     # 3-4) codegen + sandboxed run + repair loop
     runner = SubprocessRunner()

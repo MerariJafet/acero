@@ -221,3 +221,22 @@ def test_schema_reads_real_columns(tmp_path):
     p2.write_text('!Series_title\t"x"\nID\tval1\tval2\nA\t1\t2\n')
     s2 = _schema(p2)
     assert s2["columns"] == ["ID", "val1", "val2"] and s2["delimiter"] == "\t"
+
+
+def test_schema_introspects_json_record_array(tmp_path):
+    from acero.portal.experiment_factory import _schema
+    # ChEMBL-style: records wrapped in a list value
+    p = tmp_path / "chembl.json"
+    p.write_text('{"page_meta": {"total_count": 2}, "activities": ['
+                 '{"molecule_chembl_id": "CHEMBL1", "standard_value": 14.0, '
+                 '"canonical_smiles": "CCO"}, '
+                 '{"molecule_chembl_id": "CHEMBL2", "standard_value": 3.0, '
+                 '"canonical_smiles": "CCN"}]}')
+    s = _schema(p)
+    assert s["delimiter"] == "json" and s["n_rows"] == 2
+    assert "molecule_chembl_id" in s["columns"] and "canonical_smiles" in s["columns"]
+    # a top-level list of objects also works
+    p2 = tmp_path / "arr.json"
+    p2.write_text('[{"a": 1, "b": 2}, {"a": 3, "b": 4}, {"a": 5, "b": 6}]')
+    s2 = _schema(p2)
+    assert s2["columns"] == ["a", "b"] and s2["n_rows"] == 3
