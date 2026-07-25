@@ -21,10 +21,34 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
-from enum import Enum
-from typing import Any
+from enum import Enum, IntEnum
+from typing import Any, Protocol
 
 from ..core.clock import now_iso
+
+
+class SealLevel(IntEnum):
+    """A hash proves immutability, not anteriority. Higher levels prove the protocol
+    existed BEFORE unblinding to progressively less-trusting audiences."""
+    LOCAL_FROZEN = 0             # internal hash + timestamp
+    EXTERNALLY_TIMESTAMPED = 1   # sealed by an external immutable service
+    PUBLIC_PREREGISTRATION = 2   # OSF / institutional registry / signed public record
+
+
+@dataclass(frozen=True)
+class ExternalSeal:
+    service: str
+    proof: str            # opaque proof/receipt from the external service
+    at: str
+    level: SealLevel = SealLevel.EXTERNALLY_TIMESTAMPED
+
+
+class SealAdapter(Protocol):
+    """Interface to an external timestamping/preregistration service. Real adapters
+    (OSF, opentimestamps, an institutional registry) implement `stamp`. ACERO ships no
+    fabricated adapter: without a real service, protocols stay LOCAL_FROZEN."""
+
+    def stamp(self, protocol_hash: str) -> ExternalSeal | None: ...
 
 
 class Regime(str, Enum):
@@ -99,6 +123,8 @@ class Preregistration:
     plan: FrozenAnalysisPlan
     hash: str
     frozen_at: str
+    seal_level: SealLevel = SealLevel.LOCAL_FROZEN
+    external_seal: ExternalSeal | None = None
 
 
 @dataclass(frozen=True)
@@ -140,17 +166,25 @@ class ProtocolRegistry:
         self._unblindings: dict[str, list[UnblindingEvent]] = {}
         self._deviations: dict[str, list[Deviation]] = {}
 
-    def freeze(self, plan: FrozenAnalysisPlan) -> Preregistration:
+    def freeze(self, plan: FrozenAnalysisPlan,
+               seal_adapter: SealAdapter | None = None) -> Preregistration:
         missing = plan.missing_fields()
         if missing:
             raise FreezeError(f"no se puede congelar: faltan campos {missing}")
         h = protocol_hash(plan)
         if h not in self._protocols:            # idempotent
             frozen_plan = plan if plan.created_at else _stamp(plan)
-            self._protocols[h] = Preregistration(frozen_plan, h, now_iso())
+            seal = seal_adapter.stamp(h) if seal_adapter is not None else None
+            level = seal.level if seal is not None else SealLevel.LOCAL_FROZEN
+            self._protocols[h] = Preregistration(frozen_plan, h, now_iso(),
+                                                 seal_level=level, external_seal=seal)
             self._unblindings[h] = []
             self._deviations[h] = []
         return self._protocols[h]
+
+    def seal_level(self, protocol_hash_: str) -> SealLevel | None:
+        pre = self._protocols.get(protocol_hash_)
+        return pre.seal_level if pre else None
 
     def get(self, protocol_hash_: str) -> Preregistration | None:
         return self._protocols.get(protocol_hash_)
