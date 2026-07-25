@@ -64,6 +64,7 @@ evaluation_app = typer.Typer(help="Scientific Capability Evaluation Engine (Spri
 collab_app = typer.Typer(help="Collaboration & External Review Preparation (Sprint 19)")
 backup_app = typer.Typer(help="Local backup / verify / restore (Sprint 20)")
 release_app = typer.Typer(help="Release candidate manifest + acceptance (Sprint 20)")
+science_app = typer.Typer(help="Scientific Constitution (CCC): discovery/confirmation, causality, independence")
 app.add_typer(learner_app, name="learner")
 app.add_typer(learn_app, name="learn")
 app.add_typer(gate_app, name="gate")
@@ -79,6 +80,7 @@ app.add_typer(evaluation_app, name="evaluation")
 app.add_typer(collab_app, name="collab")
 app.add_typer(backup_app, name="backup")
 app.add_typer(release_app, name="release")
+app.add_typer(science_app, name="science")
 
 
 def _understanding():
@@ -2171,6 +2173,50 @@ def security_audit_cmd() -> None:
                     fg=typer.colors.GREEN if c["ok"] else typer.colors.RED)
     typer.secho(f"\n{a['n_ok']}/{a['n']} ok; failures: {a['failures'] or 'none'}",
                 fg=typer.colors.GREEN if a["all_ok"] else typer.colors.RED)
+
+
+@science_app.command("simbench")
+def science_simbench() -> None:
+    """Run the Simulation & Recovery Bench on the reference naive t-test."""
+    from ..science.simbench import evaluate, naive_ttest
+
+    rep = evaluate(naive_ttest(), n_reps=200, n=200)
+    for k, v in rep.summary().items():
+        typer.echo(f"  {k}: {v}")
+    typer.secho("apto para ASOCIACIÓN pero NO para causal (se deja engañar por "
+                "confusión/lote) — el bench lo revela.", fg=typer.colors.YELLOW)
+
+
+@science_app.command("states")
+def science_states() -> None:
+    """Show the scientific state ladder and ACERO's hard ceiling."""
+    from ..science.states import ACERO_CEILING, ScientificState, is_external_state
+
+    for s in ScientificState:
+        mark = " <-- TOPE ACERO" if s is ACERO_CEILING else (
+            "  (solo externo)" if is_external_state(s) else "")
+        typer.echo(f"  {int(s):2d}  {s.name}{mark}")
+
+
+@science_app.command("demo")
+def science_demo() -> None:
+    """Govern a toy result through the constitution (offline, deterministic)."""
+    from ..science.claim_compiler import EvidenceProfile
+    from ..science.constitution import GovernanceInput, StatisticalControls, govern
+    from ..science.preregistration import Regime
+    from ..science.states import StateEvidence
+
+    gi = GovernanceInput(
+        EvidenceProfile("metilación_cpgX", "parkinson", Regime.DISCOVERY),
+        draft_text="la metilación demuestra que causa parkinson",  # over-claims!
+        controls=StatisticalControls(effect_size=True, confidence_intervals=True),
+        state_evidence=StateEvidence(hypothesis_formulated=True,
+                                     executed_with_null_test=True))
+    rep = govern(gi)
+    typer.echo(f"claim permitido: {rep.allowed_claim}")
+    typer.echo(f"estado ACERO: {rep.acero_state.name}")
+    typer.echo(f"sobreafirmaciones: {rep.overclaims}")
+    typer.echo(f"avanza: {rep.advance_permitted}  | razones: {rep.reasons}")
 
 
 if __name__ == "__main__":  # pragma: no cover
