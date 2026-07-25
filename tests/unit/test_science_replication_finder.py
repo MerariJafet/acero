@@ -46,8 +46,8 @@ def test_live_search_merges_zenodo_hits_with_fake_opener(monkeypatch):
             }).encode()
         def __enter__(self): return self
         def __exit__(self, *a): return False
-    import acero.portal.data_resolver as dr
-    monkeypatch.setattr(dr.urllib.request, "urlopen", lambda req, timeout=0: Resp())
+    import acero.science._http as http
+    monkeypatch.setattr(http.urllib.request, "urlopen", lambda req, timeout=0: Resp())
     cands = rf.find_replication_sources("caco2 permeability", _tdc_caco2(),
                                         live_search=True)
     zc = [c for c in cands if c.reference == "zenodo:999"]

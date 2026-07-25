@@ -119,11 +119,11 @@ def zenodo_search(query: str, *, size: int = 5, opener: Any | None = None
     independent curation root, so a match is a candidate independent source."""
     import urllib.parse
 
-    from ..portal.data_resolver import _get_json  # reuse the resolver's JSON helper
+    from ._http import get_json
     url = ("https://zenodo.org/api/records?" +
            urllib.parse.urlencode({"q": query, "size": size, "type": "dataset"}))
     try:
-        data = _get_json(url, opener)
+        data = get_json(url, opener)
     except Exception:  # noqa: BLE001 - search is best-effort
         return []
     hits = (((data or {}).get("hits") or {}).get("hits")) or []
