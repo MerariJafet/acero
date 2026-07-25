@@ -2262,6 +2262,33 @@ def science_ask() -> None:
                    f"{r.question.question_text[:70]}")
 
 
+@science_app.command("pipeline")
+def science_pipeline() -> None:
+    """Full epistemic pipeline: topic → vulnerabilities → questions → discriminating test."""
+    from ..epistemic.claim_reconstructor import ClaimRecord, EvidenceType, ReplicationStatus
+    from ..epistemic.pipeline import run_pipeline
+
+    claim = ClaimRecord(
+        claim_id="caco2", claim_text="polaridad → menor permeabilidad",
+        exposure_or_input="polaridad", outcome_or_prediction="permeabilidad",
+        effect_direction="negativa", evidence_type=EvidenceType.OBSERVATIONAL,
+        provenance_roots=("TDC",), replication_status=ReplicationStatus.INTERNAL_ONLY)
+    res = run_pipeline("permeabilidad molecular", [claim],
+                       confounder_candidates=("peso molecular", "lipofilia"))
+    for k, v in res.summary().items():
+        if k != "semantic":
+            typer.echo(f"  {k}: {v}")
+
+
+@science_app.command("qbench")
+def science_qbench() -> None:
+    """Question/vulnerability benchmark (evaluation split only)."""
+    from ..epistemic.question_benchmark import evaluate
+
+    for k, v in evaluate().summary().items():
+        typer.echo(f"  {k}: {v}")
+
+
 @science_app.command("find-replication")
 def science_find_replication(
     phenomenon: str = typer.Argument(..., help="fenómeno a replicar, p. ej. 'permeabilidad Caco-2'"),
