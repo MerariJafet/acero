@@ -2233,6 +2233,23 @@ def science_independence() -> None:
     typer.echo(f"  Caco-2 vs PAMPA : {v2.explain()}  → replicación: {v2.is_replication_capable}")
 
 
+@science_app.command("find-replication")
+def science_find_replication(
+    phenomenon: str = typer.Argument(..., help="fenómeno a replicar, p. ej. 'permeabilidad Caco-2'"),
+    avoid_root: str = typer.Option("TDC/HarvardDataverse", help="raíz de procedencia a evitar"),
+    live: bool = typer.Option(False, "--live", help="búsqueda viva en Zenodo (red)"),
+) -> None:
+    """Find datasets for the SAME phenomenon from an INDEPENDENT provenance root."""
+    from ..science.independence_graph import DatasetProvenance
+    from ..science.replication_finder import find_replication_sources
+
+    target = DatasetProvenance("target", provenance_root=avoid_root)
+    for c in find_replication_sources(phenomenon, target, live_search=live):
+        tag = "REPLICA" if c.replication_capable else "no-indep"
+        typer.echo(f"  [{tag:8s}] {c.fetch_kind:9s} {c.repository:10s} raíz={c.provenance_root}")
+        typer.echo(f"             → {c.reference[:72]}")
+
+
 @science_app.command("demo")
 def science_demo() -> None:
     """Govern a toy result through the constitution (offline, deterministic)."""
