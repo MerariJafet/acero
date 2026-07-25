@@ -117,9 +117,13 @@ def _panel_from_critic(latest_crit: dict[str, Any] | None) -> PanelVerdict | Non
 
 
 def govern_dossier(h: dict[str, Any], exps: list[dict[str, Any]], standing: str,
-                   latest_crit: dict[str, Any] | None = None) -> dict[str, Any]:
+                   latest_crit: dict[str, Any] | None = None,
+                   panel: Any | None = None) -> dict[str, Any]:
     """Compute the GovernanceReport for a hypothesis's current evidence. Returns the
-    summary dict (safe to store), or a minimal honest fallback on any error."""
+    summary dict (safe to store), or a minimal honest fallback on any error.
+
+    `panel` (a science.panel.PanelVerdict) takes precedence over the single resident
+    critic when the full 8-voice plural panel has been run for this hypothesis."""
     try:
         results = _results(exps)
         has_null = _has_null_test(exps)
@@ -137,7 +141,7 @@ def govern_dossier(h: dict[str, Any], exps: list[dict[str, Any]], standing: str,
             draft_text=_draft_text(h, standing, exps),
             search_ledger=_build_search_ledger(h, exps),
             independence=profile.independence,
-            panel=_panel_from_critic(latest_crit),
+            panel=(panel if panel is not None else _panel_from_critic(latest_crit)),
             state_evidence=StateEvidence(
                 hypothesis_formulated=True,
                 executed_with_null_test=has_null and bool(results)),
