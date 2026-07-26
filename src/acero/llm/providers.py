@@ -350,9 +350,15 @@ class ClaudeCliProvider:
         return cmd + self.extra_args
 
     def _child_env(self) -> dict[str, str]:
-        # clear the nested-session guard so `claude -p` runs from within/around ACERO
+        # Make `claude` run as an INDEPENDENT CLI: clear the nested-session guard AND the
+        # host-managed auth redirection (ANTHROPIC_BASE_URL + SDK refresh vars). Otherwise
+        # it either refuses ("nested session") or hangs trying to use the host proxy that
+        # only the desktop app can refresh. Forcing standalone auth means it works anywhere
+        # `claude login` is valid, and fails FAST+CLEAR (401) if the token is revoked.
         env = dict(os.environ)
-        for k in ("CLAUDECODE", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_ENTRYPOINT"):
+        for k in ("CLAUDECODE", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_ENTRYPOINT",
+                  "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID",
+                  "ANTHROPIC_BASE_URL"):
             env.pop(k, None)
         return env
 
@@ -367,7 +373,11 @@ class ClaudeCliProvider:
                                   timeout=self.timeout_sec, stdin=subprocess.DEVNULL,
                                   env=self._child_env())
             stdout, stderr, rc = proc.stdout, proc.stderr, proc.returncode
-        text, usage = self._parse(stdout or "")
+        text, usage, err = self._parse(stdout or "")
+        if err:
+            hint = (" — corre `claude login` para renovar la sesión"
+                    if "revoked" in err.lower() or "auth" in err.lower() else "")
+            raise ClaudeError(f"claude CLI error: {err[:300]}{hint}")
         if rc != 0 and not text:
             raise ClaudeError(f"claude CLI exited {rc}: {(stderr or '').strip()[:500]}")
         params = {"command": " ".join(cmd[:2]) + " <prompt> …", "exit_code": rc,
@@ -376,16 +386,21 @@ class ClaudeCliProvider:
         return text, params
 
     @staticmethod
-    def _parse(stdout: str) -> tuple[str, dict]:
+    def _parse(stdout: str) -> tuple[str, dict, str]:
         """`claude --output-format json` emits one result envelope: {type:result,
-        result:<text>, usage:{...}}. Fall back to raw stdout if it is not JSON."""
+        is_error:bool, result:<text|error msg>, usage:{...}}. Returns
+        (text, usage, error) — `error` non-empty when the CLI reported a failure
+        (e.g. revoked auth) so it is raised, not returned as if it were an answer."""
         try:
             obj = json.loads(stdout.strip())
         except json.JSONDecodeError:
-            return stdout.strip(), {}
+            return stdout.strip(), {}, ""
         if isinstance(obj, dict):
-            return str(obj.get("result", "")).strip(), obj.get("usage", {}) or {}
-        return stdout.strip(), {}
+            result = str(obj.get("result", "")).strip()
+            if obj.get("is_error"):
+                return "", obj.get("usage", {}) or {}, result or "claude reportó error"
+            return result, obj.get("usage", {}) or {}, ""
+        return stdout.strip(), {}, ""
 
     def complete(self, prompt: str, *, temperature: float = 0.0,
                  max_tokens: int = 1024) -> LLMResponse:
