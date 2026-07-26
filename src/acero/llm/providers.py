@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -106,6 +107,43 @@ def _parse_codex_jsonl(stdout: str) -> tuple[str, dict]:
     return text, usage
 
 
+def _codex_stream_error(stdout: str) -> str:
+    """The error message from a codex stream that FAILED without a final message
+    (e.g. `{"type":"error","message":"You've hit your usage limit..."}` or turn.failed).
+    Empty string if no explicit error was reported."""
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if ev.get("type") == "error" and ev.get("message"):
+            return str(ev["message"])
+        if ev.get("type") == "turn.failed":
+            err = ev.get("error") or {}
+            if isinstance(err, dict) and err.get("message"):
+                return str(err["message"])
+    return ""
+
+
+def _fallback_to_claude_enabled() -> bool:
+    """When Codex has no tokens / is unavailable, fall back to the `claude` CLI.
+    Default ON; set ACERO_LLM_FALLBACK=none to disable."""
+    return os.environ.get("ACERO_LLM_FALLBACK", "claude").strip().lower() not in {
+        "none", "off", "0", ""}
+
+
+_log = logging.getLogger("acero.llm")
+
+
+def _note_fallback(exc: Exception) -> None:
+    """Visible note: Codex failed / out of tokens → the science ran on Claude instead."""
+    _log.warning("⚠️  Codex no disponible (%s) → usando Claude CLI como fallback",
+                 str(exc)[:140])
+
+
 class CodexCliProvider:
     """Local LLM provider that shells out to the Codex CLI (``codex exec``).
 
@@ -139,9 +177,23 @@ class CodexCliProvider:
         # Metadata from the most recent call, for provenance (usage, exit code, ...).
         self.last_usage: dict = {}
         self.last_params: dict = {}
+        self._claude_fb: ClaudeCliProvider | None = None
+
+    def _fallback(self) -> ClaudeCliProvider | None:
+        """The Claude CLI provider to use when Codex has no tokens / is unavailable."""
+        if not _fallback_to_claude_enabled():
+            return None
+        if self._claude_fb is None:
+            fb = ClaudeCliProvider(model=self.model, timeout_sec=self.timeout_sec)
+            self._claude_fb = fb if fb.available() else None
+        return self._claude_fb
+
+    def _codex_ok(self) -> bool:
+        return shutil.which(self.command) is not None or Path(self.command).exists()
 
     def available(self) -> bool:
-        return shutil.which(self.command) is not None or Path(self.command).exists()
+        # available if Codex is present OR we can fall back to Claude
+        return self._codex_ok() or self._fallback() is not None
 
     def _build_cmd(
         self, prompt: str, last_message_file: str, output_schema_file: str | None = None
@@ -187,10 +239,13 @@ class CodexCliProvider:
                 text = Path(last_file).read_text(encoding="utf-8", errors="replace").strip()
             if not text:
                 text = json_text.strip()
-            if proc.returncode != 0 and not text:
-                raise CodexError(
-                    f"Codex CLI exited {proc.returncode}: {(proc.stderr or '').strip()[:500]}"
-                )
+            if not text:
+                # empty result — surface the real cause (usage limit / error) so callers
+                # (and the Codex→Claude fallback) can act instead of silently stubbing.
+                err = (_codex_stream_error(proc.stdout or "")
+                       or (proc.stderr or "").strip())
+                raise CodexError(f"Codex sin salida (exit {proc.returncode}): "
+                                 f"{err[:400]}")
             params = {
                 "sandbox": self.sandbox,
                 "command": " ".join(cmd[:-1]) + " <prompt>",
@@ -204,7 +259,18 @@ class CodexCliProvider:
     def complete(
         self, prompt: str, *, temperature: float = 0.0, max_tokens: int = 1024
     ) -> LLMResponse:
-        text, params, _ = self._run(prompt)
+        if not self._codex_ok():
+            fb = self._fallback()
+            if fb is not None:
+                return fb.complete(prompt, temperature=temperature, max_tokens=max_tokens)
+        try:
+            text, params, _ = self._run(prompt)
+        except CodexError as exc:
+            fb = self._fallback()                    # no tokens / error → Claude
+            if fb is None:
+                raise
+            _note_fallback(exc)
+            return fb.complete(prompt, temperature=temperature, max_tokens=max_tokens)
         params["max_tokens"] = max_tokens
         return LLMResponse(
             text=text, provider=self.name, model=self.model or "codex-default",
@@ -217,6 +283,10 @@ class CodexCliProvider:
         Enables structured agent outputs (hypothesis generator, skeptic). Raises
         CodexError if the model's final message is not valid JSON.
         """
+        if not self._codex_ok():
+            fb = self._fallback()
+            if fb is not None:
+                return fb.complete_json(prompt, schema, temperature=temperature)
         with tempfile.NamedTemporaryFile(
             "w", suffix=".json", prefix="acero_schema_", delete=False, encoding="utf-8"
         ) as fh:
@@ -224,6 +294,12 @@ class CodexCliProvider:
             schema_path = fh.name
         try:
             text, _, _ = self._run(prompt, output_schema_file=schema_path)
+        except CodexError as exc:
+            fb = self._fallback()                    # no tokens / error → Claude
+            if fb is None:
+                raise
+            _note_fallback(exc)
+            return fb.complete_json(prompt, schema, temperature=temperature)
         finally:
             Path(schema_path).unlink(missing_ok=True)
         try:

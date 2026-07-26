@@ -38,7 +38,9 @@ def test_codex_available_detects_binary(fake_codex):
     assert prov.available()
 
 
-def test_codex_missing_binary_raises():
+def test_codex_missing_binary_raises(monkeypatch):
+    # with the Codex→Claude fallback DISABLED, a missing binary is unavailable + raises
+    monkeypatch.setenv("ACERO_LLM_FALLBACK", "none")
     prov = CodexCliProvider(command="definitely-not-a-real-binary-xyz")
     assert not prov.available()
     with pytest.raises(CodexError):
