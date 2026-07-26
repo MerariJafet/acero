@@ -117,9 +117,15 @@ class HypothesisService:
                         "la origina), argument (por qué es plausible Y por qué sería "
                         "NUEVA si se confirma/refuta), doubt (qué la falsaría), test_idea "
                         "(experimento concreto con datos reales, nombrando los "
-                        "catálogos/datasets a CRUZAR o el residuo a buscar, con "
-                        "controles/nulos), competes_with. En español. Provocador pero "
-                        "riguroso; nada es un descubrimiento hasta probarlo. "
+                        "catálogos/columnas necesarios — prefiere UNA sola tabla si "
+                        "basta; cruza solo si falta una variable ausente — con "
+                        "controles/nulos), competes_with. AJUSTA LA COMPLEJIDAD A LA "
+                        "PREGUNTA: si admite una prueba DIRECTA (una correlación, una "
+                        "comparación de dos grupos), incluye AL MENOS UNA hipótesis con "
+                        "la prueba más simple SUFICIENTE que la responda, ANTES de "
+                        "discriminadores mecanísticos elaborados; no compliques una "
+                        "relación directa. En español. Provocador pero riguroso; nada es "
+                        "un descubrimiento hasta probarlo. "
                         + (f"Enfócate en: {focus}." if focus else ""))
                     out = prov.complete_json(prompt, HYP_SCHEMA, temperature=0.6)
                     hyps = out.get("hypotheses") if out else None

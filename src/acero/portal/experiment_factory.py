@@ -423,6 +423,11 @@ _CODE_RULES = (
     "- verdict se decide por el discriminador contra los nulos; si los datos no "
     "alcanzan, verdict=inconclusive y dilo en verdict_reason. NUNCA inventes "
     "números: todo métrico debe salir del cómputo.\n"
+    "- COMPLEJIDAD PROPORCIONAL: usa el discriminador MÁS SIMPLE que responda la "
+    "pregunta (una correlación con su nulo, una comparación de dos grupos). NO "
+    "inventes un test mecanístico elaborado ni umbrales barrocos cuando una prueba "
+    "directa basta — un umbral excesivamente estricto convierte un efecto REAL en "
+    "'refutes'/'inconclusive'. Si el efecto directo supera su nulo, eso ES supports.\n"
     "- Opcional: guarda gráficas PNG en ./out/ (crea el directorio).\n"
     "- Responde SOLO con el código Python (sin ``` ni explicación)."
 )
@@ -555,11 +560,14 @@ def _parse_result(stdout: str) -> tuple[dict[str, Any] | None, str]:
 
 def _compare_results(a: dict[str, Any], b: dict[str, Any],
                      rel_tol: float = 0.15) -> tuple[bool, str]:
-    """Two independent implementations must agree: same verdict AND shared
-    numeric metrics within rel_tol. Honest disagreement → not agreed."""
-    if b.get("verdict") != a.get("verdict"):
-        return False, (f"veredictos difieren: {a.get('verdict')} vs "
-                       f"{b.get('verdict')}")
+    """Two independent implementations must REPRODUCE THE NUMBERS. Agreement is keyed on
+    shared metrics reproducing within rel_tol — NOT on an identical verbal verdict.
+
+    Why: requiring identical verdict labels was degrading REAL positives to inconclusive
+    (P1 benchmark: 0/3 positives recovered) whenever the two Codex scripts reached the
+    same numbers but phrased the call differently (codegen variance, not science). We
+    still refuse when the numbers themselves diverge, or share no comparable metric —
+    that is genuine instability. A verdict-only mismatch is recorded, not fatal."""
     ma, mb = a.get("metrics") or {}, b.get("metrics") or {}
     shared = [k for k in ma if k in mb
               and isinstance(ma[k], (int, float)) and isinstance(mb[k], (int, float))]
@@ -572,8 +580,18 @@ def _compare_results(a: dict[str, Any], b: dict[str, Any],
         if abs(va - vb) / denom > rel_tol:
             bad.append(f"{k}: {va:.4g} vs {vb:.4g}")
     if bad:
-        return False, "métricas divergentes: " + "; ".join(bad[:4])
-    return True, f"{len(shared)} métricas coinciden (tol {int(rel_tol*100)}%)"
+        return False, "métricas divergentes (inestabilidad real): " + "; ".join(bad[:4])
+    # Metrics reproduce. A verbal verdict difference is codegen variance and is tolerated
+    # UNLESS the verdicts are OPPOSITE (supports vs refutes): identical numbers cannot
+    # both support AND refute — that is a real contradiction, keep degrading it.
+    verd_a, verd_b = a.get("verdict"), b.get("verdict")
+    if {verd_a, verd_b} == {"supports", "refutes"}:
+        return False, f"contradicción con los mismos números: {verd_a} vs {verd_b}"
+    note = f"{len(shared)} métricas reproducen (tol {int(rel_tol*100)}%)"
+    if verd_a != verd_b:
+        note += (f" — veredicto verbal difiere ({verd_a} vs {verd_b}) pero los NÚMEROS "
+                 "coinciden (varianza de codegen, no ciencia)")
+    return True, note
 
 
 def classify_disagreement(a: dict[str, Any], b: dict[str, Any],
