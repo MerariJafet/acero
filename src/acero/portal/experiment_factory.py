@@ -769,7 +769,13 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
                            "reason": f"2ª implementación no corrió: {err2[:200]}"}
         else:
             (workdir / "script_v2.py").write_text(code2, encoding="utf-8")
-            agreed, detail = _compare_results(result, r2)
+            # cross-check tolerance is CALIBRATED per domain (self-tuning memory)
+            try:
+                from .calibration import Calibration
+                _tol = float(Calibration().get(domain).get("cross_check_rel_tol", 0.15))
+            except Exception:  # noqa: BLE001 - calibration is best-effort
+                _tol = 0.15
+            agreed, detail = _compare_results(result, r2, rel_tol=_tol)
             cross_check = {"performed": True, "agreed": agreed, "detail": detail,
                            "second_verdict": r2.get("verdict"),
                            "diagnosis": classify_disagreement(result, r2),  # P2

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from ..core.errors import PolicyViolation
 from ..policies.guard import PolicyGuard
@@ -229,6 +232,109 @@ class CodexCliProvider:
             raise CodexError(f"Codex did not return valid JSON: {text[:300]}") from exc
 
 
+class ClaudeError(RuntimeError):
+    pass
+
+
+class ClaudeCliProvider:
+    """Local LLM provider that shells out to the `claude` CLI (Claude Code) in print mode.
+
+    Lets ACERO run the SCIENCE on Claude instead of Codex, so agents are not mixed
+    (`ACERO_LLM_PROVIDER=claude`). Runs non-interactively (`-p --output-format json`),
+    without session persistence, and UNSETS the CLAUDECODE guard so it works even when
+    ACERO is itself launched from a Claude Code session. Claude output is a drafting aid,
+    NEVER scientific evidence — same rule as Codex.
+
+    Note: `claude` cannot be nested inside a live Claude Code session (the CLI blocks it);
+    this provider clears CLAUDECODE for the child, so it runs cleanly from a normal shell,
+    a portal process, or a cron. Auth uses the user's own `claude` login.
+    """
+
+    name = "claude"
+
+    def __init__(self, command: str = "claude", model: str | None = None, *,
+                 timeout_sec: int = 240, extra_args: list[str] | None = None,
+                 runner: Any | None = None) -> None:
+        self.command = command
+        self.model = model
+        self.timeout_sec = timeout_sec
+        self.extra_args = extra_args or []
+        self._runner = runner            # injectable (cmd, env) -> (stdout, stderr, rc)
+        self.last_usage: dict = {}
+        self.last_params: dict = {}
+
+    def available(self) -> bool:
+        return shutil.which(self.command) is not None or Path(self.command).exists()
+
+    def _build_cmd(self, prompt: str) -> list[str]:
+        cmd = [self.command, "-p", prompt, "--output-format", "json",
+               "--dangerously-skip-permissions", "--no-session-persistence"]
+        if self.model:
+            cmd += ["--model", self.model]
+        return cmd + self.extra_args
+
+    def _child_env(self) -> dict[str, str]:
+        # clear the nested-session guard so `claude -p` runs from within/around ACERO
+        env = dict(os.environ)
+        for k in ("CLAUDECODE", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_ENTRYPOINT"):
+            env.pop(k, None)
+        return env
+
+    def _run(self, prompt: str) -> tuple[str, dict]:
+        if not self.available():
+            raise ClaudeError(f"claude CLI '{self.command}' not found on PATH.")
+        cmd = self._build_cmd(prompt)
+        if self._runner is not None:
+            stdout, stderr, rc = self._runner(cmd, self._child_env())
+        else:
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  timeout=self.timeout_sec, stdin=subprocess.DEVNULL,
+                                  env=self._child_env())
+            stdout, stderr, rc = proc.stdout, proc.stderr, proc.returncode
+        text, usage = self._parse(stdout or "")
+        if rc != 0 and not text:
+            raise ClaudeError(f"claude CLI exited {rc}: {(stderr or '').strip()[:500]}")
+        params = {"command": " ".join(cmd[:2]) + " <prompt> …", "exit_code": rc,
+                  "usage": usage}
+        self.last_usage, self.last_params = usage, params
+        return text, params
+
+    @staticmethod
+    def _parse(stdout: str) -> tuple[str, dict]:
+        """`claude --output-format json` emits one result envelope: {type:result,
+        result:<text>, usage:{...}}. Fall back to raw stdout if it is not JSON."""
+        try:
+            obj = json.loads(stdout.strip())
+        except json.JSONDecodeError:
+            return stdout.strip(), {}
+        if isinstance(obj, dict):
+            return str(obj.get("result", "")).strip(), obj.get("usage", {}) or {}
+        return stdout.strip(), {}
+
+    def complete(self, prompt: str, *, temperature: float = 0.0,
+                 max_tokens: int = 1024) -> LLMResponse:
+        text, params = self._run(prompt)
+        params["max_tokens"] = max_tokens
+        return LLMResponse(text=text, provider=self.name,
+                           model=self.model or "claude-default",
+                           temperature=temperature, params=params)
+
+    def complete_json(self, prompt: str, schema: dict, *, temperature: float = 0.0) -> dict:
+        """No native --output-schema: ask for JSON-only and parse the first object."""
+        keys = ", ".join((schema.get("properties") or {}).keys())
+        text, _ = self._run(
+            prompt + f"\n\nResponde SOLO con un objeto JSON válido con las claves: {keys}. "
+            "Sin markdown, sin texto extra.")
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            m = re.search(r"\{.*\}", cleaned, re.DOTALL)
+            if m:
+                return json.loads(m.group(0))
+            raise ClaudeError(f"claude did not return valid JSON: {cleaned[:300]}") from None
+
+
 class PaidProvider:
     """Placeholder for Claude/OpenAI API. Refuses unless policy enables paid services."""
 
@@ -262,6 +368,9 @@ def get_provider(name: str, guard: PolicyGuard | None = None, **kwargs):
             host=kwargs.get("host", "http://127.0.0.1:11434"),
             model=kwargs.get("model", "llama3.1"),
         )
-    if name in {"claude", "openai"}:
+    if name == "claude":
+        return ClaudeCliProvider(
+            command=kwargs.get("command", "claude"), model=kwargs.get("model"))
+    if name == "openai":
         return PaidProvider(name, guard)
     return MockProvider()

@@ -84,6 +84,33 @@ def grade(expected: str, outcome: str) -> dict[str, Any]:
             "fail_mode": fail_mode}
 
 
+def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Fold per-control grades into a domain summary (feeds the calibration memory)."""
+    pos = [r for r in results if r.get("expected") == "positive"]
+    nul = [r for r in results if r.get("expected") == "null"]
+    fp = sum(1 for r in nul if r.get("outcome") == "positive_robust")  # false positives
+    tot = len(results) or 1
+    return {
+        "positives_correct": sum(1 for r in pos if r.get("correct")),
+        "positives_total": len(pos),
+        "nulls_correct": sum(1 for r in nul if r.get("correct")),
+        "nulls_total": len(nul),
+        "false_positives": fp,
+        "accuracy": round(sum(1 for r in results if r.get("correct")) / tot, 3),
+    }
+
+
+def learn(domain: str, results: list[dict[str, Any]]) -> dict[str, Any]:
+    """After a benchmark: record the retro and auto-tune the domain within guardrails.
+    This is the loop that lets the program remember and improve per field."""
+    from .calibration import Calibration
+    c = Calibration()
+    summary = summarize(results)
+    c.record_benchmark(domain, summary)
+    decision = c.auto_tune(domain)
+    return {"summary": summary, "decision": decision}
+
+
 def score_project(project_id: str, expected: str,
                   session_factory: Any | None = None) -> dict[str, Any]:
     """Read a finished project and grade it against its expected control label."""
