@@ -64,9 +64,74 @@ CONTROL_SET: list[dict[str, Any]] = [
 ]
 
 
+# --- STRESS batches (to make the calibration memory work hard). Each control carries
+# its real data `domain` (so resolvers/anti-contamination work) AND a `batch` tag so we
+# can run just that stress set. Answers are unambiguous by construction. ---
+STRESS_CONTROLS: list[dict[str, Any]] = [
+    # s1 — astronomy, SPECIFICITY stress: tempting/absurd NULLS + 1 positive anchor.
+    {"id": "s1_null_radius_dec", "batch": "s1", "domain": "astronomy", "expected": "null",
+     "question": "¿El radio planetario (pl_rade) correlaciona con la declinación (dec) de "
+                 "la estrella? Datos NEA pscomppars, una tabla.",
+     "rationale": "la coordenada del cielo no tiene relación física con el radio"},
+    {"id": "s1_null_ecc_ra", "batch": "s1", "domain": "astronomy", "expected": "null",
+     "question": "¿La excentricidad orbital (pl_orbeccen) correlaciona con la ascensión "
+                 "recta (ra) de la estrella? Datos NEA pscomppars.",
+     "rationale": "coordenada del cielo, sin vínculo físico"},
+    {"id": "s1_null_period_cid", "batch": "s1", "domain": "astronomy", "expected": "null",
+     "question": "¿El periodo orbital (pl_orbper) depende del orden de registro del "
+                 "planeta en el catálogo (índice de fila)? Datos NEA pscomppars.",
+     "rationale": "el orden de registro es un artefacto, no una propiedad física"},
+    {"id": "s1_pos_mass_radius", "batch": "s1", "domain": "astronomy", "expected": "positive",
+     "question": "¿Los planetas más masivos (pl_bmasse) tienden a tener mayor radio "
+                 "(pl_rade)? Relación masa-radio en NEA pscomppars.",
+     "rationale": "ancla positiva establecida"},
+    # s2 — astronomy, SENSITIVITY stress: real effects (some subtle) + 1 null.
+    {"id": "s2_pos_teq_insol", "batch": "s2", "domain": "astronomy", "expected": "positive",
+     "question": "¿La temperatura de equilibrio (pl_eqt) aumenta con la insolación "
+                 "(pl_insol)? Datos NEA pscomppars.",
+     "rationale": "relación física directa"},
+    {"id": "s2_pos_grav_mass", "batch": "s2", "domain": "astronomy", "expected": "positive",
+     "question": "¿La gravedad superficial (∝ pl_bmasse/pl_rade^2) aumenta con la masa "
+                 "planetaria a radio comparable? Calcular desde NEA pscomppars.",
+     "rationale": "g = GM/R^2, efecto real computable"},
+    {"id": "s2_pos_teq_steff", "batch": "s2", "domain": "astronomy", "expected": "positive",
+     "question": "¿Los planetas alrededor de estrellas más calientes (st_teff) tienen "
+                 "mayor temperatura de equilibrio (pl_eqt) en promedio? NEA pscomppars.",
+     "rationale": "tendencia real (más luminosa, más caliente el planeta)"},
+    {"id": "s2_null_radius_glon", "batch": "s2", "domain": "astronomy", "expected": "null",
+     "question": "¿El radio planetario (pl_rade) correlaciona con la longitud galáctica "
+                 "(glon) de la estrella? NEA pscomppars.",
+     "rationale": "coordenada galáctica sin vínculo físico con el radio"},
+    # s3 — chemistry, cross-domain reinforcement (PubChem).
+    {"id": "s3_pos_tpsa_on", "batch": "s3", "domain": "chemistry", "expected": "positive",
+     "question": "¿El área de superficie polar topológica (TPSA) aumenta con el número de "
+                 "átomos de oxígeno + nitrógeno? Datos PubChem.",
+     "rationale": "TPSA se define sobre O/N: casi tautológico"},
+    {"id": "s3_pos_hbd_ohnh", "batch": "s3", "domain": "chemistry", "expected": "positive",
+     "question": "¿El número de donadores de puente de hidrógeno aumenta con el número de "
+                 "grupos OH y NH del compuesto? Datos PubChem.",
+     "rationale": "relación establecida por definición de donador"},
+    {"id": "s3_null_mw_cid", "batch": "s3", "domain": "chemistry", "expected": "null",
+     "question": "¿El peso molecular correlaciona con el número CID de registro en "
+                 "PubChem? Datos PubChem.",
+     "rationale": "el CID es orden de registro, no una propiedad física"},
+    {"id": "s3_null_xlogp_firstletter", "batch": "s3", "domain": "chemistry",
+     "expected": "null",
+     "question": "¿La lipofilicidad (XLogP) depende de la primera letra del nombre del "
+                 "compuesto? Datos PubChem.",
+     "rationale": "la inicial del nombre no tiene relación física"},
+]
+CONTROL_SET += STRESS_CONTROLS
+
+
 def controls_for(domain: str) -> list[dict[str, Any]]:
     """The control questions for one domain (empty ⇒ that field isn't onboarded yet)."""
     return [c for c in CONTROL_SET if c.get("domain") == domain]
+
+
+def controls_in_batch(batch: str) -> list[dict[str, Any]]:
+    """The controls of a named stress batch (may span domains)."""
+    return [c for c in CONTROL_SET if c.get("batch") == batch]
 
 
 def derive_outcome(experiments: list[dict[str, Any]]) -> str:
