@@ -85,9 +85,31 @@ class CriticAgent:
                       and int(x.get("hyp_version", 1)) == ver)
         return ver, f"Aris v{ver}.{seq}"
 
+    def _eva_context(self, target_id: str, *, use_ai: bool) -> tuple[str, list[str]]:
+        """EVA's vulnerabilities for a hypothesis target, so Aristóteles PRIORITIZES
+        them instead of re-deriving weaknesses from scratch (EVA↔critic integration)."""
+        h = self.store.get(target_id) or {}
+        if h.get("kind") != "candidate" and "tag" not in h:
+            return "", []
+        try:
+            from .epistemic_bridge import eva_for_hypothesis, make_codex_extractor
+            extractor = make_codex_extractor() if use_ai else None
+            vulns = eva_for_hypothesis(h, extractor=extractor)
+        except Exception:  # noqa: BLE001
+            return "", []
+        if not vulns:
+            return "", []
+        ids = [v["id"] for v in vulns]
+        txt = "\n".join(f"- [{v['id']}] {v['type']} (sev {v['severity']}): "
+                        f"{v['description']} → prueba: {v['decisive_test']}"
+                        for v in vulns)
+        return txt, ids
+
     def critique_now(self, project_id: str, target_id: str, task: str,
                      context: str, *, use_ai: bool = True) -> dict[str, Any]:
-        out = self._review(project_id, task, context, use_ai=use_ai)
+        eva_txt, eva_ids = self._eva_context(target_id, use_ai=use_ai)
+        out = self._review(project_id, task, context, use_ai=use_ai, eva_context=eva_txt)
+        out["eva_vulnerability_ids"] = eva_ids          # trazabilidad objeción↔EVA
         ver, label = self._version_label(project_id, target_id)
         rec = {"id": new_id("crit"), "target_id": target_id, "task": task,
                "hyp_version": ver, "label": label,
@@ -97,26 +119,33 @@ class CriticAgent:
                        summary=f"crítica ({task}): {out.get('verdict','')}")
         return rec
 
-    def _review(self, project_id: str, task: str, context: str, *, use_ai: bool
-                ) -> dict[str, Any]:
+    def _review(self, project_id: str, task: str, context: str, *, use_ai: bool,
+                eva_context: str = "") -> dict[str, Any]:
         if use_ai:
             try:
                 from ..llm.providers import CodexCliProvider
                 prov = CodexCliProvider(timeout_sec=180)
                 if prov.available():
                     lit = self._literature_context(project_id)
+                    eva_block = (
+                        f"\nVULNERABILIDADES YA DETECTADAS POR EVA (priorízalas, NO las "
+                        f"repitas; liga tus objeciones a su [id]):\n{eva_context}\n"
+                        if eva_context else "")
                     prompt = (
                         f"{_SOUL}\n\n---\n\n"
                         f"Vas a revisar {_TASK_LABEL.get(task, 'una tarea de investigación')} "
                         "de tu equipo.\n\n"
-                        f"LITERATURA REAL del proyecto (abstracts verificados):\n{lit}\n\n"
+                        f"LITERATURA REAL del proyecto (abstracts verificados):\n{lit}\n"
+                        f"{eva_block}\n"
                         f"TRABAJO A REVISAR:\n{context[:3500]}\n\n"
                         "Aplica tu método completo (afirmación exacta, falsación, "
                         "alternativas, literatura faltante, poder discriminante, revisor "
-                        "hostil). Devuelve: verdict (solido|prometedor|debil|defectuoso), "
-                        "summary, objections (2-4 concretas), alternatives (explicaciones "
-                        "alternativas no descartadas), suggestions (ejecutables en la "
-                        "compu), hard_question. NO inventes citas.")
+                        "hostil). PROFUNDIZA las vulnerabilidades de EVA en objeciones "
+                        "accionables; añade sólo las que EVA no vio. Devuelve: verdict "
+                        "(solido|prometedor|debil|defectuoso), summary, objections (2-4 "
+                        "concretas), alternatives (explicaciones alternativas no "
+                        "descartadas), suggestions (ejecutables en la compu), "
+                        "hard_question. NO inventes citas.")
                     out = prov.complete_json(prompt, CRITIC_SCHEMA, temperature=0.4)
                     return {"provider": "codex",
                             "verdict": out.get("verdict", ""),

@@ -50,16 +50,22 @@ class Lifecycle:
         history = list(hyp.get("history", []))
         history.append({"version": cur_ver, "title": hyp.get("title", ""),
                         "trigger_question": hyp.get("trigger_question", ""),
+                        "argument": hyp.get("argument", ""), "doubt": hyp.get("doubt", ""),
                         "reason": "reconsideración por crítica de Aristóteles",
                         "critique_id": critique_id,
                         "critique_summary": str(c.get("summary", ""))[:200],
                         "archived_at": now_iso()})
-        self.store.update_payload(hyp["id"], {
-            "version": new_ver, "history": history,
-            "lit_status": "STALE",
+        # REFORMULATE the hypothesis so v2 genuinely CHANGES (not just a version bump):
+        # Codex rewrites it to address the objection; the old text stays in history.
+        reform = self._reformulate(hyp, c)
+        changes = {
+            "version": new_ver, "history": history, "lit_status": "STALE",
+            "reformulated": bool(reform),
             "reconsider_note": {"critique_id": critique_id,
                                 "summary": str(c.get("summary", ""))[:250],
-                                "from_level": c.get("task", ""), "at": now_iso()}})
+                                "from_level": c.get("task", ""), "at": now_iso()}}
+        changes.update(reform)          # title/trigger_question/argument/doubt if any
+        self.store.update_payload(hyp["id"], changes)
         # downstream experiments of this hypothesis are flagged for re-review
         for e in self.store.list_objects(project_id, kind="experiment"):
             if e.get("hyp_id") == hyp["id"] and e.get("status") == "COMPLETE":
@@ -68,12 +74,56 @@ class Lifecycle:
             project_id, ProvenanceAction.UPDATE, "human",
             f"crítica considerada → {hyp.get('tag')} pasa a v{new_ver}"[:150],
             {"critique_id": critique_id}, entity_id=hyp["id"])
+        new_title = reform.get("title") or hyp.get("title", "")
+        note = (f"{hyp.get('tag')} → v{new_ver}. " +
+                (f"Reformulada para responder la crítica: «{new_title[:90]}». "
+                 if reform else
+                 "Versión avanzada (Codex no disponible para reformular el texto). ") +
+                "Literatura marcada STALE y experimentos previos supeditados. "
+                "Vuelve a Investigar / Lanzar Misión.")
         return {"ok": True, "hyp_id": hyp["id"], "tag": hyp.get("tag"),
-                "version": new_ver,
-                "note": (f"El flujo de {hyp.get('tag')} se replantea desde el nivel "
-                         f"'{c.get('task','')}': v{new_ver}, literatura marcada STALE "
-                         "y experimentos previos señalados como supeditados a la "
-                         "crítica. Vuelve a Investigar / Lanzar Misión.")}
+                "version": new_ver, "reformulated": bool(reform),
+                "new_title": new_title, "note": note}
+
+    def _reformulate(self, hyp: dict[str, Any], critique: dict[str, Any]
+                     ) -> dict[str, Any]:
+        """Codex rewrites the hypothesis to ADDRESS the critique — so 'considerar
+        crítica' visibly changes the hypothesis. Empty dict if Codex is unavailable."""
+        objections = "; ".join(str(o) for o in (critique.get("objections") or [])[:4])
+        summary = str(critique.get("summary", ""))
+        if not (objections or summary):
+            return {}
+        try:
+            from ..llm.providers import CodexCliProvider
+            prov = CodexCliProvider(timeout_sec=150)
+            if not prov.available():
+                return {}
+            schema = {"type": "object", "properties": {
+                "title": {"type": "string"}, "trigger_question": {"type": "string"},
+                "argument": {"type": "string"}, "doubt": {"type": "string"},
+                "changed_because": {"type": "string"}},
+                "required": ["title", "trigger_question", "argument", "doubt",
+                             "changed_because"], "additionalProperties": False}
+            out = prov.complete_json(
+                "Reformula esta hipótesis científica para RESPONDER la crítica, sin "
+                "abandonar la pregunta central. Debe quedar más precisa y falsable, "
+                "no más vaga. No la conviertas en trivial ni en una que solo se pueda "
+                "confirmar.\n\n"
+                f"HIPÓTESIS ACTUAL: {hyp.get('title','')}\n"
+                f"Pregunta detonante: {hyp.get('trigger_question','')}\n"
+                f"Argumento: {hyp.get('argument','')}\n"
+                f"Duda: {hyp.get('doubt','')}\n\n"
+                f"CRÍTICA DE ARISTÓTELES: {summary}\nObjeciones: {objections}\n\n"
+                "Devuelve title, trigger_question, argument, doubt y changed_because "
+                "(qué cambiaste y por qué). En español.", schema, temperature=0.3)
+            fields = {k: str(out.get(k, "")).strip()
+                      for k in ("title", "trigger_question", "argument", "doubt")
+                      if str(out.get(k, "")).strip()}
+            if out.get("changed_because"):
+                fields["reform_reason"] = str(out["changed_because"])[:300]
+            return fields
+        except Exception:  # noqa: BLE001 - reformulation is best-effort
+            return {}
 
     # ---- 5) safe delete with vault memory --------------------------------------
     def delete_hypothesis(self, project_id: str, hyp_id: str) -> dict[str, Any]:

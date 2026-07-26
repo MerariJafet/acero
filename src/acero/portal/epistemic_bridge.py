@@ -164,6 +164,18 @@ def _claim_from_hypothesis(h: dict[str, Any], exps: list[dict[str, Any]],
     return claim, provenance, _CONF_BY_PROVENANCE.get(provenance, 0.5)
 
 
+def eva_for_hypothesis(h: dict[str, Any], exps: list[dict[str, Any]] | None = None,
+                       *, extractor: Extractor | None = None) -> list[dict[str, Any]]:
+    """EVA vulnerabilities for ONE hypothesis — the shared surface the critic
+    (Aristóteles) consumes so it does not re-derive weaknesses from scratch.
+    Returns [{type, description, decisive_test, severity}] ranked by priority."""
+    claim, _prov, _conf = _claim_from_hypothesis(h, exps or [], extractor=extractor)
+    vulns = audit_external(claim).vulnerabilities
+    return [{"id": v.vulnerability_id, "type": v.type.value, "description": v.description,
+             "decisive_test": v.decisive_test, "severity": round(v.severity, 2)}
+            for v in vulns[:6]]
+
+
 def run_epistemic(project_id: str, session_factory: Any | None = None,
                   *, extractor: Extractor | None = None) -> dict[str, Any]:
     """Run the epistemic pipeline over the project's approved/candidate hypotheses.
