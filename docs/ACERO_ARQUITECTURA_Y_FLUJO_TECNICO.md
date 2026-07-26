@@ -220,6 +220,13 @@ Es la capa que separa "candidato honesto" de "positivo fabricado". Módulos clav
   propiedades en `required` (como `PLAN_SCHEMA` y `_EXTRACT_SCHEMA`).
 - Se activa con `ACERO_LLM_PROVIDER=codex`. Consume la cuota del usuario; por eso no es el
   default silencioso.
+- **FALLBACK AUTOMÁTICO A CLAUDE (siempre):** si Codex **no tiene tokens** (usage limit)
+  o **no carga/falla**, cada llamada cae automáticamente a `ClaudeCliProvider` (el CLI
+  `claude`). Antes, un "usage limit" salía con exit 0 y salida vacía → el pipeline caía a
+  stubs en silencio (y contaminaba la calibración). Ahora `_run()` **lanza error** con el
+  mensaje real y `complete()/complete_json()` reintentan en Claude. Se controla con
+  `ACERO_LLM_FALLBACK` (default `claude`; `none` lo apaga) y deja una **nota visible en el
+  log** al caer. Todos los call sites (crítico, hipótesis, fábrica, EVA) lo heredan.
 
 ---
 
