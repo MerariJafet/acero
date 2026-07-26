@@ -69,6 +69,65 @@ def heuristic_extract(h: dict[str, Any]) -> tuple[dict[str, Any], str]:
     return fields, "heuristic"
 
 
+_EXTRACT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "population_or_domain": {"type": "string"},
+        "exposure_or_input": {"type": "string"},
+        "outcome_or_prediction": {"type": "string"},
+        "effect_direction": {"type": "string"},
+        "mechanism": {"type": "string"},
+        "assumptions": {"type": "array", "items": {"type": "string"}},
+        "boundary_conditions": {"type": "array", "items": {"type": "string"}},
+    },
+    # Codex --output-schema is STRICT: every property must be in `required` (empties
+    # are allowed and dropped downstream). Mirrors PLAN_SCHEMA in experiment_factory.
+    "required": ["population_or_domain", "exposure_or_input", "outcome_or_prediction",
+                 "effect_direction", "mechanism", "assumptions", "boundary_conditions"],
+    "additionalProperties": False,
+}
+
+
+def codex_extract(h: dict[str, Any], *, provider: Any | None = None
+                  ) -> tuple[dict[str, Any], str]:
+    """LLM reconstruction of ONE hypothesis into ClaimRecord fields, per claim.
+
+    Populating exposure/outcome activates the CONFOUNDING vulnerability (which the
+    heuristic path cannot infer), giving type-level specificity per claim. Raises on
+    failure so the caller degrades to the heuristic (provenance='fallback').
+    """
+    if provider is None:
+        from .experiment_factory import _codex
+        provider = _codex()
+    title = str(h.get("title") or h.get("description") or "")
+    prompt = (
+        "Reconstruye ESTA hipótesis científica en campos estructurados (no la critiques, "
+        "sólo extrae lo que afirma). Devuelve JSON con: population_or_domain, "
+        "exposure_or_input (la variable causal/predictora), outcome_or_prediction (lo "
+        "que cambia), effect_direction, mechanism, assumptions (supuestos concretos de los "
+        "que depende, específicos de ESTA hipótesis), boundary_conditions (rango/población "
+        "donde aplica). Sé específico y fiel al texto; no inventes.\n\n"
+        f"Título: {title}\n"
+        f"Pregunta detonante: {h.get('trigger_question','')}\n"
+        f"Argumento: {h.get('argument','')}\n"
+        f"Duda/qué la falsaría: {h.get('doubt','')}\n"
+        f"Compite con: {h.get('competes_with','')}\n"
+        f"Cómo probarla: {h.get('test_idea','')}")
+    out = provider.complete_json(prompt, _EXTRACT_SCHEMA, temperature=0.1)
+    fields = {k: v for k, v in out.items() if v}       # drop empties
+    return fields, "llm"
+
+
+def make_codex_extractor() -> Extractor | None:
+    """Return a per-hypothesis Codex extractor, or None if Codex is unavailable."""
+    try:
+        from .experiment_factory import _codex
+        _codex()                                        # probe availability
+    except Exception:  # noqa: BLE001
+        return None
+    return lambda h: codex_extract(h)
+
+
 def _claim_from_hypothesis(h: dict[str, Any], exps: list[dict[str, Any]],
                            *, extractor: Extractor | None = None
                            ) -> tuple[ClaimRecord, str, float]:
@@ -132,7 +191,10 @@ def run_epistemic(project_id: str, session_factory: Any | None = None,
             claims.append(c)
             rep = audit_external(c)
             eva_by_claim[c.claim_id] = [v.summary() for v in rep.vulnerabilities[:5]]
-            vuln_sets[c.claim_id] = frozenset(v.type.value for v in rep.vulnerabilities)
+            # de-dup on CONTENT (type + description), not just type: rival hypotheses
+            # legitimately SHARE vulnerability types; a true duplicate shares the wording.
+            vuln_sets[c.claim_id] = frozenset(
+                f"{v.type.value}:{(v.description or '')[:60]}" for v in rep.vulnerabilities)
             reasoning[c.claim_id] = {
                 "provenance": provenance, "confidence": confidence,
                 "n_assumptions": len(c.assumptions), "has_mechanism": bool(c.mechanism),

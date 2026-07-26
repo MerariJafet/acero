@@ -11,9 +11,21 @@ from acero.epistemic.eva import audit_external
 from acero.epistemic.vulnerability import VulnerabilityType
 from acero.portal.epistemic_bridge import (
     _claim_from_hypothesis,
+    codex_extract,
     heuristic_extract,
 )
 from acero.questions.question_engine import question_from_vulnerability
+
+
+class _FakeProvider:
+    """Offline stand-in for CodexCliProvider.complete_json."""
+    def __init__(self, payload):
+        self.payload = payload
+        self.prompts = []
+
+    def complete_json(self, prompt, schema, *, temperature=0.0):
+        self.prompts.append(prompt)
+        return dict(self.payload)
 
 H_A = {
     "id": "hA", "tag": "H0",
@@ -112,3 +124,30 @@ def test_confounding_question_uses_real_variables_when_known():
               if v.type == VulnerabilityType.SINGLE_SOURCE)
     q = question_from_vulnerability(src, claim)
     assert "metalicidad [Fe/H]" in q.question_text
+
+
+def test_codex_extract_with_mock_provider():
+    prov = _FakeProvider({"exposure_or_input": "[Fe/H]",
+                          "outcome_or_prediction": "posición del valle",
+                          "mechanism": "fotoevaporación", "assumptions": ["a1", "a2"],
+                          "effect_direction": "positiva", "boundary_conditions": []})
+    fields, provenance = codex_extract(H_A, provider=prov)
+    assert provenance == "llm"
+    assert fields["exposure_or_input"] == "[Fe/H]"
+    assert fields["assumptions"] == ["a1", "a2"]
+    assert "boundary_conditions" not in fields   # empties dropped
+    assert "[Fe/H]" in prov.prompts[0]           # the hypothesis fed to Codex
+
+
+def test_llm_exposure_outcome_activates_confounding_vulnerability():
+    """The heuristic path cannot infer exposure/outcome, so it never surfaces the
+    CONFOUNDING vulnerability. The LLM path does -> genuine type-level specificity."""
+    def llm(h):
+        return {"exposure_or_input": "[Fe/H]", "outcome_or_prediction": "valle",
+                "assumptions": ["insolación fija"]}, "llm"
+    heuristic_claim, *_ = _claim_from_hypothesis(H_A, [])
+    llm_claim, *_ = _claim_from_hypothesis(H_A, [], extractor=llm)
+    h_types = {v.type for v in audit_external(heuristic_claim).vulnerabilities}
+    l_types = {v.type for v in audit_external(llm_claim).vulnerabilities}
+    assert VulnerabilityType.CONFOUNDING not in h_types
+    assert VulnerabilityType.CONFOUNDING in l_types

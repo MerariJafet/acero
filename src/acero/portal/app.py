@@ -821,8 +821,9 @@ def build_portal_router() -> APIRouter:
         """EVA + Question Engine: turn the project's hypotheses into fertile, prioritized
         questions and a discriminating test (topic→vulnerabilities→questions)."""
         _require_csrf(sess, x_csrf_token)
-        from .epistemic_bridge import run_epistemic
-        return run_epistemic(project_id)
+        from .epistemic_bridge import make_codex_extractor, run_epistemic
+        # per-hypothesis Codex reconstruction when available; else heuristic fallback
+        return run_epistemic(project_id, extractor=make_codex_extractor())
 
     @r.get("/api/mesh/search")
     def mesh_search(q: str, rows: int = 5, sess: Session = Depends(_require_session)
