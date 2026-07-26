@@ -78,3 +78,37 @@ def test_summarize_counts_false_positives():
     s = summarize(results)
     assert s["false_positives"] == 1 and s["positives_correct"] == 1
     assert s["nulls_total"] == 2
+
+
+def test_invalid_run_is_not_learned_from(tmp_path):
+    from acero.portal.recovery_bench import summarize
+    # 3 of 4 controls produced no_evidence ⇒ pipeline failure ⇒ invalid
+    results = [
+        {"expected": "positive", "outcome": "no_evidence", "correct": False},
+        {"expected": "positive", "outcome": "no_evidence", "correct": False},
+        {"expected": "null", "outcome": "no_evidence", "correct": True},
+        {"expected": "null", "outcome": "refuted", "correct": True},
+    ]
+    s = summarize(results)
+    assert s["valid"] is False and s["no_evidence"] == 3
+    c = _cal(tmp_path)
+    before = c.get("astronomy")["cross_check_rel_tol"]
+    c.record_benchmark("astronomy", s)
+    d = c.auto_tune("astronomy")
+    assert d["action"] == "skip_invalid"
+    assert c.get("astronomy")["cross_check_rel_tol"] == before   # NOT tuned from garbage
+
+
+def test_valid_run_still_learns(tmp_path):
+    from acero.portal.recovery_bench import summarize
+    results = [{"expected": "positive", "outcome": "inconclusive", "correct": False},
+               {"expected": "positive", "outcome": "supports", "correct": False},
+               {"expected": "null", "outcome": "refuted", "correct": True},
+               {"expected": "null", "outcome": "inconclusive", "correct": True}]
+    s = summarize(results)
+    assert s["valid"] is True
+    c = _cal(tmp_path)
+    before = c.get("x")["cross_check_rel_tol"]
+    c.record_benchmark("x", s)
+    assert c.auto_tune("x")["action"] == "loosen"
+    assert c.get("x")["cross_check_rel_tol"] > before

@@ -171,29 +171,49 @@ def grade(expected: str, outcome: str) -> dict[str, Any]:
             "fail_mode": fail_mode}
 
 
+# A run is only VALID (safe to learn from) if enough controls actually produced
+# evidence. If most come back `no_evidence`, the DATA PIPELINE failed (e.g. the LLM
+# quota was exhausted and experiments never ran) — learning from that would teach the
+# calibration a FALSE "low sensitivity" signal. This is the validity floor.
+MIN_EVIDENCE_FRACTION = 0.5
+
+
 def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
     """Fold per-control grades into a domain summary (feeds the calibration memory)."""
     pos = [r for r in results if r.get("expected") == "positive"]
     nul = [r for r in results if r.get("expected") == "null"]
     fp = sum(1 for r in nul if r.get("outcome") == "positive_robust")  # false positives
+    no_ev = sum(1 for r in results if r.get("outcome") == "no_evidence")
     tot = len(results) or 1
+    evidence_fraction = round((tot - no_ev) / tot, 3)
     return {
         "positives_correct": sum(1 for r in pos if r.get("correct")),
         "positives_total": len(pos),
         "nulls_correct": sum(1 for r in nul if r.get("correct")),
         "nulls_total": len(nul),
         "false_positives": fp,
+        "no_evidence": no_ev,
+        "evidence_fraction": evidence_fraction,
+        # invalid ⇒ the pipeline didn't produce evidence (plumbing failure, not science)
+        "valid": evidence_fraction >= MIN_EVIDENCE_FRACTION,
         "accuracy": round(sum(1 for r in results if r.get("correct")) / tot, 3),
     }
 
 
 def learn(domain: str, results: list[dict[str, Any]]) -> dict[str, Any]:
-    """After a benchmark: record the retro and auto-tune the domain within guardrails.
-    This is the loop that lets the program remember and improve per field."""
+    """After a benchmark: record the retro and (only if the run is VALID) auto-tune the
+    domain within guardrails. This is the loop that lets the program improve per field
+    — and refuse to 'learn' from a run where the data pipeline failed."""
     from .calibration import Calibration
     c = Calibration()
     summary = summarize(results)
     c.record_benchmark(domain, summary)
+    if not summary["valid"]:
+        return {"summary": summary,
+                "decision": {"action": "skip_invalid",
+                             "reason": (f"solo {summary['evidence_fraction']:.0%} de los "
+                                        "controles produjo evidencia (pipeline caído): "
+                                        "no se aprende de esta corrida")}}
     decision = c.auto_tune(domain)
     return {"summary": summary, "decision": decision}
 

@@ -99,6 +99,16 @@ class Calibration:
         if not d["history"]:
             return {"action": "none", "reason": "sin historial todavía"}
         last = d["history"][-1]
+        # validity floor: never learn from a run whose data pipeline failed
+        if last.get("valid") is False:
+            dec = {"at": now_iso(), "domain": domain or "general",
+                   "action": "skip_invalid", "knob": "cross_check_rel_tol",
+                   "before": d["knobs"]["cross_check_rel_tol"],
+                   "after": d["knobs"]["cross_check_rel_tol"],
+                   "reason": "corrida inválida (pipeline sin evidencia): no se ajusta"}
+            d["decisions"].append(dec)
+            self._save()
+            return dec
         nulls_t = last.get("nulls_total", 0) or 0
         fp = last.get("false_positives", 0) or 0
         pos_t = last.get("positives_total", 0) or 0
