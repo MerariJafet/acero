@@ -469,6 +469,7 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
         <div class="hyp-head">
           <b>${esc(i.tag)}: ${esc(i.title)}</b>
           ${verChip(`H v${i.version || 1}`, true, "versión actual de la hipótesis")}
+          ${i.reformulated ? `<span class="pill ok" title="${esc(i.reform_reason || "reformulada al considerar la crítica de Aristóteles")}">🔄 reformulada por crítica</span>` : ""}
           ${novBadge} ${daBadge}
           ${klabel ? " " + pill(klabel, kcolor) : ""} ${anom}
           ${pill(i.meta || "", approved ? "ok" : "warn")}
@@ -484,11 +485,17 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
         ${reasoning}${i.critique ? criticFoot(i.critique, i.id, i.version || 1) : criticEmpty(i.id, "hipotesis")}</div>`;
     }).join("");
   } else {
+    // P5 observability: verdict + WHY-inconclusive flags as chips (cross-check / guardrail)
+    const V_COLOR = { supports: "ok", refutes: "bad", inconclusive: "warn" };
+    const flagChips = (i) => (i.flags || []).map((fl) =>
+      pill(fl, /discrep|degrad|guardarra|cobertura/.test(fl) ? "bad"
+             : (fl === "datos reales" ? "ok" : "warn"))).join(" ");
     items = (f.items || []).map((i) => {
       const link = i.url ? `<a href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a>`
                          : esc(i.title);
+      const vchip = i.verdict ? " " + pill(i.verdict, V_COLOR[i.verdict] || "warn") : "";
       return `<div class="card">${link}
-        ${i.flag ? " " + pill(i.flag, "bad") : ""}
+        ${i.flag ? " " + pill(i.flag, "bad") : ""}${vchip} ${flagChips(i)}
         <div class="tag">${esc(i.meta || "")}</div></div>`;
     }).join("");
   }

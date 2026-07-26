@@ -122,6 +122,18 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
                   or (c.get("created_at") or "") > (crits[t].get("created_at") or "")):
             crits[t] = c
 
+    # P5 observability: make WHY a result is inconclusive visible without digging the DB.
+    def _result_flags(e: dict[str, Any]) -> list[str]:
+        r = e.get("result") or {}
+        reason = str(r.get("verdict_reason") or "").lower()
+        flags = ["datos reales" if e.get("synthetic") is False else "sintético"]
+        if any(k in reason for k in ("degrad", "no coincid", "difieren", "cross-check")):
+            flags.append("cross-check discrepó → degradado")
+        if any(k in reason for k in ("cross-match", "crossmatch", "cobertura",
+                                     "defecto de", "pasan cortes", "insufic")):
+            flags.append("cobertura/guardarraíl")
+        return flags
+
     # results = experiment outcomes (metrics/claims) + preserved negatives
     results_items: list[dict[str, Any]] = []
     for e in exps:
@@ -131,6 +143,8 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
             results_items.append({
                 "title": (claim or e.get("id", ""))[:140],
                 "meta": ("datos reales" if e.get("synthetic") is False else "sintético"),
+                "verdict": res.get("verdict", ""),
+                "flags": _result_flags(e),
                 "angle": e.get("angle", "")})
     for n in negs:
         results_items.append({"title": str(n.get("summary") or n.get("id", ""))[:140],
@@ -242,6 +256,8 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
                        "n_experiments": exps_by_hyp.get(h.get("id", ""), 0),
                        "n_real_experiments": real_exps_by_hyp.get(h.get("id", ""), 0),
                        "has_dossier": h.get("id", "") in dossier_hyps,
+                       "reformulated": bool(h.get("reformulated")),
+                       "reform_reason": h.get("reform_reason", ""),
                        "flag": "plantilla" if h.get("synthetic") else ""} for h in hyps],
             "rejected": [{"id": h.get("id", ""), "tag": h.get("tag", "H?"),
                           "title": h.get("title") or h.get("description", ""),
@@ -267,7 +283,9 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
             **_status(len(exps), f"{len(real_exps)} con datos reales", "sin experimentos"),
             "items": [{"title": (e.get("claim") or e.get("id", ""))[:120],
                        "meta": ("DATOS REALES · " + str(e.get("angle") or e.get("dataset") or ""))
-                               if e.get("synthetic") is False else "sintético (flujo)"}
+                               if e.get("synthetic") is False else "sintético (flujo)",
+                       "verdict": (e.get("result") or {}).get("verdict", ""),
+                       "flags": _result_flags(e)}
                       for e in exps],
         },
         "resultados": {

@@ -340,6 +340,28 @@ def _codex():
     return prov
 
 
+# P3 — schema-awareness at PLAN time: known public tables and the columns they ALREADY
+# carry in-table, so the planner never requests a second table for a column that exists
+# (the DR25 cross-match defect). Keyed by substrings that may appear in a data_source.
+KNOWN_TABLE_COLUMNS: dict[str, str] = {
+    "q1_q17_dr25_koi": ("koi_smet [Fe/H], koi_prad, koi_period, koi_steff, koi_srad, "
+                        "koi_slogg, koi_insol, koi_kepmag, koi_disposition, koi_model_snr, "
+                        "kepid, kepoi_name — TODO en la MISMA tabla, sin join"),
+    "pscomppars": ("pl_rade, pl_orbper, pl_bmasse, st_met [Fe/H], st_teff, st_rad, "
+                   "st_mass, sy_kepmag, sy_gaiamag, hostname — en la MISMA tabla"),
+}
+
+
+def _known_schema_hint(exp: dict[str, Any]) -> str:
+    blob = f"{exp.get('data_source','')} {exp.get('how','')} {exp.get('what','')}".lower()
+    hits = [f"  · {name}: {cols}" for name, cols in KNOWN_TABLE_COLUMNS.items()
+            if name in blob]
+    if not hits:
+        return ""
+    return ("\n\nESQUEMA CONOCIDO (columnas YA presentes in-table — NO pidas otra tabla "
+            "para estas columnas):\n" + "\n".join(hits))
+
+
 def default_plan(exp: dict[str, Any], hyp: dict[str, Any], domain: str,
                  feedback: str | None = None) -> dict[str, Any]:
     """Ask Codex which public datasets the experiment needs (may be none)."""
@@ -347,6 +369,7 @@ def default_plan(exp: dict[str, Any], hyp: dict[str, Any], domain: str,
     prov = _codex()
     allow = ", ".join(sorted(DATA_HOST_ALLOWLIST))
     fb = f"\n\nINTENTO ANTERIOR: {feedback[:600]}\n" if feedback else ""
+    fb += _known_schema_hint(exp)
     out = prov.complete_json(fb +
         f"Dominio: {domain}. Experimento: «{exp.get('title','')}». "
         f"Qué: {exp.get('what','')}. Cómo: {exp.get('how','')}. "
