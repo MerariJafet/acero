@@ -48,16 +48,36 @@ def _max_missions() -> int:
 
 
 MAX_MISSIONS = _max_missions()       # concurrent missions (each spawns Codex work)
-STALE_HEARTBEAT_SEC = 180.0
+STALE_HEARTBEAT_SEC = 180.0          # worker-gone threshold → re-submit (resume)
+REAP_HUNG_SEC = 1200.0               # worker present but hung this long → force-FAIL
+_WATCHDOG_MIN_INTERVAL = 30.0        # throttle lazy self-heal on dashboard reads
 
 _POOL = ThreadPoolExecutor(max_workers=MAX_MISSIONS, thread_name_prefix="mission")
 _ACTIVE: set[str] = set()
 _LOCK = threading.Lock()
+_LAST_WATCHDOG = [0.0]
 
 
 def _now_ts() -> float:
     import time
     return time.time()
+
+
+def _stale_action(status: str, heartbeat_ts: float, in_active: bool,
+                  now: float) -> str | None:
+    """Pure decision for the watchdog (testable without threads/DB):
+      - RUNNING + worker gone (not in _ACTIVE) + stale heartbeat → 'resume'
+      - RUNNING + worker present but hung far past grace       → 'reap'
+      - otherwise                                              → None
+    """
+    if status != "RUNNING":
+        return None
+    age = now - float(heartbeat_ts or 0)
+    if not in_active and age > STALE_HEARTBEAT_SEC:
+        return "resume"
+    if in_active and age > REAP_HUNG_SEC:
+        return "reap"
+    return None
 
 
 class MissionEngine:
@@ -146,8 +166,47 @@ class MissionEngine:
         self.store.update_payload(m["id"], m, status=m["status"])
 
     def list_missions(self, project_id: str) -> list[dict[str, Any]]:
+        self._maybe_watchdog()
         ms = self.store.list_objects(project_id, kind="mission")
         return sorted(ms, key=lambda x: x.get("created_at") or "", reverse=True)
+
+    def _maybe_watchdog(self) -> None:
+        """Throttled self-heal on dashboard reads (so no restart is needed)."""
+        now = _now_ts()
+        with _LOCK:
+            if now - _LAST_WATCHDOG[0] < _WATCHDOG_MIN_INTERVAL:
+                return
+            _LAST_WATCHDOG[0] = now
+        try:
+            self.watchdog()
+        except Exception:  # noqa: BLE001 - self-heal must never break a read
+            pass
+
+    def watchdog(self) -> dict[str, Any]:
+        """Recover missions whose worker vanished (re-submit) or hung (force-FAIL),
+        WITHOUT a portal restart. Safe to call often: `_submit` dedups on `_ACTIVE`,
+        and DONE step checkpoints are preserved so a resume continues, never restarts."""
+        resumed: list[str] = []
+        reaped: list[str] = []
+        now = _now_ts()
+        for p in self.ledger.list_projects():
+            for m in self.store.list_objects(p.id, kind="mission"):
+                action = _stale_action(m.get("status", ""),
+                                       float(m.get("heartbeat_ts") or 0),
+                                       m["id"] in _ACTIVE, now)
+                if action == "resume":
+                    self._submit(m["id"])
+                    resumed.append(m["id"])
+                elif action == "reap":
+                    for s in m.get("steps", []):
+                        if s["status"] == "RUNNING":
+                            s["status"] = "FAILED"
+                            s["error"] = "worker colgado sin heartbeat (reaped); reintentable"
+                            s["finished_at"] = now_iso()
+                    m["status"] = "FAILED"
+                    self._save(m)
+                    reaped.append(m["id"])
+        return {"ok": True, "resumed": resumed, "reaped": reaped}
 
     def resume_pending(self, *, sync: bool = False) -> dict[str, Any]:
         """After a restart: re-launch PENDING missions and RUNNING ones whose
