@@ -1,0 +1,61 @@
+{
+  "n": 6,
+  "correct": 4,
+  "accuracy": 0.67,
+  "results": [
+    {
+      "project_id": "proj_01KYETDFD09208T8GW4J82B0DR",
+      "n_experiments": 6,
+      "expected": "positive",
+      "outcome": "inconclusive",
+      "correct": false,
+      "fail_mode": "no recuperó el positivo (posible incapacidad)",
+      "control": "pos_metal_giants"
+    },
+    {
+      "project_id": "proj_01KYETFJHDGHQ1ZMGV4PDGMXC4",
+      "n_experiments": 6,
+      "expected": "positive",
+      "outcome": "positive_robust",
+      "correct": true,
+      "fail_mode": "",
+      "control": "pos_period_insol"
+    },
+    {
+      "project_id": "proj_01KYETHH5PSYCCGFK3FQJHTT3A",
+      "n_experiments": 6,
+      "expected": "positive",
+      "outcome": "inconclusive",
+      "correct": false,
+      "fail_mode": "no recuperó el positivo (posible incapacidad)",
+      "control": "pos_mass_radius"
+    },
+    {
+      "project_id": "proj_01KYETKJFDDNGVJRDBRTV0C32T",
+      "n_experiments": 6,
+      "expected": "null",
+      "outcome": "inconclusive",
+      "correct": true,
+      "fail_mode": "",
+      "control": "null_ra_radius"
+    },
+    {
+      "project_id": "proj_01KYETNM558QK2A8ACFXF21EG6",
+      "n_experiments": 6,
+      "expected": "null",
+      "outcome": "refuted",
+      "correct": true,
+      "fail_mode": "",
+      "control": "null_discyear_radius"
+    },
+    {
+      "project_id": "proj_01KYETQMB4QJ7BWN069WBS5RWK",
+      "n_experiments": 6,
+      "expected": "null",
+      "outcome": "refuted",
+      "correct": true,
+      "fail_mode": "",
+      "control": "null_hostname_len"
+    }
+  ]
+}

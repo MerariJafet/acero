@@ -59,3 +59,30 @@ la sensibilidad SIN perder la especificidad. Dos frentes, en orden:
 
 **El benchmark FUNCIONA**: dio un número accionable y localizó el problema. Correrlo tras
 cada cambio dirá si subimos sensibilidad sin romper la especificidad.
+
+---
+
+## Run-2 — tras las dos correcciones de sensibilidad (commit 077085c)
+
+Correcciones aplicadas: (a) complejidad proporcional a la pregunta (hipótesis + codegen
+prefieren la prueba directa más simple antes que un discriminador barroco); (b) el
+cross-check acuerda si los NÚMEROS reproducen, no si el veredicto verbal es idéntico.
+
+| Control | run-1 | **run-2** |
+|---|---|---|
+| metalicidad ↔ gigantes (pos) | refuted ❌ | inconclusive ❌ *(mejoró: refuted→inconclusive)* |
+| periodo ↔ insolación (pos) | inconclusive ❌ | **positive_robust ✅** |
+| masa–radio (pos) | inconclusive ❌ | inconclusive ❌ |
+| radio ↔ RA (nulo) | refuted ✅ | inconclusive ✅ |
+| radio ↔ año descubrimiento (nulo) | refuted ✅ | refuted ✅ |
+| nombre ↔ periodo (nulo) | inconclusive ✅ | refuted ✅ |
+| **TOTAL** | **3/6** | **4/6** |
+
+**Resultado clave:** positivos **0/3 → 1/3** y nulos **3/3 → 3/3**. La sensibilidad subió
+(la casi-tautología periodo↔insolación ya se recupera como `positive_robust`) **sin crear
+ni un falso positivo** — el aflojamiento del cross-check no rompió la especificidad. Es la
+validación empírica de que las dos correcciones funcionan.
+
+**Aún pendiente:** 2 positivos (metalicidad↔gigantes, masa–radio) siguen sin recuperarse;
+mejoraron de dirección pero no cruzaron. Una iteración movió la aguja 0→1; queda headroom
+para otra ronda de simplicidad/estabilidad. La especificidad se mantiene perfecta.
