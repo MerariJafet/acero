@@ -44,7 +44,29 @@ CONTROL_SET: list[dict[str, Any]] = [
      "question": ("¿La longitud del nombre de la estrella anfitriona predice el periodo "
                   "orbital del planeta? Datos: NEA, una tabla."),
      "rationale": "correlación absurda de control negativo"},
+    # --- CHEMISTRY (segundo dominio, para probar generalización del MOTOR) ---
+    {"id": "chem_pos_mw_heavyatoms", "expected": "positive", "domain": "chemistry",
+     "question": ("¿El peso molecular de los compuestos aumenta con su número de átomos "
+                  "pesados (no-H)? Datos públicos de PubChem (propiedades de compuestos)."),
+     "rationale": "relación casi tautológica: más átomos pesados → más masa"},
+    {"id": "chem_pos_logp_carbons", "expected": "positive", "domain": "chemistry",
+     "question": ("¿La lipofilicidad (XLogP) tiende a aumentar con el número de átomos de "
+                  "carbono? Datos de PubChem."),
+     "rationale": "tendencia establecida: más carbonos → más hidrofóbico"},
+    {"id": "chem_null_mw_namealpha", "expected": "null", "domain": "chemistry",
+     "question": ("¿El peso molecular correlaciona con el orden alfabético del nombre del "
+                  "compuesto? Datos de PubChem."),
+     "rationale": "el nombre no tiene relación física con la masa"},
+    {"id": "chem_null_rings_cid", "expected": "null", "domain": "chemistry",
+     "question": ("¿El número de anillos de un compuesto depende de su número de "
+                  "identificación CID en PubChem? Datos de PubChem."),
+     "rationale": "el CID es orden de registro, no una propiedad física"},
 ]
+
+
+def controls_for(domain: str) -> list[dict[str, Any]]:
+    """The control questions for one domain (empty ⇒ that field isn't onboarded yet)."""
+    return [c for c in CONTROL_SET if c.get("domain") == domain]
 
 
 def derive_outcome(experiments: list[dict[str, Any]]) -> str:
