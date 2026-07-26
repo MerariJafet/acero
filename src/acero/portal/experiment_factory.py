@@ -576,6 +576,59 @@ def _compare_results(a: dict[str, Any], b: dict[str, Any],
     return True, f"{len(shared)} métricas coinciden (tol {int(rel_tol*100)}%)"
 
 
+def classify_disagreement(a: dict[str, Any], b: dict[str, Any],
+                          rel_tol: float = 0.15) -> dict[str, Any]:
+    """P2 diagnosis: WHY two implementations disagree, structured so it can be
+    aggregated across runs to tell codegen VARIANCE from genuine INSTABILITY.
+
+    kind ∈ {agree, verdict_mismatch, metric_divergence, no_shared_metrics}.
+    A `verdict_mismatch` with metrics that actually AGREE numerically is a strong
+    signal of codegen variance (same numbers, different verbal call), not science.
+    """
+    va, vb = a.get("verdict"), b.get("verdict")
+    ma, mb = a.get("metrics") or {}, b.get("metrics") or {}
+    shared = [k for k in ma if k in mb
+              and isinstance(ma[k], (int, float)) and isinstance(mb[k], (int, float))]
+    divergent = []
+    for k in shared:
+        x, y = float(ma[k]), float(mb[k])
+        if abs(x - y) / max(abs(x), abs(y), 1e-12) > rel_tol:
+            divergent.append(k)
+    metrics_agree = bool(shared) and not divergent
+    if va != vb:
+        kind = "verdict_mismatch"
+    elif not shared:
+        kind = "no_shared_metrics"
+    elif divergent:
+        kind = "metric_divergence"
+    else:
+        kind = "agree"
+    return {"kind": kind, "verdict_a": va, "verdict_b": vb,
+            "n_shared_metrics": len(shared), "n_divergent": len(divergent),
+            "divergent_metrics": divergent[:6], "metrics_agree_numerically": metrics_agree,
+            "likely_codegen_variance": kind == "verdict_mismatch" and metrics_agree}
+
+
+def crosscheck_summary(experiments: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate cross-check diagnoses across a project's experiments (P2)."""
+    tally: dict[str, int] = {}
+    variance = performed = 0
+    for e in experiments:
+        cc = (e.get("factory") or {}).get("cross_check") or e.get("cross_check")
+        if not cc or not cc.get("performed"):
+            continue
+        performed += 1
+        d = cc.get("diagnosis") or {}
+        k = d.get("kind") or ("agree" if cc.get("agreed") else "unknown")
+        tally[k] = tally.get(k, 0) + 1
+        if d.get("likely_codegen_variance"):
+            variance += 1
+    return {"cross_checks": performed, "by_kind": tally,
+            "likely_codegen_variance": variance,
+            "note": ("Si 'likely_codegen_variance' domina, el desacuerdo es de "
+                     "implementación (mismos números, distinto veredicto), no ciencia.")}
+
+
 def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
                   plan: Callable[..., dict[str, Any]] | None = None,
                   codegen: Callable[..., str] | None = None,
@@ -701,6 +754,7 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
             agreed, detail = _compare_results(result, r2)
             cross_check = {"performed": True, "agreed": agreed, "detail": detail,
                            "second_verdict": r2.get("verdict"),
+                           "diagnosis": classify_disagreement(result, r2),  # P2
                            "attempts": att2}
         if not cross_check.get("agreed"):
             result["verdict"] = "inconclusive"
