@@ -176,6 +176,90 @@ def eva_for_hypothesis(h: dict[str, Any], exps: list[dict[str, Any]] | None = No
             for v in vulns[:6]]
 
 
+_INTERNAL_FLAG_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "is_reformulation_of_known": {"type": "boolean"},
+        "too_vague_to_refute": {"type": "boolean"},
+        "arose_after_seeing_results": {"type": "boolean"},
+        "simpler_explanation_exists": {"type": "boolean"},
+        "dataset_cannot_answer": {"type": "boolean"},
+        "experiment_confirm_only": {"type": "boolean"},
+        "effect_would_be_trivial": {"type": "boolean"},
+        "depends_on_single_decision": {"type": "boolean"},
+        "reason": {"type": "string"},
+    },
+    "required": ["is_reformulation_of_known", "too_vague_to_refute",
+                 "arose_after_seeing_results", "simpler_explanation_exists",
+                 "dataset_cannot_answer", "experiment_confirm_only",
+                 "effect_would_be_trivial", "depends_on_single_decision", "reason"],
+    "additionalProperties": False,
+}
+
+
+def internal_eva(h: dict[str, Any], *, use_ai: bool = True,
+                 provider: Any | None = None) -> dict[str, Any]:
+    """EVA INTERNAL mode as a pre-mission gate: attack ACERO's OWN hypothesis BEFORE
+    spending experiments. Codex assesses the fatal flags (reformulation, vagueness,
+    HARKing, confirm-only, trivial, unanswerable); `audit_internal` turns them into
+    blockers. Conservative by design: with no Codex it does NOT block (returns proceed).
+
+    Returns {proceed, blockers, reason, provenance}. A False `proceed` means: don't burn
+    a mission on this hypothesis until it's revised (the human can still force it).
+    """
+    from ..epistemic.eva import InternalHypothesisFlags, audit_internal
+    claim, _prov, _conf = _claim_from_hypothesis(h, [])
+    flags = InternalHypothesisFlags()
+    provenance, reason = "heuristic", ""
+    if use_ai:
+        try:
+            if provider is None:
+                from .experiment_factory import _codex
+                provider = _codex()
+            out = provider.complete_json(
+                "Eres EVA en modo interno: ataca ESTA hipótesis ANTES de gastar "
+                "experimentos. Marca cada bandera solo si es CLARAMENTE cierta (en la "
+                "duda, false). Sé estricto con: reformulación de algo ya conocido, "
+                "demasiado vaga para refutar, surgió tras ver resultados (HARKing), el "
+                "experimento solo puede confirmarla, el efecto sería trivial, el dataset "
+                "no puede responderla.\n\n"
+                f"Título: {h.get('title','')}\n"
+                f"Pregunta detonante: {h.get('trigger_question','')}\n"
+                f"Argumento: {h.get('argument','')}\n"
+                f"Duda/qué la falsaría: {h.get('doubt','')}\n"
+                f"Cómo probarla: {h.get('test_idea','')}\n\n"
+                "Devuelve las 8 banderas booleanas y 'reason' (una línea).",
+                _INTERNAL_FLAG_SCHEMA, temperature=0.1)
+            flags = InternalHypothesisFlags(
+                is_reformulation_of_known=bool(out.get("is_reformulation_of_known")),
+                too_vague_to_refute=bool(out.get("too_vague_to_refute")),
+                arose_after_seeing_results=bool(out.get("arose_after_seeing_results")),
+                simpler_explanation_exists=bool(out.get("simpler_explanation_exists")),
+                dataset_cannot_answer=bool(out.get("dataset_cannot_answer")),
+                experiment_confirm_only=bool(out.get("experiment_confirm_only")),
+                effect_would_be_trivial=bool(out.get("effect_would_be_trivial")),
+                depends_on_single_decision=bool(out.get("depends_on_single_decision")))
+            provenance, reason = "llm", str(out.get("reason", ""))[:250]
+        except Exception:  # noqa: BLE001 - can't assess ⇒ don't block
+            provenance = "fallback"
+    rep = audit_internal(claim, flags)
+    # Block ONLY flaws that make experiments POINTLESS or INVALID. 'Known/reformulation'
+    # and 'simpler explanation' are NOVELTY/warnings — a known-but-testable relationship
+    # is still worth confirming (and is exactly what the recovery benchmark tests), so it
+    # must NOT block. 'dataset_cannot_answer' is left as a warning (Codex over-flags it).
+    fatal = {
+        "too_vague_to_refute": "demasiado vaga para ser refutada",
+        "experiment_confirm_only": "el experimento solo puede confirmarla (no falsable)",
+        "arose_after_seeing_results": "surgió tras ver el resultado (HARKing)",
+        "effect_would_be_trivial": "el efecto sería científicamente trivial",
+    }
+    blockers = [msg for flag, msg in fatal.items() if getattr(flags, flag)]
+    warnings = [b for b in rep.internal_blockers if b not in blockers]
+    return {"proceed": not blockers, "blockers": blockers, "warnings": warnings,
+            "reason": reason, "provenance": provenance,
+            "top_vulnerabilities": [v.type.value for v in rep.vulnerabilities[:4]]}
+
+
 def run_epistemic(project_id: str, session_factory: Any | None = None,
                   *, extractor: Extractor | None = None) -> dict[str, Any]:
     """Run the epistemic pipeline over the project's approved/candidate hypotheses.

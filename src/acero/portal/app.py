@@ -630,13 +630,15 @@ def build_portal_router() -> APIRouter:
         return CriticAgent().rigor_score(project_id)
 
     @r.post("/api/projects/{project_id}/hypothesis/{hyp_id}/mission")
-    def mission_start(project_id: str, hyp_id: str,
+    def mission_start(project_id: str, hyp_id: str, body: dict[str, Any] | None = None,
                       sess: Session = Depends(_require_session),
                       x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
-        """Launch the full autonomous research mission for one approved hypothesis."""
+        """Launch the full autonomous research mission for one approved hypothesis.
+        Pass {"force": true} to override the EVA internal gate."""
         _require_csrf(sess, x_csrf_token)
         from .missions import MissionEngine
-        return MissionEngine().start(project_id, hyp_id)
+        force = bool((body or {}).get("force"))
+        return MissionEngine().start(project_id, hyp_id, force=force)
 
     @r.post("/api/projects/{project_id}/missions/start-all")
     def mission_start_all(project_id: str, sess: Session = Depends(_require_session),

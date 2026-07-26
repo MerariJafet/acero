@@ -88,7 +88,7 @@ class MissionEngine:
 
     # --- lifecycle -----------------------------------------------------------
     def start(self, project_id: str, hyp_id: str, *, use_ai: bool = True,
-              sync: bool = False) -> dict[str, Any]:
+              sync: bool = False, force: bool = False) -> dict[str, Any]:
         from .hypothesis_flow import HypothesisFlow
         h = HypothesisFlow(self._sf).store.get(hyp_id)
         if not h:
@@ -101,6 +101,17 @@ class MissionEngine:
             if m.get("hyp_id") == hyp_id and m.get("status") in ("PENDING", "RUNNING"):
                 return {"ok": False, "error": f"ya hay una misión activa ({m['id']})",
                         "mission_id": m["id"]}
+        # P4 — EVA internal gate: attack the hypothesis BEFORE spending experiments.
+        # A fatal flaw (vague / reformulation / HARKing / confirm-only / trivial) blocks
+        # the mission so no Codex is burned; the human can override with force=True.
+        if use_ai and not force:
+            from .epistemic_bridge import internal_eva
+            gate = internal_eva(h, use_ai=use_ai)
+            if not gate["proceed"]:
+                return {"ok": False, "blocked_by_eva": True,
+                        "blockers": gate["blockers"],
+                        "error": ("EVA interno bloqueó la misión (arréglala o fuerza): "
+                                  + "; ".join(gate["blockers"]))}
         mid = new_id("msn")
         rec = {"id": mid, "project_id": project_id, "hyp_id": hyp_id,
                "hyp_tag": h.get("tag", ""), "kind": "deep_investigation",

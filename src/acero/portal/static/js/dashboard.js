@@ -628,9 +628,19 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
   // 🚀 launch the FULL mission for one hypothesis, from its card
   view.querySelectorAll("[data-hmission]").forEach((b) =>
     b.addEventListener("click", async () => {
+      const url = `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.hmission}/mission`;
       const o = b.textContent; b.disabled = true; b.textContent = "🚀 misión en curso…";
-      const { ok, body } = await post(
-        `/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${b.dataset.hmission}/mission`, {});
+      let { ok, body } = await post(url, {});
+      // P4: EVA internal gate can block a flawed hypothesis before spending Codex
+      if (body && body.blocked_by_eva) {
+        b.disabled = false; b.textContent = o;
+        if (confirm("🛑 EVA interno bloqueó esta hipótesis ANTES de gastar experimentos:\n\n• "
+            + (body.blockers || []).join("\n• ")
+            + "\n\nLo ideal: 'Considerar crítica' para reformularla. ¿Lanzar de todos modos (forzar)?")) {
+          b.disabled = true; b.textContent = "🚀 forzando…";
+          ({ ok, body } = await post(url, { force: true }));
+        } else { cb.openPhase(pid, "hipotesis"); return; }
+      }
       b.disabled = false; b.textContent = o;
       if (!ok || (body && body.error && !body.ok))
         alert("Error al lanzar misión: " + ((body && (body.error || body.detail)) || ""));
