@@ -121,6 +121,21 @@ def test_tick_generates_approves_and_starts(monkeypatch):
     assert rl.load_state("p1")["ticks"] == 1
 
 
+def test_tick_bootstraps_when_action_is_noop(monkeypatch):
+    # PI picks 'deepen' but there are NO approved hypotheses → self-correct to
+    # generate so the loop never spins dry forever.
+    monkeypatch.setattr(rl, "build_digest",
+                        lambda *a, **k: {"hypotheses_by_status": {}, "recent_verdicts": [],
+                                         "open_anomalies": [], "rigor": {}})
+    eng, hyp, flow = _Engine(), _Hyps(), _Flow()
+    pi = _pi(_Prov({"action": "deepen", "reasoning": "profundizar"}),
+             engine=eng, hyps=hyp, flow=flow)
+    rec = pi.tick("pb")
+    assert rec["applied"].get("bootstrapped") is True
+    assert rec["applied"]["generated"] >= 2 and eng.started == ["pb"]
+    assert rec["dry"] is False
+
+
 def test_tick_pause_action_pauses(monkeypatch):
     monkeypatch.setattr(rl, "build_digest", _canned_digest)
     pi = _pi(_Prov({"action": "pause", "reasoning": "nada informativo"}),

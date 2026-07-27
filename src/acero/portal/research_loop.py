@@ -272,23 +272,34 @@ class PrincipalInvestigator:
                 "focus": str(decision.get("focus") or "")[:200],
                 "reasoning": str(decision.get("reasoning") or "")[:300]}
 
-    def _apply(self, pid: str, d: dict[str, Any]) -> dict[str, Any]:
+    def _generate_and_approve(self, pid: str, n: int, focus: str,
+                              applied: dict[str, Any]) -> None:
+        g = self._hyps_().generate(pid, n=n, use_ai=True, focus=focus)
+        created = g.get("created", []) if isinstance(g, dict) else []
+        applied["generated"] += len(created)
+        flow = self._flow_()
+        for c in created:                          # autonomy: PI approves; methodology
+            try:                                    # still gates evidence downstream
+                flow.set_status(pid, c["id"], "APPROVED", "PI loop")
+                applied["approved"] += 1
+            except Exception:  # noqa: BLE001
+                continue
+
+    def _apply(self, pid: str, d: dict[str, Any], digest: dict[str, Any]) -> dict[str, Any]:
         applied: dict[str, Any] = {"generated": 0, "approved": 0, "started": 0}
         if d["action"] == "pause":
             pause(pid)
             applied["paused"] = True
             return applied
+        approved_now = digest.get("hypotheses_by_status", {}).get("APPROVED", 0)
+        # A run/deepen action on a project with NO approved hypotheses is a no-op —
+        # the loop would spin dry forever. The methodology self-corrects: bootstrap
+        # a lot of hypotheses first so there is always something to run.
+        if d["action"] in {"run_existing", "deepen"} and approved_now == 0:
+            d = {**d, "action": "generate_and_run", "n_new": max(2, d.get("n_new", 0))}
+            applied["bootstrapped"] = True
         if d["action"] == "generate_and_run" and d["n_new"] > 0:
-            g = self._hyps_().generate(pid, n=d["n_new"], use_ai=True, focus=d["focus"])
-            created = g.get("created", []) if isinstance(g, dict) else []
-            applied["generated"] = len(created)
-            flow = self._flow_()
-            for c in created:                     # autonomy: PI approves; methodology
-                try:                               # still gates evidence downstream
-                    flow.set_status(pid, c["id"], "APPROVED", "PI loop")
-                    applied["approved"] += 1
-                except Exception:  # noqa: BLE001
-                    continue
+            self._generate_and_approve(pid, d["n_new"], d["focus"], applied)
         if d["action"] in {"generate_and_run", "run_existing", "deepen"}:
             r = self._engine_().start_all(pid, use_ai=True, sync=False)
             applied["started"] = len(r.get("started", [])) if isinstance(r, dict) else 0
@@ -297,7 +308,7 @@ class PrincipalInvestigator:
     def tick(self, pid: str) -> dict[str, Any]:
         digest = build_digest(self._sf, pid)
         decision = self._validate(self.decide(digest))
-        applied = self._apply(pid, decision)
+        applied = self._apply(pid, decision, digest)
         dry = (applied.get("started", 0) == 0 and applied.get("generated", 0) == 0
                and not applied.get("paused"))
         st = load_state(pid)
