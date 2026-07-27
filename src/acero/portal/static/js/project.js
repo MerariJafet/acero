@@ -25,6 +25,7 @@ export async function renderProjectWorkspace(view, pid) {
        <button data-tab="lit">🔎 Literatura</button>
        <button data-tab="world">🧠 Conocimiento</button>
        <button data-tab="learn">📚 Aprender</button>
+       <button data-tab="loop">🔁 Loop autónomo</button>
        <button data-tab="history">📜 Historial</button>
      </div>
      <div id="pw-tab"></div>`;
@@ -251,6 +252,55 @@ const TABS = {
         `<div class="card"><b>${esc(c.concept)}</b> ${c.blocking ? pill("BLOQUEANTE", "bad") : pill(c.criticality, "warn")}` +
         `<div class="tag">${esc(c.reason)}</div><div class="tag">currículo: ${esc(c.curriculum)}</div></div>`).join("") +
       `</div>`;
+  },
+
+  // --- 🔁 Loop autónomo: el Investigador Principal ------------------------
+  loop: async (el, pid) => {
+    const base = `/portal/api/projects/${encodeURIComponent(pid)}/loop`;
+    let timer = null;
+    async function draw() {
+      const { ok, body } = await get(base);
+      if (!ok) { el.innerHTML = "<p class='err'>no se pudo cargar el loop</p>"; return; }
+      const st = body.state || {}, fb = (body.feedback || []).slice().reverse();
+      const running = !st.paused && st.status === "running";
+      const rows = fb.length ? fb.map((r) => {
+        const d = r.decision || {}, a = r.applied || {};
+        const blocks = (a.blocks || []).length
+          ? `<div class="tag bad">EVA bloqueó: ${esc((a.blocks || []).join("; ").slice(0, 160))}</div>` : "";
+        return `<div class="card">
+          <b>tick ${esc(r.tick)}</b> · ${esc(d.action || "?")}
+          ${d.focus ? `— <span class="muted">${esc(String(d.focus).slice(0, 80))}</span>` : ""}
+          <div class="tag">generadas ${esc(a.generated || 0)} · aprobadas ${esc(a.approved || 0)} · misiones ${esc(a.started || 0)}${r.dry ? " · seco" : ""}</div>
+          ${blocks}</div>`;
+      }).join("") : "<p class='muted'>sin ticks aún — pulsa Iniciar</p>";
+      el.innerHTML =
+        `<section class="panel">
+           <h3>🔁 Investigador Principal (loop autónomo)</h3>
+           <p class="muted">El agente decide → la máquina corre los experimentos → la retro vuelve al agente → repite. La metodología gobierna cada paso; nada se promueve a descubrimiento sin tu revisión.</p>
+           <div class="tag">estado: ${pill(st.paused ? "pausado" : (st.status || "idle"), st.paused ? "warn" : "ok")} · ticks ${esc(st.ticks || 0)} · seco×${esc(st.dry_streak || 0)}</div>
+           <div class="chat-actions" style="margin-top:.6rem">
+             <button id="lp-start" class="act" ${running ? "disabled" : ""}>▶ ${st.ticks ? "Reanudar" : "Iniciar"}</button>
+             <button id="lp-pause" class="act ghost" ${running ? "" : "disabled"}>⏸ Pausar</button>
+             <button id="lp-tick" class="act ghost">⏭ Avanzar un tick</button>
+           </div>
+         </section>
+         <section class="panel"><h4>Últimas decisiones</h4>${rows}</section>`;
+      el.querySelector("#lp-start").addEventListener("click", async () => {
+        await post(base + "/start"); setTimeout(draw, 600);
+      });
+      el.querySelector("#lp-pause").addEventListener("click", async () => {
+        await post(base + "/pause"); setTimeout(draw, 300);
+      });
+      el.querySelector("#lp-tick").addEventListener("click", async (e) => {
+        e.target.disabled = true; e.target.textContent = "⏳ tick…";
+        await post(base + "/tick"); draw();
+      });
+    }
+    await draw();
+    // refresco en vivo mientras el tab esté abierto
+    timer = setInterval(() => {
+      if (el.isConnected) draw(); else clearInterval(timer);
+    }, 5000);
   },
 
   // --- 📜 Historial: provenance ------------------------------------------

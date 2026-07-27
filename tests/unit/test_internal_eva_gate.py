@@ -43,6 +43,20 @@ def test_confirm_only_is_blocked():
     assert g["proceed"] is False
 
 
+def test_harking_is_blocked_when_tested_on_same_data():
+    g = internal_eva(H, use_ai=True, provider=_Flags(arose_after_seeing_results=True))
+    assert g["proceed"] is False
+    assert any("HARKing" in b for b in g["blockers"])
+
+
+def test_harking_downgraded_when_tested_on_independent_data():
+    # anomaly-derived hypothesis + independent/holdout test = confirmation, NOT HARKing
+    g = internal_eva(H, use_ai=True, provider=_Flags(
+        arose_after_seeing_results=True, tested_on_independent_data=True))
+    assert g["proceed"] is True
+    assert not any("HARKing" in b for b in g["blockers"])
+
+
 def test_clean_hypothesis_proceeds_even_with_llm():
     g = internal_eva(H, use_ai=True, provider=_Flags())   # all flags false
     assert g["proceed"] is True and g["provenance"] == "llm"

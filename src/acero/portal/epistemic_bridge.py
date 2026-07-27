@@ -187,12 +187,18 @@ _INTERNAL_FLAG_SCHEMA = {
         "experiment_confirm_only": {"type": "boolean"},
         "effect_would_be_trivial": {"type": "boolean"},
         "depends_on_single_decision": {"type": "boolean"},
+        # A hypothesis suggested by an anomaly is only HARKing if it is tested on the
+        # SAME data that suggested it. If it proposes an INDEPENDENT/held-out dataset
+        # (exploration → confirmation), it is legitimate. This flag captures that so
+        # the loop can pursue anomalies without the gate treating them as fatal.
+        "tested_on_independent_data": {"type": "boolean"},
         "reason": {"type": "string"},
     },
     "required": ["is_reformulation_of_known", "too_vague_to_refute",
                  "arose_after_seeing_results", "simpler_explanation_exists",
                  "dataset_cannot_answer", "experiment_confirm_only",
-                 "effect_would_be_trivial", "depends_on_single_decision", "reason"],
+                 "effect_would_be_trivial", "depends_on_single_decision",
+                 "tested_on_independent_data", "reason"],
     "additionalProperties": False,
 }
 
@@ -211,6 +217,7 @@ def internal_eva(h: dict[str, Any], *, use_ai: bool = True,
     claim, _prov, _conf = _claim_from_hypothesis(h, [])
     flags = InternalHypothesisFlags()
     provenance, reason = "heuristic", ""
+    out: dict[str, Any] = {}
     if use_ai:
         try:
             if provider is None:
@@ -222,13 +229,16 @@ def internal_eva(h: dict[str, Any], *, use_ai: bool = True,
                 "duda, false). Sé estricto con: reformulación de algo ya conocido, "
                 "demasiado vaga para refutar, surgió tras ver resultados (HARKing), el "
                 "experimento solo puede confirmarla, el efecto sería trivial, el dataset "
-                "no puede responderla.\n\n"
+                "no puede responderla. Marca 'tested_on_independent_data'=true si la "
+                "forma de probarla usa un dataset/holdout INDEPENDIENTE de lo que la "
+                "sugirió (eso convierte una idea nacida de una anomalía en confirmación "
+                "legítima, NO HARKing).\n\n"
                 f"Título: {h.get('title','')}\n"
                 f"Pregunta detonante: {h.get('trigger_question','')}\n"
                 f"Argumento: {h.get('argument','')}\n"
                 f"Duda/qué la falsaría: {h.get('doubt','')}\n"
                 f"Cómo probarla: {h.get('test_idea','')}\n\n"
-                "Devuelve las 8 banderas booleanas y 'reason' (una línea).",
+                "Devuelve las 9 banderas booleanas y 'reason' (una línea).",
                 _INTERNAL_FLAG_SCHEMA, temperature=0.1)
             flags = InternalHypothesisFlags(
                 is_reformulation_of_known=bool(out.get("is_reformulation_of_known")),
@@ -254,6 +264,13 @@ def internal_eva(h: dict[str, Any], *, use_ai: bool = True,
         "effect_would_be_trivial": "el efecto sería científicamente trivial",
     }
     blockers = [msg for flag, msg in fatal.items() if getattr(flags, flag)]
+    # HARKing is only fatal when the test reuses the data that suggested it. If the
+    # hypothesis proposes INDEPENDENT/held-out data, exploration→confirmation is valid:
+    # downgrade the HARKing blocker to a warning so the loop can pursue anomalies
+    # legitimately. (The downstream cross-check + holdout + human ceiling still apply.)
+    if use_ai and bool(out.get("tested_on_independent_data")) \
+            and fatal["arose_after_seeing_results"] in blockers:
+        blockers.remove(fatal["arose_after_seeing_results"])
     warnings = [b for b in rep.internal_blockers if b not in blockers]
     return {"proceed": not blockers, "blockers": blockers, "warnings": warnings,
             "reason": reason, "provenance": provenance,
