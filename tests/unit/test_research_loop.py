@@ -115,7 +115,8 @@ def test_tick_generates_approves_and_starts(monkeypatch):
     pi = _pi(_Prov({"action": "generate_and_run", "focus": "anomalías", "n_new": 3,
                     "reasoning": "x"}), engine=eng, hyps=hyp, flow=flow)
     rec = pi.tick("p1")
-    assert hyp.calls == [(3, "anomalías")]
+    assert len(hyp.calls) == 1 and hyp.calls[0][0] == 3
+    assert hyp.calls[0][1].startswith("anomalías")        # + anti-HARKing steer
     assert len(flow.approved) == 3 and eng.started == ["p1"]
     assert rec["applied"]["started"] == 1 and rec["dry"] is False
     assert rl.load_state("p1")["ticks"] == 1
@@ -142,7 +143,9 @@ def test_tick_expands_frontier_when_nothing_to_run(monkeypatch):
     rec = pi.tick("pb")
     assert rec["applied"].get("expanded") is True
     assert rec["applied"]["generated"] >= 2 and rec["applied"]["approved"] >= 2
-    assert rec["dry"] is False                    # generating counts as progress
+    # nothing actually ran in this fake engine → dry (driver will back off), but
+    # the frontier WAS expanded so a real engine would launch the new hypotheses
+    assert rec["dry"] is True
 
 
 def test_tick_pause_action_pauses(monkeypatch):

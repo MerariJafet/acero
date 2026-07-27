@@ -175,6 +175,9 @@ def build_digest(sf: Any, pid: str, *, recent: int = 8) -> dict[str, Any]:
             {"action": r.get("decision", {}).get("action"),
              "focus": r.get("decision", {}).get("focus", "")[:60]}
             for r in recent_feedback(pid, 4)],
+        # framings the EVA gate rejected recently — so the PI stops proposing them
+        "eva_blocked": list({b for r in recent_feedback(pid, 4)
+                             for b in (r.get("applied", {}).get("blocks") or [])})[:6],
     }
 
 
@@ -272,9 +275,15 @@ class PrincipalInvestigator:
                 "focus": str(decision.get("focus") or "")[:200],
                 "reasoning": str(decision.get("reasoning") or "")[:300]}
 
+    _ANTI_HARK = (" — formula PREDICCIONES A PRIORI, falsables y NO triviales, que "
+                  "se prueben con datos INDEPENDIENTES (no derivadas de un resultado ya "
+                  "visto); evita marcos post-hoc/HARKing y efectos triviales")
+
     def _generate_and_approve(self, pid: str, n: int, focus: str,
                               applied: dict[str, Any]) -> None:
-        g = self._hyps_().generate(pid, n=n, use_ai=True, focus=focus)
+        # Steer generation to pass the EVA gate (anti-HARKing / non-trivial) instead
+        # of forcing past it — the methodology gate stays sovereign.
+        g = self._hyps_().generate(pid, n=n, use_ai=True, focus=(focus + self._ANTI_HARK))
         created = g.get("created", []) if isinstance(g, dict) else []
         applied["generated"] += len(created)
         flow = self._flow_()
@@ -285,36 +294,51 @@ class PrincipalInvestigator:
             except Exception:  # noqa: BLE001
                 continue
 
-    def _start(self, pid: str) -> int:
+    def _start(self, pid: str) -> tuple[int, list[str]]:
+        """Start missions for approved hypotheses. Returns (n_started, block_reasons).
+        Hypotheses the EVA gate rejects (HARKing/trivial/vague) come back as skips —
+        we surface those reasons so the next generation can avoid them. We do NOT
+        force past EVA: the methodology gate stays sovereign."""
         r = self._engine_().start_all(pid, use_ai=True, sync=False)
-        return len(r.get("started", [])) if isinstance(r, dict) else 0
+        if not isinstance(r, dict):
+            return 0, []
+        started = len(r.get("started", []))
+        blocks = [str(s.get("why") or "")[:160] for s in r.get("skipped", [])
+                  if s.get("why")]
+        return started, blocks
 
     def _apply(self, pid: str, d: dict[str, Any]) -> dict[str, Any]:
-        applied: dict[str, Any] = {"generated": 0, "approved": 0, "started": 0}
+        applied: dict[str, Any] = {"generated": 0, "approved": 0, "started": 0,
+                                   "blocks": []}
         if d["action"] == "pause":
             pause(pid)
             applied["paused"] = True
             return applied
         if d["action"] == "generate_and_run" and d["n_new"] > 0:
             self._generate_and_approve(pid, d["n_new"], d["focus"], applied)
-        applied["started"] = self._start(pid)
+        started, blocks = self._start(pid)
+        applied["started"], applied["blocks"] = started, blocks
         # Self-correct: if the chosen action found NOTHING runnable (no approved
         # hypotheses, or every mission already finished), EXPAND THE FRONTIER with
-        # new hypotheses instead of spinning dry. This is what keeps a "finished"
-        # project moving — the methodology says: nothing to run ⇒ explore.
-        if applied["started"] == 0 and applied["generated"] == 0:
+        # new hypotheses instead of spinning dry. Methodology says: nothing to run
+        # ⇒ explore. (If the fresh hypotheses are EVA-blocked, `started` stays 0 and
+        # the tick counts as dry → the driver backs off; it will NOT hot-spin.)
+        if started == 0 and applied["generated"] == 0:
             self._generate_and_approve(pid, max(2, d.get("n_new", 0) or 2),
                                        d.get("focus", ""), applied)
             applied["expanded"] = True
-            applied["started"] = self._start(pid)
+            applied["started"], b2 = self._start(pid)
+            applied["blocks"] += b2
         return applied
 
     def tick(self, pid: str) -> dict[str, Any]:
         digest = build_digest(self._sf, pid)
         decision = self._validate(self.decide(digest))
         applied = self._apply(pid, decision)
-        dry = (applied.get("started", 0) == 0 and applied.get("generated", 0) == 0
-               and not applied.get("paused"))
+        # dry = nothing actually RAN. Generating hypotheses that the EVA gate then
+        # blocks is NOT progress — so the driver backs off instead of hot-spinning
+        # on generation+EVA calls that never launch an experiment.
+        dry = applied.get("started", 0) == 0 and not applied.get("paused")
         st = load_state(pid)
         st["ticks"] = int(st.get("ticks", 0)) + 1
         st["last_tick_at"] = now_iso()
