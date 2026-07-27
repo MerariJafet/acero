@@ -49,7 +49,7 @@ def _max_missions() -> int:
 
 MAX_MISSIONS = _max_missions()       # concurrent missions (each spawns Codex work)
 STALE_HEARTBEAT_SEC = 180.0          # worker-gone threshold → re-submit (resume)
-REAP_HUNG_SEC = 1200.0               # worker present but hung this long → force-FAIL
+REAP_HUNG_SEC = 3600.0               # worker sin latido 1h → dado por muerto (force-FAIL)
 _WATCHDOG_MIN_INTERVAL = 30.0        # throttle lazy self-heal on dashboard reads
 
 _POOL = ThreadPoolExecutor(max_workers=MAX_MISSIONS, thread_name_prefix="mission")
@@ -263,6 +263,27 @@ class MissionEngine:
             return
         m["status"] = "RUNNING"
         self._save(m)
+        # Keep-alive heartbeat: while this worker is alive, bump the mission's heartbeat
+        # every 60s so a LONG-but-progressing step (the agent may legitimately take a
+        # long time designing/running an experiment) is NOT falsely reaped. Only a truly
+        # dead worker stops beating → reaped after REAP_HUNG_SEC. The real "hung" guard is
+        # the per-call LLM timeout (ACERO_LLM_TIMEOUT).
+        _stop_beat = threading.Event()
+
+        def _beat() -> None:
+            while not _stop_beat.wait(60):
+                try:
+                    self.store.update_payload(mission_id, {"heartbeat_ts": _now_ts()})
+                except Exception:  # noqa: BLE001
+                    pass
+        _hb = threading.Thread(target=_beat, name=f"beat-{mission_id[:8]}", daemon=True)
+        _hb.start()
+        try:
+            self._execute_steps(m)
+        finally:
+            _stop_beat.set()
+
+    def _execute_steps(self, m: dict[str, Any]) -> None:
         for step in m["steps"]:
             if step["status"] == "DONE":
                 continue                      # checkpoint: already done pre-restart
@@ -283,8 +304,8 @@ class MissionEngine:
                 self._save(m)
                 self.ledger.record_event(
                     m["project_id"], ProvenanceAction.UPDATE, "mission_engine",
-                    f"misión {mission_id[:12]} FALLÓ en {step['name']}"[:150],
-                    {"step": step["name"]}, entity_id=mission_id)
+                    f"misión {m['id'][:12]} FALLÓ en {step['name']}"[:150],
+                    {"step": step["name"]}, entity_id=m["id"])
                 return
             step["finished_at"] = now_iso()
             self._save(m)

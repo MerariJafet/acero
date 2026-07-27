@@ -85,7 +85,9 @@ def _enforce_cache_cap() -> None:
         total -= f.stat().st_size
         f.unlink(missing_ok=True)
 FETCH_TIMEOUT = 180.0
-SANDBOX_TIMEOUT = int(os.environ.get("ACERO_SANDBOX_TIMEOUT", "600"))   # s
+SANDBOX_TIMEOUT = int(os.environ.get("ACERO_SANDBOX_TIMEOUT", "3600"))  # s (1h: el
+# script corre sobre los datos completos en la máquina; analizar gigas puede tardar.
+# Override con ACERO_SANDBOX_TIMEOUT. Un runaway se corta a 1h.
 SANDBOX_MEMORY_MB = int(os.environ.get("ACERO_SANDBOX_MEMORY_MB", "12288"))  # 12GB
 MAX_REPAIRS = 2
 
@@ -334,7 +336,7 @@ def _schema(path: Path) -> dict[str, Any]:
 
 def _codex():
     from ..llm.providers import CodexCliProvider
-    prov = CodexCliProvider(timeout_sec=240)
+    prov = CodexCliProvider()          # timeout = ACERO_LLM_TIMEOUT (default 1h)
     if not prov.available():
         raise RuntimeError("codex unavailable")
     return prov

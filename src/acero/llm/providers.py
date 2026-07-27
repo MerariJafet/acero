@@ -128,6 +128,17 @@ def _codex_stream_error(stdout: str) -> str:
     return ""
 
 
+def _default_llm_timeout() -> int:
+    """Per-call LLM timeout in seconds. The agent that DESIGNS experiments and writes
+    scripts may legitimately take a long time (it only ever sees the schema + a 500-char
+    preview, never the data), so we don't cut it short — only a truly hung call is killed.
+    Default 1 hour; override with ACERO_LLM_TIMEOUT."""
+    try:
+        return max(30, int(os.environ.get("ACERO_LLM_TIMEOUT", "3600")))
+    except ValueError:
+        return 3600
+
+
 def _fallback_to_claude_enabled() -> bool:
     """When Codex has no tokens / is unavailable, fall back to the `claude` CLI.
     Default ON; set ACERO_LLM_FALLBACK=none to disable."""
@@ -166,13 +177,13 @@ class CodexCliProvider:
         model: str | None = None,
         *,
         sandbox: str = "read-only",
-        timeout_sec: int = 300,
+        timeout_sec: int | None = None,
         extra_args: list[str] | None = None,
     ) -> None:
         self.command = command
         self.model = model
         self.sandbox = sandbox
-        self.timeout_sec = timeout_sec
+        self.timeout_sec = timeout_sec if timeout_sec is not None else _default_llm_timeout()
         self.extra_args = extra_args or []
         # Metadata from the most recent call, for provenance (usage, exit code, ...).
         self.last_usage: dict = {}
@@ -329,11 +340,11 @@ class ClaudeCliProvider:
     name = "claude"
 
     def __init__(self, command: str = "claude", model: str | None = None, *,
-                 timeout_sec: int = 240, extra_args: list[str] | None = None,
+                 timeout_sec: int | None = None, extra_args: list[str] | None = None,
                  runner: Any | None = None) -> None:
         self.command = command
         self.model = model
-        self.timeout_sec = timeout_sec
+        self.timeout_sec = timeout_sec if timeout_sec is not None else _default_llm_timeout()
         self.extra_args = extra_args or []
         self._runner = runner            # injectable (cmd, env) -> (stdout, stderr, rc)
         self.last_usage: dict = {}

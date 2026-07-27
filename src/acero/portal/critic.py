@@ -124,7 +124,7 @@ class CriticAgent:
         if use_ai:
             try:
                 from ..llm.providers import CodexCliProvider
-                prov = CodexCliProvider(timeout_sec=180)
+                prov = CodexCliProvider()
                 if prov.available():
                     lit = self._literature_context(project_id)
                     eva_block = (
@@ -211,7 +211,7 @@ class CriticAgent:
         if use_ai and exps:
             try:
                 from ..llm.providers import CodexCliProvider
-                prov = CodexCliProvider(timeout_sec=150)
+                prov = CodexCliProvider()
                 if prov.available():
                     schema = {"type": "object", "properties": {
                         "resolutions": {"type": "array", "items": {
