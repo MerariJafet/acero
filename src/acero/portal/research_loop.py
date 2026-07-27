@@ -311,8 +311,12 @@ class PrincipalInvestigator:
         applied: dict[str, Any] = {"generated": 0, "approved": 0, "started": 0,
                                    "blocks": []}
         if d["action"] == "pause":
-            pause(pid)
-            applied["paused"] = True
+            # The PI signalling "no productive step now" must NOT stop the loop —
+            # autonomy is unlimited until the RESEARCHER pauses. Treat it as a
+            # COOLDOWN: add no work, let the in-flight missions drain, back off, and
+            # re-tick once the state has changed (concurrency eased, verdicts in).
+            applied["cooldown"] = True
+            applied["reason"] = str(d.get("reasoning") or "")[:200]
             return applied
         if d["action"] == "generate_and_run" and d["n_new"] > 0:
             self._generate_and_approve(pid, d["n_new"], d["focus"], applied)
@@ -389,10 +393,11 @@ class ResearchLoop:
         while True:
             if is_paused(pid):
                 break
-            record = self._pi.tick(pid)
+            self._pi.tick(pid)          # state + feedback are persisted inside tick
             done += 1
-            if record.get("applied", {}).get("paused"):
-                break
+            # NOTE: a PI 'pause'/cooldown decision does NOT break the loop — only the
+            # researcher's pause (is_paused, checked at the top) stops it. The PI can
+            # only decline to add work; the loop keeps cycling until the human pauses.
             if max_ticks is not None and done >= max_ticks:
                 break
             if wait:

@@ -148,12 +148,16 @@ def test_tick_expands_frontier_when_nothing_to_run(monkeypatch):
     assert rec["dry"] is True
 
 
-def test_tick_pause_action_pauses(monkeypatch):
+def test_pi_pause_is_cooldown_not_stop(monkeypatch):
+    # a PI 'pause' decision must NOT stop the loop (only the researcher pauses);
+    # it is a cooldown: no work added, no missions started, treated as dry.
     monkeypatch.setattr(rl, "build_digest", _canned_digest)
-    pi = _pi(_Prov({"action": "pause", "reasoning": "nada informativo"}),
+    pi = _pi(_Prov({"action": "pause", "reasoning": "fricción operativa"}),
              engine=_Engine(), hyps=_Hyps(), flow=_Flow())
     rec = pi.tick("p2")
-    assert rec["applied"].get("paused") and is_paused("p2")
+    assert rec["applied"].get("cooldown") is True
+    assert rec["applied"]["started"] == 0 and rec["dry"] is True
+    assert is_paused("p2") is False               # PI did NOT pause the loop
 
 
 def test_dry_tick_increments_backoff_streak(monkeypatch):

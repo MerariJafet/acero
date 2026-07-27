@@ -27,7 +27,10 @@ Cada tick el PI elige UNA acción (validada por la metodología):
   generador frontera de ACERO), las aprueba, y arranca misiones.
 - `run_existing` — corre lo aprobado pendiente sin crear más.
 - `deepen` — profundiza el rigor de lo ya corrido.
-- `pause` — no hay paso informativo ahora.
+- `pause` — **cooldown, NO detiene el loop.** El PI solo puede declinar añadir
+  trabajo ahora (fricción operativa, nada informativo): no arranca misiones, deja
+  drenar las que corren, hace back-off y vuelve a tickear con el estado ya cambiado.
+  Solo el investigador detiene el loop (`pause(pid)` / endpoint / botón).
 
 Sin LLM disponible hay un fallback determinista (bootstrap → perseguir anomalías
 → correr pendientes) para que el loop nunca se cuelgue.
