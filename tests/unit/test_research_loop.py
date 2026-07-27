@@ -121,19 +121,28 @@ def test_tick_generates_approves_and_starts(monkeypatch):
     assert rl.load_state("p1")["ticks"] == 1
 
 
-def test_tick_bootstraps_when_action_is_noop(monkeypatch):
-    # PI picks 'deepen' but there are NO approved hypotheses → self-correct to
-    # generate so the loop never spins dry forever.
-    monkeypatch.setattr(rl, "build_digest",
-                        lambda *a, **k: {"hypotheses_by_status": {}, "recent_verdicts": [],
-                                         "open_anomalies": [], "rigor": {}})
-    eng, hyp, flow = _Engine(), _Hyps(), _Flow()
+class _NoStart(_Engine):
+    def start_all(self, pid, *, use_ai=True, sync=False):
+        return {"started": [], "skipped": []}
+
+
+class _NoHyps(_Hyps):
+    def generate(self, pid, *, n=6, use_ai=True, focus=""):
+        self.calls.append((n, focus))
+        return {"ok": True, "created": []}
+
+
+def test_tick_expands_frontier_when_nothing_to_run(monkeypatch):
+    # PI picks 'deepen' but nothing is runnable (finished/empty project) →
+    # self-correct by EXPANDING the frontier with new hypotheses, never dry-spin.
+    monkeypatch.setattr(rl, "build_digest", _canned_digest)
+    hyp, flow = _Hyps(), _Flow()
     pi = _pi(_Prov({"action": "deepen", "reasoning": "profundizar"}),
-             engine=eng, hyps=hyp, flow=flow)
+             engine=_NoStart(), hyps=hyp, flow=flow)
     rec = pi.tick("pb")
-    assert rec["applied"].get("bootstrapped") is True
-    assert rec["applied"]["generated"] >= 2 and eng.started == ["pb"]
-    assert rec["dry"] is False
+    assert rec["applied"].get("expanded") is True
+    assert rec["applied"]["generated"] >= 2 and rec["applied"]["approved"] >= 2
+    assert rec["dry"] is False                    # generating counts as progress
 
 
 def test_tick_pause_action_pauses(monkeypatch):
@@ -145,13 +154,10 @@ def test_tick_pause_action_pauses(monkeypatch):
 
 
 def test_dry_tick_increments_backoff_streak(monkeypatch):
+    # truly dry: nothing runs AND the generator produces nothing new
     monkeypatch.setattr(rl, "build_digest", _canned_digest)
-
-    class _NoStart(_Engine):
-        def start_all(self, pid, *, use_ai=True, sync=False):
-            return {"started": [], "skipped": []}
     pi = _pi(_Prov({"action": "run_existing", "reasoning": "x"}),
-             engine=_NoStart(), hyps=_Hyps(), flow=_Flow())
+             engine=_NoStart(), hyps=_NoHyps(), flow=_Flow())
     pi.tick("p3")
     pi.tick("p3")
     assert rl.load_state("p3")["dry_streak"] == 2
