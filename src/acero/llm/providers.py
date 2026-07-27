@@ -354,8 +354,12 @@ class ClaudeCliProvider:
         return shutil.which(self.command) is not None or Path(self.command).exists()
 
     def _build_cmd(self, prompt: str) -> list[str]:
+        # `--tools ""` disables ALL of Claude Code's agentic tools so it behaves as a
+        # PURE text generator. Without this, `claude -p` acts as an agent: it writes/runs
+        # files itself and returns a PROSE SUMMARY instead of the raw script — which broke
+        # ACERO's codegen (the summary was saved as script.py and failed in the sandbox).
         cmd = [self.command, "-p", prompt, "--output-format", "json",
-               "--dangerously-skip-permissions", "--no-session-persistence"]
+               "--tools", "", "--dangerously-skip-permissions", "--no-session-persistence"]
         if self.model:
             cmd += ["--model", self.model]
         return cmd + self.extra_args

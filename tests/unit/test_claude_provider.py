@@ -27,6 +27,7 @@ def test_build_cmd_is_non_interactive_and_clears_guard():
     assert cmd[:2] == ["claude", "-p"]
     assert "--output-format" in cmd and "json" in cmd
     assert "--dangerously-skip-permissions" in cmd and "--no-session-persistence" in cmd
+    assert "--tools" in cmd                        # agentic tools disabled → pure codegen
     assert "--model" in cmd and "opus" in cmd
     import os
     os.environ["CLAUDECODE"] = "1"
