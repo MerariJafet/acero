@@ -528,6 +528,46 @@ def default_codegen(exp: dict[str, Any], hyp: dict[str, Any],
     return code
 
 
+# --- agentic authoring (Claude Code jailed in a container) ---------------------
+
+def experiment_agent_enabled() -> bool:
+    """Agentic experiment role: the agent WRITES + RUNS + debugs the script itself,
+    then ACERO scores it net-free. On by default; disable with ACERO_EXPERIMENT_AGENT=0."""
+    return os.environ.get("ACERO_EXPERIMENT_AGENT", "1").strip().lower() not in {"0", "false", "no"}
+
+
+_AGENTIC_ADDENDUM = (
+    "\n\n=== MODO AGÉNTICO (ACERO) ===\n"
+    "Tienes herramientas Write/Bash/Read/Edit confinadas a /work. ./data es "
+    "SOLO-LECTURA y NO hay red para el análisis: no descargues ni consultes nada; "
+    "usa EXCLUSIVAMENTE los archivos ya presentes en ./data.\n"
+    "PASOS OBLIGATORIOS:\n"
+    "1) Escribe el script en el archivo EXACTO ./analysis.py (un solo archivo).\n"
+    "2) EJECÚTALO con `python analysis.py` y revisa salida y errores.\n"
+    "3) Si falla o el RESULT_JSON no cumple el contrato, corrige ./analysis.py y "
+    "vuelve a correrlo hasta que imprima UNA línea RESULT_JSON válida.\n"
+    "4) El veredicto lo deciden los NÚMEROS contra los nulos. NUNCA ajustes el "
+    "resultado para que calce una plantilla: un 'refutes'/'inconclusive' honesto "
+    "vale igual que 'supports'.\n"
+    "IMPORTANTE: ACERO NO confía en tu resumen — re-ejecutará ./analysis.py en un "
+    "sandbox SIN red y ESE es el resultado puntuado. Deja ./analysis.py "
+    "determinista y autocontenido (stdlib + numpy/pandas/scipy, semilla fija) para "
+    "que reproduzca idéntico. La ÚLTIMA línea que imprime debe ser RESULT_JSON: {...}.\n"
+    "5) Escribe TAMBIÉN ese objeto JSON final (solo el objeto, sin el prefijo "
+    "'RESULT_JSON:') en el archivo ./agent_result.json — ACERO lo compara contra la "
+    "corrida sin-red (reproduce-check de integridad)."
+)
+
+
+def build_agentic_prompt(exp: dict[str, Any], hyp: dict[str, Any],
+                         data_files: list[dict[str, Any]],
+                         previews: dict[str, str],
+                         feedback: str | None = None) -> str:
+    """Agentic variant of the codegen prompt: same scientific contract, but the
+    agent authors + runs + debugs analysis.py itself instead of returning a blob."""
+    return build_codegen_prompt(exp, hyp, data_files, previews, feedback) + _AGENTIC_ADDENDUM
+
+
 # --- validation ----------------------------------------------------------------
 
 def _parse_result(stdout: str) -> tuple[dict[str, Any] | None, str]:
@@ -653,14 +693,23 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
                   plan: Callable[..., dict[str, Any]] | None = None,
                   codegen: Callable[..., str] | None = None,
                   fetch: Callable[..., list[dict[str, Any]]] | None = None,
+                  author: Any = None,
                   max_repairs: int = MAX_REPAIRS,
                   verify_supports: bool = True) -> dict[str, Any]:
     """Full factory pipeline. Returns {ok, result?, error?, ...} — never fabricates."""
     from ..sandbox.runner import SubprocessRunner
 
     plan = plan or default_plan
-    codegen = codegen or default_codegen
     fetch = fetch or fetch_data
+    # Decide the codegen role: pure-completion (default) OR agentic authoring.
+    # `author` injected (tests) OR a real AgenticAuthor forces agent mode; an
+    # explicit `codegen` forces pure completion. Otherwise use the agent when
+    # enabled AND the container+creds are actually available (else fall back).
+    from ..sandbox.agentic_runner import AgenticAuthor, agent_available
+    use_agent = codegen is None and (
+        author is not None or (experiment_agent_enabled() and agent_available()))
+    claimed_holder: dict[str, Any] = {}
+    scoring_image = os.environ.get("ACERO_AGENT_IMAGE", "acero-agent:py312")
 
     exp_id = exp.get("id") or "exp_unknown"
     workdir = artifacts_root() / exp_id
@@ -669,6 +718,27 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
     # run (possibly a different domain) can never leak into this experiment
     shutil.rmtree(data_dir, ignore_errors=True)
     workdir.mkdir(parents=True, exist_ok=True)
+
+    if use_agent:
+        _auth = author or AgenticAuthor()
+
+        def _agentic_codegen(exp_, hyp_, prov_, prev_, feedback=None):
+            """Author + run + debug analysis.py in the jailed container; return the
+            authored code. The agent's own claimed result is stashed (untrusted)
+            for the reproduce-check; ACERO scores the code net-free below."""
+            prompt = _sanitize(build_agentic_prompt(exp_, hyp_, prov_, prev_, feedback))
+            res = _auth.author(prompt, workdir)
+            claimed_holder["claimed"] = res.claimed
+            claimed_holder["cost_usd"] = round(
+                claimed_holder.get("cost_usd", 0.0) + float(res.cost_usd or 0.0), 4)
+            claimed_holder["num_turns"] = res.num_turns
+            claimed_holder["duration_sec"] = res.duration_sec
+            if not res.ok:
+                raise RuntimeError(res.error or "autoría agéntica falló")
+            return res.code
+        codegen = _agentic_codegen
+    else:
+        codegen = codegen or default_codegen
 
     # 1-2) plan → trusted fetch; on fetch failure RE-PLAN with alternatives (2 rounds)
     provenance: list[dict[str, Any]] = []
@@ -727,6 +797,26 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
 
     # 3-4) codegen + sandboxed run + repair loop
     runner = SubprocessRunner()
+    # In agent mode the SCORED run happens in the SAME image the agent used
+    # (acero-agent) but with --network=none, so library parity is guaranteed and
+    # the trusted result is net-free. Falls back to the subprocess sandbox if the
+    # docker scorer is unavailable.
+    docker_scorer = None
+    if use_agent:
+        try:
+            from ..sandbox.docker_runner import DockerRunner, docker_available, image_present
+            if docker_available() and image_present(scoring_image):
+                docker_scorer = DockerRunner(image=scoring_image)
+        except Exception:  # noqa: BLE001
+            docker_scorer = None
+
+    def _score(code: str) -> Any:
+        if docker_scorer is not None:
+            return docker_scorer.run(code, workdir, timeout_sec=SANDBOX_TIMEOUT,
+                                     memory_mb=SANDBOX_MEMORY_MB, allow_network=False)
+        return runner.run(code, workdir, timeout_sec=SANDBOX_TIMEOUT,
+                          memory_mb=SANDBOX_MEMORY_MB,
+                          cpu_seconds=SANDBOX_TIMEOUT, allow_network=False)
 
     def _one_impl(extra: str | None) -> tuple[dict[str, Any] | None, str, Any, int, str]:
         feedback = extra
@@ -741,9 +831,7 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
                 code = codegen(exp, hyp, provenance, previews, feedback)
             except Exception as exc:  # noqa: BLE001
                 return None, "", None, attempts, f"codegen: {str(exc)[:250]}"
-            sres = runner.run(code, workdir, timeout_sec=SANDBOX_TIMEOUT,
-                              memory_mb=SANDBOX_MEMORY_MB,
-                              cpu_seconds=SANDBOX_TIMEOUT, allow_network=False)
+            sres = _score(code)
             if sres.status == "ok" and sres.exit_code == 0:
                 result, why = _parse_result(sres.stdout)
                 if result is not None:
@@ -761,6 +849,10 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
         (workdir / "last_attempt.py").write_text(code or "", encoding="utf-8")
         return {"ok": False, "stage": "run", "attempts": attempts,
                 "error": err[:400]}
+    # snapshot the PRIMARY implementation's claimed result NOW — the cross-check
+    # below re-invokes the agent and would overwrite claimed_holder with the 2nd
+    # implementation's (different) metrics, corrupting the reproduce-check.
+    primary_claimed = claimed_holder.get("claimed")
 
     # 4b) cross-check: a "supports" needs an INDEPENDENT second implementation
     cross_check: dict[str, Any] | None = None
@@ -789,6 +881,35 @@ def run_generated(exp: dict[str, Any], hyp: dict[str, Any], *, domain: str = "",
                 "implementación independiente NO coincidió — "
                 f"{cross_check.get('reason') or cross_check.get('detail','')}] "
                 + str(result.get("verdict_reason", "")))[:400]
+
+    # 4c) reproduce-check (agent mode): the SCORED result above came from the
+    # net-free sandbox and is the source of truth. Compare it against what the
+    # AGENT itself claimed during authoring (it had network). A mismatch means
+    # the agent's run used something unavailable net-free (network / extra data)
+    # — a hard integrity flag, recorded and surfaced in the verdict_reason.
+    if use_agent:
+        claimed = primary_claimed
+        agentic: dict[str, Any] = {
+            "authored_by": "claude-agentic",
+            "scored_in": (f"docker:{scoring_image} (network=none)"
+                          if docker_scorer is not None else "subprocess (network=none)"),
+            "cost_usd": claimed_holder.get("cost_usd", 0.0),
+            "num_turns": claimed_holder.get("num_turns", 0),
+        }
+        if isinstance(claimed, dict) and claimed:
+            reproduced, detail = _compare_results(result, claimed, rel_tol=0.15)
+            agentic["reproduced"] = reproduced
+            agentic["reproduce_detail"] = detail
+            if not reproduced:
+                result["verdict_reason"] = (
+                    "[⚠️ integridad ACERO: lo que el agente AFIRMÓ no reproduce en el "
+                    "sandbox SIN red — posible uso de red o datos extra durante la "
+                    f"autoría ({detail}); se reporta el resultado sin-red] "
+                    + str(result.get("verdict_reason", "")))[:400]
+        else:
+            agentic["reproduced"] = None
+            agentic["note"] = "el agente no afirmó un RESULT_JSON comparable"
+        result["agentic"] = agentic
 
     # figures written by the script (if any)
     out_dir = workdir / "out"
