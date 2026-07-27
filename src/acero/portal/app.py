@@ -660,6 +660,39 @@ def build_portal_router() -> APIRouter:
         from .missions import MissionEngine
         return MissionEngine().retry(mission_id)
 
+    # --- Investigador Principal (loop autónomo) -------------------------------
+    @r.get("/api/projects/{project_id}/loop")
+    def loop_status(project_id: str, sess: Session = Depends(_require_session)
+                    ) -> dict[str, Any]:
+        from .research_loop import load_state, recent_feedback
+        return {"state": load_state(project_id),
+                "feedback": recent_feedback(project_id, 8)}
+
+    @r.post("/api/projects/{project_id}/loop/start")
+    def loop_start(project_id: str, sess: Session = Depends(_require_session),
+                   x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Arranca el loop del PI en segundo plano (ilimitado hasta pausar)."""
+        _require_csrf(sess, x_csrf_token)
+        from .research_loop import default_loop, load_state, resume
+        resume(project_id)
+        default_loop().start_background(project_id)
+        return {"ok": True, "state": load_state(project_id)}
+
+    @r.post("/api/projects/{project_id}/loop/pause")
+    def loop_pause(project_id: str, sess: Session = Depends(_require_session),
+                   x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .research_loop import pause
+        return {"ok": True, "state": pause(project_id)}
+
+    @r.post("/api/projects/{project_id}/loop/tick")
+    def loop_tick(project_id: str, sess: Session = Depends(_require_session),
+                  x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Avanza EXACTAMENTE un tick (síncrono) — para depurar el loop."""
+        _require_csrf(sess, x_csrf_token)
+        from .research_loop import default_pi
+        return {"ok": True, "tick": default_pi().tick(project_id)}
+
     @r.post("/api/projects/{project_id}/obsidian/sync")
     def obsidian_sync(project_id: str, sess: Session = Depends(_require_session),
                       x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:

@@ -367,3 +367,18 @@ class ResearchLoop:
         import threading
         threading.Thread(target=lambda: self.run(pid, **kw), daemon=True,
                          name=f"acero-pi-{pid[:8]}").start()
+
+
+# --- convenience builders (portal endpoints) ----------------------------------
+
+def _default_sf() -> Any:
+    from ..ledger.db import default_session_factory
+    return default_session_factory()
+
+
+def default_pi() -> PrincipalInvestigator:
+    return PrincipalInvestigator(_default_sf())
+
+
+def default_loop() -> ResearchLoop:
+    return ResearchLoop(_default_sf())
