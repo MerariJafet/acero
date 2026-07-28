@@ -21,7 +21,8 @@ class _Tutor(LearningTutor):
         return {
             "explanation": f"Explico {title} (ruta: {' → '.join(path)})",
             "formulas": [{"latex": "E=mc^2", "caption": "energía"}],
-            "diagram_mermaid": "", "key_terms": [{"term": title, "definition": "x"}],
+            "diagram_svg": "<svg viewBox='0 0 10 10'></svg>",
+            "key_terms": [{"term": title, "definition": "x"}],
             "connections": ["relatividad"],
             "subtopics": [{"title": f"{title} avanzado", "hook": "más profundo"}],
             "frontier": {"near": near, "score": 0.9 if near else 0.1,

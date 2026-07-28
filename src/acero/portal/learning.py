@@ -31,7 +31,7 @@ LEARN_TURN_SCHEMA = {
             "type": "object",
             "properties": {"latex": {"type": "string"}, "caption": {"type": "string"}},
             "required": ["latex", "caption"], "additionalProperties": False}},
-        "diagram_mermaid": {"type": "string"},        # mermaid source or ""
+        "diagram_svg": {"type": "string"},            # inline SVG (LLM-drawn) or ""
         "key_terms": {"type": "array", "items": {
             "type": "object",
             "properties": {"term": {"type": "string"}, "definition": {"type": "string"}},
@@ -53,7 +53,7 @@ LEARN_TURN_SCHEMA = {
     },
     # Codex structured output requires EVERY property key in `required`; the tutor
     # fills unused ones with empty arrays/strings.
-    "required": ["explanation", "formulas", "diagram_mermaid", "key_terms",
+    "required": ["explanation", "formulas", "diagram_svg", "key_terms",
                  "connections", "subtopics", "frontier"],
     "additionalProperties": False,
 }
@@ -64,8 +64,13 @@ _SYS = (
     "clarísima, en ESPAÑOL. Adapta la PROFUNDIDAD al camino recorrido (ruta más "
     "larga ⇒ nivel más avanzado, menos básico). Reglas:\n"
     "- explanation: explica el punto actual con rigor pero didáctico (markdown corto).\n"
-    "- formulas: fórmulas CLAVE en LaTeX (sin $), cada una con caption de qué significa.\n"
-    "- diagram_mermaid: si ayuda, un diagrama mermaid simple (si no, cadena vacía).\n"
+    "- formulas: fórmulas CLAVE en LaTeX VÁLIDO para KaTeX (sin $, sin \\text raro), "
+    "cada una con caption de qué significa. Prefiere pocas y esenciales, bien escritas.\n"
+    "- diagram_svg: DIBUJA un diagrama en SVG INLINE que ilustre el concepto — como una "
+    "imagen. Requisitos: empieza con <svg viewBox=\"0 0 400 260\" ...>, SIN ancho/alto "
+    "fijos, fondo transparente, texto legible (fill #e6edf3, font-size 12-14), trazos y "
+    "cajas claras (stroke #8ab4f8, fill de cajas #1c2333), flechas con marker. Etiqueta "
+    "todo en español. NADA de <script>. Si de verdad no aplica, cadena vacía.\n"
     "- key_terms: 2-5 términos con definición breve.\n"
     "- connections: teorías/ideas con las que conecta (para el lienzo).\n"
     "- subtopics: 3-5 conceptos MÁS PROFUNDOS en los que se puede ahondar desde aquí.\n"
@@ -151,13 +156,13 @@ class LearningTutor:
         out.setdefault("formulas", [])
         out.setdefault("key_terms", [])
         out.setdefault("connections", [])
-        out.setdefault("diagram_mermaid", "")
+        out.setdefault("diagram_svg", "")
         return out
 
     @staticmethod
     def _fallback(title: str) -> dict[str, Any]:
         return {"explanation": f"(tutor sin IA disponible) Tema: {title}.",
-                "formulas": [], "diagram_mermaid": "", "key_terms": [],
+                "formulas": [], "diagram_svg": "", "key_terms": [],
                 "connections": [], "subtopics": [],
                 "frontier": {"near": False, "score": 0.0, "open_question": "", "why": ""}}
 

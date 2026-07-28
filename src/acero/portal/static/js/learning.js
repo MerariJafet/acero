@@ -82,7 +82,7 @@ function paint(view, cb) {
          <div id="learn-canvas">${canvasHTML(lastTurn)}</div>
        </aside>
      </div>`;
-  renderMath(view); renderDiagrams(view);
+  renderMath(view);
 
   view.querySelectorAll("[data-node]").forEach((b) =>
     b.addEventListener("click", () => { S.cur = b.dataset.node; paint(view, cb); }));
@@ -169,9 +169,12 @@ function canvasHTML(t) {
       `<div class="formula" data-latex="${esc(f.latex)}"></div>
        <div class="tag">${esc(f.caption || "")}</div>`).join("")}</div>`);
   }
-  if (t.diagram_mermaid) {
+  if (t.diagram_svg && t.diagram_svg.includes("<svg")) {
+    // render the LLM-drawn SVG as a sandboxed <img> data-URI: it looks like an
+    // image AND scripts inside it cannot execute (defense against injection).
+    const uri = "data:image/svg+xml;utf8," + encodeURIComponent(t.diagram_svg);
     parts.push(`<div class="canvas-card"><h4>Diagrama</h4>
-      <div class="mermaid">${esc(t.diagram_mermaid)}</div></div>`);
+      <img class="learn-svg" src="${uri}" alt="diagrama explicativo" loading="lazy"></div>`);
   }
   if (t.key_terms && t.key_terms.length) {
     parts.push(`<div class="canvas-card"><h4>Términos clave</h4>${t.key_terms.map((k) =>
@@ -205,11 +208,3 @@ function renderMath(view) {
   });
 }
 
-function renderDiagrams(view) {
-  const els = view.querySelectorAll(".mermaid");
-  if (!els.length) return;
-  if (window.mermaid && window.mermaid.run) {
-    try { window.mermaid.run({ nodes: els }); return; } catch (_e) { /* fallback */ }
-  }
-  els.forEach((el) => { el.innerHTML = `<pre>${el.textContent}</pre>`; });
-}

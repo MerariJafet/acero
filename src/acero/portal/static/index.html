@@ -5,16 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ACERO — Research Portal</title>
   <link rel="stylesheet" href="/portal/static/style.css">
-  <!-- Modo Aprender: KaTeX (fórmulas) + Mermaid (diagramas). CDN con degradación
-       elegante — si no hay red, learning.js muestra el LaTeX/fuente en texto. -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-  <script type="module">
-    try {
-      const m = await import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs");
-      window.mermaid = m.default; window.mermaid.initialize({ startOnLoad: false, theme: "dark" });
-    } catch (_e) { /* offline: learning.js falls back to <pre> */ }
-  </script>
+  <!-- Modo Aprender: KaTeX servido LOCAL y síncrono (fórmulas nítidas garantizadas,
+       sin depender del CDN ni de timing). Los diagramas son SVG generados por el
+       LLM (learning.js los renderiza como imagen vectorial). -->
+  <link rel="stylesheet" href="/portal/static/vendor/katex/katex.min.css">
+  <script src="/portal/static/vendor/katex/katex.min.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#view">Saltar al contenido principal</a>

@@ -704,3 +704,12 @@ button.hyp-step:hover { border-color: var(--accent); color: var(--fg); }
 .term { font-size: .86rem; margin: .3rem 0; }
 @media (max-width: 1000px) { .learn-shell { grid-template-columns: 1fr; height: auto; }
   .mode-grid { grid-template-columns: 1fr; } }
+
+/* Modo Aprender — lienzo: fórmulas nítidas + diagrama-imagen (SVG del LLM) */
+.canvas-card .formula { padding: .5rem .2rem; text-align: center; font-size: 1.15rem;
+  overflow-x: auto; overflow-y: hidden; }
+.canvas-card .formula .katex { font-size: 1.25em; }
+.canvas-card .formula code { color: var(--accent); font-size: .9rem; }
+.learn-svg { width: 100%; height: auto; background: #0d1117; border-radius: 8px;
+  padding: .4rem; display: block; }
+.canvas-card + .canvas-card { margin-top: .7rem; }
