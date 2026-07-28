@@ -21,3 +21,4 @@ async function request(path, { method = "GET", body } = {}) {
 
 export const get = (p) => request(p);
 export const post = (p, body) => request(p, { method: "POST", body });
+export const del = (p) => request(p, { method: "DELETE" });

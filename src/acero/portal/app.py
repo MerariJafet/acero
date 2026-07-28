@@ -248,6 +248,26 @@ def build_portal_router() -> APIRouter:
         out.sort(key=lambda x: x["last_activity"], reverse=True)
         return out
 
+    @r.delete("/api/projects/{project_id}")
+    def project_delete(project_id: str, sess: Session = Depends(_require_session),
+                       x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Hard-delete a project and ALL its data (cascade). Irreversible."""
+        _require_csrf(sess, x_csrf_token)
+        from ..ledger.db import default_session_factory
+        from ..ledger.service import ResearchLedger
+        # also drop the autonomous-loop state/feedback files for this project
+        try:
+            import shutil
+
+            from .research_loop import _loop_dir
+            shutil.rmtree(_loop_dir(project_id), ignore_errors=True)
+        except Exception:  # noqa: BLE001 - best-effort cleanup
+            pass
+        try:
+            return ResearchLedger(default_session_factory()).delete_project(project_id)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=404, detail=str(exc)[:200]) from exc
+
     @r.get("/api/projects/{project_id}")
     def project_detail(project_id: str, sess: Session = Depends(_require_session)
                        ) -> dict[str, Any]:

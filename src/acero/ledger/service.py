@@ -233,6 +233,48 @@ class ResearchLedger:
             )
             s.commit()
 
+    def delete_project(self, project_id: str, *, actor: str = "human") -> dict[str, Any]:
+        """Hard-delete a project and ALL of its data (cascade). IRREVERSIBLE — the
+        human's explicit purge, so the negative-result protection is intentionally
+        bypassed. Removes every row that carries this project_id across all tables,
+        plus history rows keyed by the project's entities/nodes, then the project."""
+        from sqlalchemy import text
+        # tables that carry a project_id column (see models.py)
+        project_tables = [
+            "discovery", "provenance", "decisions", "documents", "fragments",
+            "world_edges", "world_nodes", "entities", "runs",
+            "runtime_tasks", "runtime_tokens", "runtime_events",
+        ]
+        # history tables keyed by a parent id, not project_id — cleared via subquery
+        history = [
+            ("entity_history", "entity_id", "entities"),
+            ("world_node_history", "node_id", "world_nodes"),
+        ]
+        deleted = 0
+        with self._sf() as s:
+            if s.get(ProjectRow, project_id) is None:
+                raise IntegrityError(f"Project {project_id} not found")
+            for tbl, col, parent in history:
+                try:
+                    s.execute(text(
+                        f"DELETE FROM {tbl} WHERE {col} IN "
+                        f"(SELECT id FROM {parent} WHERE project_id = :pid)"),
+                        {"pid": project_id})
+                except Exception:  # noqa: BLE001 - best-effort per optional table
+                    pass
+            for tbl in project_tables:
+                try:
+                    res = s.execute(
+                        text(f"DELETE FROM {tbl} WHERE project_id = :pid"),
+                        {"pid": project_id})
+                    deleted += int(getattr(res, "rowcount", 0) or 0)
+                except Exception:  # noqa: BLE001
+                    pass
+            s.execute(text("DELETE FROM projects WHERE id = :pid"), {"pid": project_id})
+            s.commit()
+        return {"ok": True, "project_id": project_id, "deleted_rows": deleted,
+                "actor": actor}
+
     # ------------------------------------------------------------------ #
     # Runs, decisions, provenance access
     # ------------------------------------------------------------------ #

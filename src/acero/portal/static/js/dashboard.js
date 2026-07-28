@@ -1,5 +1,5 @@
 "use strict";
-import { get, post } from "./api.js";
+import { del, get, post } from "./api.js";
 import { esc, kv, pill } from "./components.js";
 
 // CIO-style dashboards: home (all investigations), project-by-phases, phase detail,
@@ -25,6 +25,8 @@ export async function renderHome(view, cb) {
     const empty = (p.status || "").startsWith("empty");
     return `<div class="proj-card" data-pid="${esc(p.id)}" role="button" tabindex="0"
       aria-label="Abrir investigación ${esc(p.title)}">
+      <button class="proj-del act ghost" data-del="${esc(p.id)}" style="float:right"
+        title="Borrar esta investigación" aria-label="Borrar investigación ${esc(p.title)}">🗑</button>
       <h3>${esc(p.title)}</h3>
       <div>${pill(p.domain)} ${pill(empty ? "vacío" : "en progreso", empty ? "warn" : "ok")}</div>
       <div class="tag">Hipótesis ${p.hypotheses} · Experimentos ${p.experiments} ·
@@ -52,6 +54,23 @@ export async function renderHome(view, cb) {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
     });
   });
+  // 🗑 delete an investigation (cascade). Confirm first; never opens the project.
+  view.querySelectorAll("[data-del]").forEach((b) =>
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const card = b.closest(".proj-card");
+      const title = card ? card.querySelector("h3").textContent : "esta investigación";
+      if (!confirm(`¿Borrar «${title}» y TODOS sus datos (hipótesis, literatura, `
+        + `experimentos, dossiers)?\n\nEsto es IRREVERSIBLE.`)) return;
+      b.disabled = true; b.textContent = "⏳";
+      const { ok, body } = await del(
+        `/portal/api/projects/${encodeURIComponent(b.dataset.del)}`);
+      if (ok) { renderHome(view, cb); }
+      else {
+        b.disabled = false; b.textContent = "🗑";
+        alert("No se pudo borrar: " + ((body && (body.detail || body.error)) || ""));
+      }
+    }));
 }
 
 /* --------------------------------------------------------- project phases -- */
@@ -105,6 +124,55 @@ async function pollProjectRun(pid, runId, statusEl) {
     if (statusEl) statusEl.textContent = `subagentes ${done}/${items.length}…`;
     if (body.status !== "RUNNING") return;
   }
+}
+
+// 🔁 Autonomous-loop panel embedded in the project dashboard. Reads /loop, renders
+// state + recent PI decisions (with EVA blocks), and wires start/pause/tick. No
+// polling loop (the dashboard re-renders on refresh); each action re-draws the panel.
+async function wireLoopPanel(view, pid) {
+  const body = view.querySelector("#pi-loop-body");
+  const statusEl = view.querySelector("#pi-loop-status");
+  if (!body) return;
+  const base = `/portal/api/projects/${encodeURIComponent(pid)}/loop`;
+  async function draw() {
+    const { ok, body: d } = await get(base);
+    if (!ok) { body.innerHTML = "<p class='tag'>no se pudo cargar el loop</p>"; return; }
+    const st = d.state || {}, fb = (d.feedback || []).slice().reverse();
+    const running = !st.paused && st.status === "running";
+    if (statusEl) statusEl.textContent = st.paused ? "pausado" : (st.status || "idle");
+    const rows = fb.length ? fb.map((r) => {
+      const dec = r.decision || {}, a = r.applied || {};
+      const blk = (a.blocks || []).length
+        ? `<div class="tag">⛔ EVA: ${esc((a.blocks || []).join("; ").slice(0, 140))}</div>` : "";
+      const tail = a.cooldown ? " · cooldown" : (r.dry ? " · seco" : "");
+      return `<div class="card">
+        <b>tick ${esc(r.tick)}</b> · ${esc(dec.action || "?")}
+        ${dec.focus ? `— <span class="tag">${esc(String(dec.focus).slice(0, 70))}</span>` : ""}
+        <div class="tag">generadas ${esc(a.generated || 0)} · aprobadas ${esc(a.approved || 0)} · misiones ${esc(a.started || 0)}${tail}</div>
+        ${blk}</div>`;
+    }).join("") : "<p class='tag'>sin ticks aún — pulsa Iniciar para arrancar el ciclo autónomo</p>";
+    body.innerHTML = `
+      <p class="tag">El agente decide → la máquina corre los experimentos → la retro vuelve al agente → repite. La metodología gobierna; nada se promueve a descubrimiento sin ti.</p>
+      <div class="tag">estado: <b>${esc(st.paused ? "pausado" : (st.status || "idle"))}</b> · ticks ${esc(st.ticks || 0)} · seco×${esc(st.dry_streak || 0)}</div>
+      <div class="launch-primary" style="margin:.5rem 0">
+        <button class="act" id="pi-start" ${running ? "disabled" : ""}>▶ ${st.ticks ? "Reanudar" : "Iniciar"}</button>
+        <button class="act ghost" id="pi-pause" ${running ? "" : "disabled"}>⏸ Pausar</button>
+        <button class="act ghost" id="pi-tick">⏭ Avanzar un tick</button>
+      </div>
+      <div class="loop-feed">${rows}</div>`;
+    body.querySelector("#pi-start").addEventListener("click", async () => {
+      if (statusEl) statusEl.textContent = "⏳ arrancando…";
+      await post(base + "/start", {}); setTimeout(draw, 800);
+    });
+    body.querySelector("#pi-pause").addEventListener("click", async () => {
+      await post(base + "/pause", {}); setTimeout(draw, 300);
+    });
+    body.querySelector("#pi-tick").addEventListener("click", async (e) => {
+      e.target.disabled = true; e.target.textContent = "⏳ tick…";
+      await post(base + "/tick", {}); await draw();
+    });
+  }
+  await draw();
 }
 
 export async function renderProjectDash(view, pid, cb) {
@@ -242,6 +310,12 @@ export async function renderProjectDash(view, pid, cb) {
        <div id="epistemic-out" aria-live="polite"></div>
      </section>
 
+     <section class="launch-bar" id="pi-loop" aria-label="Loop autónomo">
+       <div class="launch-head"><b>🔁 Loop autónomo (Investigador Principal)</b>
+         <span class="launch-status" id="pi-loop-status" aria-live="polite"></span></div>
+       <div id="pi-loop-body"><p class="tag">cargando…</p></div>
+     </section>
+
      <div class="kpi-strip">
        <div class="kpi">${ring(ph.progress_pct, "#4aa3ff")}
          <div><b>${ph.n_phases_done}/${ph.n_phases}</b><span>fases con trabajo</span>
@@ -284,6 +358,9 @@ export async function renderProjectDash(view, pid, cb) {
   }
   view.querySelectorAll(".launch-btn").forEach((b) =>
     b.addEventListener("click", () => runFlow(b, b.dataset.ep, statusEl)));
+
+  // --- 🔁 Loop autónomo (Investigador Principal) ---------------------------
+  wireLoopPanel(view, pid);
 
   // 🧭 EVA + Question Engine: hypotheses → fertile questions + discriminating test
   const evaBtn = view.querySelector("#epistemic-run");
