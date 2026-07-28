@@ -6,6 +6,7 @@ import {
   eduPlanFlow, renderCourse, renderCourses, renderHome,
   renderPhaseDetail, renderProjectDash,
 } from "./dashboard.js";
+import { renderLearning } from "./learning.js";
 
 const $ = (s) => document.querySelector(s);
 
@@ -43,9 +44,38 @@ const cb = {
   },
   openCourses: () => { setContext({ scope: "global", label: "Cursos — chat general" }); renderCourses($("#view"), cb); },
   openCourse: (id) => renderCourse($("#view"), id, cb),
+  openLearning: () => {
+    state.project = null; syncSelect();
+    setContext({ scope: "global", label: "Modo Aprender — tutor socrático" });
+    renderLearning($("#view"), cb);
+  },
+  openModeSelect: () => { state.project = null; syncSelect();
+    setContext({ scope: "global" }); renderModeSelect($("#view"), cb); },
   setContext,
   refreshProjects: loadProjects,
 };
+
+// Landing: choose Learning vs Research (the two entry modes).
+function renderModeSelect(view, cb) {
+  view.innerHTML =
+    `<div class="mode-select">
+       <h1>¿Qué quieres hacer hoy?</h1>
+       <div class="mode-grid">
+         <button class="mode-card" id="mode-learn">
+           <div class="mode-ic">🎓</div><h2>Modo Aprender</h2>
+           <p>Un tutor te lleva de un tema general a la frontera del conocimiento.
+           Cuando roces una pregunta abierta, la conviertes en investigación.</p>
+           <span class="mode-go">Empezar a aprender →</span></button>
+         <button class="mode-card" id="mode-research">
+           <div class="mode-ic">🔬</div><h2>Modo Investigación</h2>
+           <p>El flujo completo de ACERO: hipótesis, literatura, experimentos
+           agénticos, revisión y el loop autónomo del Investigador Principal.</p>
+           <span class="mode-go">Ir a mis investigaciones →</span></button>
+       </div>
+     </div>`;
+  view.querySelector("#mode-learn").addEventListener("click", () => cb.openLearning());
+  view.querySelector("#mode-research").addEventListener("click", () => cb.openHome());
+}
 
 // ---- chat context ----------------------------------------------------------
 function setContext(ctx) {
@@ -190,10 +220,9 @@ async function enterApp() {
   $("#version").textContent = "v" + (body.version || "?");
   $("#whoami").textContent = body.user ? `sesión: ${body.user}` : "";
   buildSysMenu(body.sections || Object.keys(VIEWS));
-  const projs = await loadProjects();
-  // arranque: si hay una sola investigación real, entra directo; si no, home
-  if (projs.length === 1) cb.openProject(projs[0].id);
-  else cb.openHome();
+  await loadProjects();
+  // arranque: pantalla de selección de modo (Aprender / Investigación)
+  cb.openModeSelect();
 }
 
 async function doLogin(ev) {
@@ -220,8 +249,9 @@ async function doLogout() {
 async function boot() {
   $("#login-form").addEventListener("submit", doLogin);
   $("#logout").addEventListener("click", doLogout);
-  $("#home-btn").addEventListener("click", () => cb.openHome());
+  $("#home-btn").addEventListener("click", () => cb.openModeSelect());
   $("#new-project").addEventListener("click", newProjectFlow);
+  $("#learn-btn").addEventListener("click", () => cb.openLearning());
   $("#courses-btn").addEventListener("click", () => cb.openCourses());
   $("#processes-btn").addEventListener("click", async () => {
     const panel = $("#float-panel");

@@ -713,6 +713,63 @@ def build_portal_router() -> APIRouter:
         from .research_loop import default_pi
         return {"ok": True, "tick": default_pi().tick(project_id)}
 
+    # --- Modo Learning: tutor socrático → frontera → proyecto -----------------
+    @r.post("/api/learning/start")
+    def learning_start(body: dict[str, Any], sess: Session = Depends(_require_session),
+                       x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        topic = str((body or {}).get("topic") or "").strip()
+        if not topic:
+            raise HTTPException(422, "topic is required")
+        from .learning import LearningEngine
+        return LearningEngine().start(topic)
+
+    @r.get("/api/learning/{sid}")
+    def learning_get(sid: str, sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        from .learning import LearningEngine
+        try:
+            return LearningEngine().get(sid)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @r.post("/api/learning/{sid}/ask")
+    def learning_ask(sid: str, body: dict[str, Any],
+                     sess: Session = Depends(_require_session),
+                     x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .learning import LearningEngine
+        try:
+            return LearningEngine().ask(sid, str((body or {}).get("node_id") or ""),
+                                        str((body or {}).get("message") or ""))
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @r.post("/api/learning/{sid}/drill")
+    def learning_drill(sid: str, body: dict[str, Any],
+                       sess: Session = Depends(_require_session),
+                       x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .learning import LearningEngine
+        try:
+            return LearningEngine().drill(sid, str((body or {}).get("parent_id") or ""),
+                                          str((body or {}).get("subtopic") or ""))
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @r.post("/api/learning/{sid}/promote")
+    def learning_promote(sid: str, body: dict[str, Any],
+                         sess: Session = Depends(_require_session),
+                         x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Close the loop: turn a frontier question into a real ACERO investigation."""
+        _require_csrf(sess, x_csrf_token)
+        q = str((body or {}).get("question") or "").strip()
+        if not q:
+            raise HTTPException(422, "question is required")
+        domain = str((body or {}).get("domain") or "general").strip() or "general"
+        title = (q[:77] + "…") if len(q) > 78 else q
+        proj = _ws().create_project(title, domain=domain, topic=q)
+        return {"ok": True, "project": proj, "from_learning": sid}
+
     @r.post("/api/projects/{project_id}/obsidian/sync")
     def obsidian_sync(project_id: str, sess: Session = Depends(_require_session),
                       x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
