@@ -51,7 +51,10 @@ LEARN_TURN_SCHEMA = {
             "required": ["near", "score", "open_question", "why"],
             "additionalProperties": False},
     },
-    "required": ["explanation", "subtopics", "frontier"],
+    # Codex structured output requires EVERY property key in `required`; the tutor
+    # fills unused ones with empty arrays/strings.
+    "required": ["explanation", "formulas", "diagram_mermaid", "key_terms",
+                 "connections", "subtopics", "frontier"],
     "additionalProperties": False,
 }
 
