@@ -28,6 +28,7 @@ class _Tutor(LearningTutor):
             "frontier": {"near": near, "score": 0.9 if near else 0.1,
                          "open_question": "¿pregunta abierta?" if near else "",
                          "why": "no resuelto" if near else ""},
+            "learner_signal": {"level": "intermedio", "interests": [title.lower()]},
         }
 
 
@@ -73,6 +74,32 @@ def test_frontier_flag_surfaces_open_question():
 def test_get_unknown_session_raises():
     with pytest.raises(KeyError):
         _engine().get("lsess_nope")
+
+
+def test_list_sessions_and_resume():
+    from acero.portal.learning import list_sessions
+    eng = _engine()
+    a = eng.start("Álgebra")
+    eng.start("Química")
+    sess = list_sessions()
+    assert len(sess) == 2
+    topics = {s["topic"] for s in sess}
+    assert topics == {"Álgebra", "Química"}
+    # resuming = get() an existing session id works and carries its tree
+    resumed = eng.get(a["session_id"])
+    assert resumed["tree"]["topic"] == "Álgebra"
+
+
+def test_profile_learns_from_the_student():
+    from acero.portal.learning import load_profile
+    eng = _engine()
+    s = eng.start("Física cuántica")
+    eng.ask(s["session_id"], s["node_id"], "¿cómo se deriva la ecuación de onda?")
+    p = load_profile()
+    assert p["n_sessions"] == 1 and p["n_questions"] >= 1
+    assert "física cuántica" in p["interests"]          # from learner_signal
+    assert "intermedio" in p["levels"]
+    assert any("deriva" in q for q in p["recent_questions"])
 
 
 def test_real_tutor_falls_back_without_provider():

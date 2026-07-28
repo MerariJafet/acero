@@ -9,16 +9,39 @@ import { esc } from "./components.js";
 const S = { sid: null, cur: null, data: null };
 
 export async function renderLearning(view, cb) {
-  if (!S.sid) { view.innerHTML = starter(); wireStarter(view, cb); return; }
+  if (!S.sid) { await renderStart(view, cb); return; }
   await refresh();
+  if (!S.cur && S.data) S.cur = S.data.tree.root;   // resuming: land on the root
   paint(view, cb);
 }
 
-// --- topic starter ------------------------------------------------------------
+// --- topic starter: new topic + resume past lessons + your profile -----------
 const SEEDS = ["Mecánica cuántica", "Epigenética", "Agujeros negros",
   "Teoría de números", "Inmunología", "Consciencia"];
 
-function starter() {
+async function renderStart(view, cb) {
+  view.innerHTML = "<p class='loading'>Cargando…</p>";
+  const { body } = await get("/portal/api/learning");
+  view.innerHTML = starter((body && body.sessions) || [], (body && body.profile) || {});
+  wireStarter(view, cb);
+}
+
+function starter(sessions, prof) {
+  const resume = sessions.length ? `
+    <section class="learn-resume">
+      <h3>▸ Continúa donde ibas</h3>
+      <div class="learn-sesslist">${sessions.map((s) => `
+        <button class="learn-sesscard" data-resume="${esc(s.session_id)}">
+          <b>${esc(s.topic)}</b>
+          <span class="tag">${esc(s.nodes)} conceptos · ${esc((s.last_activity || "").slice(0, 10))}</span>
+        </button>`).join("")}</div>
+    </section>` : "";
+  const profile = (prof && prof.summary) ? `
+    <section class="learn-profile">
+      <h3>🧠 Lo que ACERO sabe de ti</h3>
+      <p class="tag">${esc(prof.summary)}</p>
+      <p class="tag">${esc(prof.n_sessions || 0)} lecciones · ${esc(prof.n_questions || 0)} preguntas — el tutor usa esto para guiarte mejor</p>
+    </section>` : "";
   return `<div class="learn-start">
     <h1>🎓 Modo Aprender</h1>
     <p class="muted">Elige un tema y baja de lo general a la <b>frontera del conocimiento</b>.
@@ -31,6 +54,8 @@ function starter() {
     </form>
     <div class="learn-suggest">${SEEDS.map((t) =>
       `<button class="act ghost" data-topic="${esc(t)}">${esc(t)}</button>`).join("")}</div>
+    ${resume}
+    ${profile}
   </div>`;
 }
 
@@ -48,6 +73,10 @@ function wireStarter(view, cb) {
   });
   view.querySelectorAll("[data-topic]").forEach((b) =>
     b.addEventListener("click", () => go(b.dataset.topic)));
+  view.querySelectorAll("[data-resume]").forEach((b) =>
+    b.addEventListener("click", () => {
+      S.sid = b.dataset.resume; S.cur = null; S.data = null; renderLearning(view, cb);
+    }));
 }
 
 async function refresh() {

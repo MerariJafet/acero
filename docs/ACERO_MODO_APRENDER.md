@@ -55,3 +55,8 @@ frontera es una heurística de arranque; la novedad real la valida el pipeline.
 
 Regla epistémica: la prosa del tutor es **guía, nunca evidencia**; ningún hallazgo
 se promueve a descubrimiento sin el pipeline + revisión humana.
+
+## Reanudar + Perfil del aprendiz
+
+- Al entrar a Aprender ves **tus lecciones guardadas** (tema · conceptos · fecha) para **reanudar** cualquiera otro día (persisten en `acero_data/learning/<sid>/`).
+- ACERO mantiene un **perfil del aprendiz** (`acero_data/learning/profile.json`): en cada turno el tutor infiere tu **nivel** e **intereses** (`learner_signal`, en la misma llamada, sin costo extra) y se acumulan con tus temas y preguntas. Ese perfil se **inyecta en el prompt** de cada lección para calibrar profundidad, conectar con lo que te interesa y guiarte hacia lo que aún no dominas. Endpoint: `GET /api/learning` (sesiones + perfil).

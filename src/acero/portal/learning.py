@@ -50,11 +50,18 @@ LEARN_TURN_SCHEMA = {
                 "why": {"type": "string"}},
             "required": ["near", "score", "open_question", "why"],
             "additionalProperties": False},
+        "learner_signal": {                          # what this turn reveals about YOU
+            "type": "object",
+            "properties": {
+                "level": {"type": "string"},          # principiante|intermedio|avanzado
+                "interests": {"type": "array", "items": {"type": "string"}}},
+            "required": ["level", "interests"],
+            "additionalProperties": False},
     },
     # Codex structured output requires EVERY property key in `required`; the tutor
     # fills unused ones with empty arrays/strings.
     "required": ["explanation", "formulas", "diagram_svg", "key_terms",
-                 "connections", "subtopics", "frontier"],
+                 "connections", "subtopics", "frontier", "learner_signal"],
     "additionalProperties": False,
 }
 
@@ -77,7 +84,12 @@ _SYS = (
     "- frontier: evalúa HONESTAMENTE si la pregunta actual está cerca de un PROBLEMA "
     "ABIERTO sin respuesta asentada. near=true y score alto SOLO si de verdad roza "
     "algo no resuelto; da la open_question concreta y por qué es abierta. Si es "
-    "material asentado, near=false y score bajo. No inventes fronteras."
+    "material asentado, near=false y score bajo. No inventes fronteras.\n"
+    "- learner_signal: infiere del MENSAJE del estudiante su nivel "
+    "(principiante|intermedio|avanzado) y 1-4 etiquetas de interés temático. Esto "
+    "alimenta su PERFIL para personalizar futuras lecciones.\n"
+    "Si te doy un PERFIL del estudiante, ÚSALO: ajusta la profundidad a su nivel, "
+    "conecta con sus intereses recurrentes, y guíalo hacia lo que aún no domina."
 )
 
 
@@ -118,6 +130,104 @@ def _path_titles(tree: dict[str, Any], node_id: str) -> list[str]:
     return list(reversed(chain))
 
 
+def list_sessions() -> list[dict[str, Any]]:
+    """All learning sessions (newest first) so you can resume any of them."""
+    root = learning_root()
+    if not root.exists():
+        return []
+    out: list[dict[str, Any]] = []
+    for d in sorted(root.iterdir()):
+        if not d.is_dir() or not d.name.startswith("lsess"):
+            continue
+        f = d / "tree.json"
+        if not f.exists():
+            continue
+        try:
+            t = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        nodes = t.get("nodes", {})
+        last = max([str(n.get("created_at", "")) for n in nodes.values()]
+                   + [str(t.get("created_at", ""))])
+        out.append({"session_id": t.get("id", d.name), "topic": t.get("topic", ""),
+                    "nodes": len(nodes), "last_activity": last})
+    out.sort(key=lambda x: x["last_activity"], reverse=True)
+    return out
+
+
+# --- learner profile (what ACERO learns about YOU, to personalize) ------------
+
+def profile_path() -> Path:
+    return learning_root() / "profile.json"
+
+
+def load_profile() -> dict[str, Any]:
+    f = profile_path()
+    if f.exists():
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            pass
+    return {"interests": {}, "topics": [], "levels": [], "n_questions": 0,
+            "n_sessions": 0, "recent_questions": [], "updated_at": None}
+
+
+def save_profile(p: dict[str, Any]) -> None:
+    learning_root().mkdir(parents=True, exist_ok=True)
+    profile_path().write_text(json.dumps(p, ensure_ascii=False, indent=2),
+                              encoding="utf-8")
+
+
+def _typical_level(levels: list[str]) -> str:
+    if not levels:
+        return ""
+    from collections import Counter
+    return Counter(levels[-12:]).most_common(1)[0][0]
+
+
+def profile_summary(p: dict[str, Any]) -> str:
+    """Compact, human-readable summary fed to the tutor to personalize."""
+    if not (p.get("interests") or p.get("topics")):
+        return ""
+    parts: list[str] = []
+    top = sorted(p.get("interests", {}).items(), key=lambda x: -x[1])[:6]
+    if top:
+        parts.append("intereses: " + ", ".join(t for t, _ in top))
+    lvl = _typical_level(p.get("levels", []))
+    if lvl:
+        parts.append("nivel típico: " + lvl)
+    if p.get("topics"):
+        parts.append("temas explorados: " + ", ".join(p["topics"][-6:]))
+    if p.get("recent_questions"):
+        parts.append("suele preguntar: " + " | ".join(p["recent_questions"][-3:]))
+    return "; ".join(parts)
+
+
+def update_profile(*, topic: str | None = None, question: str | None = None,
+                   signal: dict[str, Any] | None = None,
+                   new_session: bool = False) -> dict[str, Any]:
+    """Fold one turn into the learner profile (interests, level, questions)."""
+    p = load_profile()
+    if new_session:
+        p["n_sessions"] = int(p.get("n_sessions", 0)) + 1
+        if topic and topic not in p["topics"]:
+            p["topics"].append(topic)
+    if question:
+        p["n_questions"] = int(p.get("n_questions", 0)) + 1
+        p["recent_questions"] = (p.get("recent_questions", []) + [str(question)[:120]])[-10:]
+    if isinstance(signal, dict):
+        for tag in (signal.get("interests") or [])[:6]:
+            tag = str(tag)[:40].strip()
+            if tag:
+                p["interests"][tag] = int(p["interests"].get(tag, 0)) + 1
+        lvl = str(signal.get("level") or "").strip().lower()
+        if lvl:
+            p["levels"] = (p.get("levels", []) + [lvl])[-40:]
+    p["updated_at"] = now_iso()
+    save_profile(p)
+    return p
+
+
 class LearningTutor:
     """Produces one structured tutor turn. Provider is injectable for tests."""
 
@@ -135,7 +245,10 @@ class LearningTutor:
         if prov is None or not getattr(prov, "available", lambda: False)():
             return self._fallback(title)
         crumb = " → ".join(path) if path else title
-        prompt = (f"{_SYS}\n\nRUTA DE APRENDIZAJE (de general a específico): {crumb}\n"
+        prof = profile_summary(load_profile())
+        prompt = (f"{_SYS}\n\n"
+                  + (f"PERFIL DEL ESTUDIANTE (personaliza desde aquí): {prof}\n\n" if prof else "")
+                  + f"RUTA DE APRENDIZAJE (de general a específico): {crumb}\n"
                   f"CONCEPTO ACTUAL: {title}\n"
                   f"MENSAJE DEL ESTUDIANTE: {message}\n\nDevuelve el turno.")
         try:
@@ -157,6 +270,10 @@ class LearningTutor:
         out.setdefault("key_terms", [])
         out.setdefault("connections", [])
         out.setdefault("diagram_svg", "")
+        sig = out.get("learner_signal") or {}
+        out["learner_signal"] = {"level": str(sig.get("level") or "")[:20],
+                                 "interests": [str(i)[:40] for i in
+                                               (sig.get("interests") or [])[:6]]}
         return out
 
     @staticmethod
@@ -164,7 +281,8 @@ class LearningTutor:
         return {"explanation": f"(tutor sin IA disponible) Tema: {title}.",
                 "formulas": [], "diagram_svg": "", "key_terms": [],
                 "connections": [], "subtopics": [],
-                "frontier": {"near": False, "score": 0.0, "open_question": "", "why": ""}}
+                "frontier": {"near": False, "score": 0.0, "open_question": "", "why": ""},
+                "learner_signal": {"level": "", "interests": []}}
 
 
 class LearningEngine:
@@ -197,6 +315,7 @@ class LearningEngine:
         _save(sid, tree)
         turn = self._tutor.turn(topic, [topic], f"Enséñame sobre {topic} desde lo esencial.")
         self._append_msg(sid, root, "assistant", turn["explanation"], turn)
+        update_profile(new_session=True, topic=topic, signal=turn.get("learner_signal"))
         return {"session_id": sid, "node_id": root, "turn": turn}
 
     def drill(self, sid: str, parent_id: str, subtopic: str) -> dict[str, Any]:
@@ -208,6 +327,7 @@ class LearningEngine:
         path = _path_titles(tree, nid)
         turn = self._tutor.turn(subtopic, path, f"Profundiza en {subtopic}.")
         self._append_msg(sid, nid, "assistant", turn["explanation"], turn)
+        update_profile(question=f"profundizar: {subtopic}", signal=turn.get("learner_signal"))
         return {"node_id": nid, "turn": turn}
 
     def ask(self, sid: str, node_id: str, message: str) -> dict[str, Any]:
@@ -219,6 +339,7 @@ class LearningEngine:
         self._append_msg(sid, node_id, "user", message)
         turn = self._tutor.turn(node["title"], path, message)
         self._append_msg(sid, node_id, "assistant", turn["explanation"], turn)
+        update_profile(question=message, signal=turn.get("learner_signal"))
         return {"node_id": node_id, "turn": turn}
 
     def get(self, sid: str) -> dict[str, Any]:

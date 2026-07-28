@@ -713,3 +713,15 @@ button.hyp-step:hover { border-color: var(--accent); color: var(--fg); }
 .learn-svg { width: 100%; height: auto; background: #0d1117; border-radius: 8px;
   padding: .4rem; display: block; }
 .canvas-card + .canvas-card { margin-top: .7rem; }
+
+/* Modo Aprender — reanudar lecciones + perfil del aprendiz */
+.learn-resume, .learn-profile { max-width: 720px; margin: 1.4rem auto 0; text-align: left; }
+.learn-resume h3, .learn-profile h3 { font-size: .95rem; color: var(--muted); margin-bottom: .5rem; }
+.learn-sesslist { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.learn-sesscard { text-align: left; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: .7rem .9rem; cursor: pointer; color: var(--fg);
+  display: flex; flex-direction: column; gap: .2rem; transition: border-color .15s; }
+.learn-sesscard:hover { border-color: var(--accent); }
+.learn-profile { background: rgba(138,180,248,.10); border: 1px solid var(--border);
+  border-radius: 12px; padding: .9rem 1rem; }
+@media (max-width: 700px) { .learn-sesslist { grid-template-columns: 1fr; } }

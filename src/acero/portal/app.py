@@ -724,6 +724,14 @@ def build_portal_router() -> APIRouter:
         from .learning import LearningEngine
         return LearningEngine().start(topic)
 
+    @r.get("/api/learning")
+    def learning_list(sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        """All your learning sessions (to resume) + your learner profile."""
+        from .learning import list_sessions, load_profile, profile_summary
+        p = load_profile()
+        return {"sessions": list_sessions(),
+                "profile": {**p, "summary": profile_summary(p)}}
+
     @r.get("/api/learning/{sid}")
     def learning_get(sid: str, sess: Session = Depends(_require_session)) -> dict[str, Any]:
         from .learning import LearningEngine
