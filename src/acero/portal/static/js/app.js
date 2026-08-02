@@ -7,6 +7,7 @@ import {
   renderPhaseDetail, renderProjectDash,
 } from "./dashboard.js";
 import { renderLearning } from "./learning.js";
+import { renderEconomics } from "./economics.js";
 
 const $ = (s) => document.querySelector(s);
 
@@ -49,6 +50,11 @@ const cb = {
     setContext({ scope: "global", label: "Modo Aprender — tutor socrático" });
     renderLearning($("#view"), cb);
   },
+  openEconomics: () => {
+    state.project = null; syncSelect();
+    setContext({ scope: "global", label: "Modo Económico — asesor sobre NEXUS" });
+    renderEconomics($("#view"), cb);
+  },
   openModeSelect: () => { state.project = null; syncSelect();
     setContext({ scope: "global" }); renderModeSelect($("#view"), cb); },
   setContext,
@@ -71,10 +77,16 @@ function renderModeSelect(view, cb) {
            <p>El flujo completo de ACERO: hipótesis, literatura, experimentos
            agénticos, revisión y el loop autónomo del Investigador Principal.</p>
            <span class="mode-go">Ir a mis investigaciones →</span></button>
+         <button class="mode-card" id="mode-econ">
+           <div class="mode-ic">💰</div><h2>Modo Económico</h2>
+           <p>Diálogos e ideas para generar recursos y una economía sana, sobre tus
+           datos reales de NEXUS. El asesor cuestiona cada idea hasta que funcione.</p>
+           <span class="mode-go">Ir a mi economía →</span></button>
        </div>
      </div>`;
   view.querySelector("#mode-learn").addEventListener("click", () => cb.openLearning());
   view.querySelector("#mode-research").addEventListener("click", () => cb.openHome());
+  view.querySelector("#mode-econ").addEventListener("click", () => cb.openEconomics());
 }
 
 // ---- chat context ----------------------------------------------------------
@@ -252,6 +264,7 @@ async function boot() {
   $("#home-btn").addEventListener("click", () => cb.openModeSelect());
   $("#new-project").addEventListener("click", newProjectFlow);
   $("#learn-btn").addEventListener("click", () => cb.openLearning());
+  $("#econ-btn").addEventListener("click", () => cb.openEconomics());
   $("#courses-btn").addEventListener("click", () => cb.openCourses());
   $("#processes-btn").addEventListener("click", async () => {
     const panel = $("#float-panel");

@@ -725,3 +725,19 @@ button.hyp-step:hover { border-color: var(--accent); color: var(--fg); }
 .learn-profile { background: rgba(138,180,248,.10); border: 1px solid var(--border);
   border-radius: 12px; padding: .9rem 1rem; }
 @media (max-width: 700px) { .learn-sesslist { grid-template-columns: 1fr; } }
+
+/* Modo Económico */
+.econ-kpis { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .4rem; }
+.econ-kpi { text-align: center; } .econ-kpi b { display: block; font-size: 1rem; }
+.econ-kpi span { font-size: .7rem; color: var(--muted); }
+.econ-kpi b.pos, .learn-msg .pos { color: var(--ok); } .econ-kpi b.neg, .neg { color: var(--bad); }
+.econ-bar { display: grid; grid-template-columns: 90px 1fr auto; gap: .4rem; align-items: center;
+  font-size: .8rem; margin: .25rem 0; }
+.econ-track { background: var(--border); border-radius: 6px; height: 10px; overflow: hidden; }
+.econ-track.big { height: 16px; }
+.econ-fill { background: var(--accent); height: 100%; }
+.econ-idea { background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: .6rem .8rem; margin: .5rem 0; }
+.econ-verdict { margin-top: .4rem; font-size: .85rem; }
+.econ-advice { border-bottom: 1px solid var(--border); padding-bottom: .5rem; margin-bottom: .5rem; }
+.econ-snapprev { max-width: 720px; margin: 1rem auto; text-align: left; }

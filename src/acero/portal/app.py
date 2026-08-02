@@ -778,6 +778,62 @@ def build_portal_router() -> APIRouter:
         proj = _ws().create_project(title, domain=domain, topic=q)
         return {"ok": True, "project": proj, "from_learning": sid}
 
+    # --- Modo Económico: asesor sobre datos reales de NEXUS -------------------
+    @r.get("/api/economics")
+    def econ_home(sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        """Sesiones económicas (para reanudar) + snapshot financiero actual de NEXUS."""
+        from .economics import EconomicEngine, list_sessions
+        return {"sessions": list_sessions(), "snapshot": EconomicEngine().snapshot()}
+
+    @r.post("/api/economics/start")
+    def econ_start(body: dict[str, Any], sess: Session = Depends(_require_session),
+                   x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .economics import EconomicEngine
+        return EconomicEngine().start(str((body or {}).get("goal") or "").strip())
+
+    @r.get("/api/economics/{sid}")
+    def econ_get(sid: str, sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        from .economics import EconomicEngine
+        try:
+            return EconomicEngine().get(sid)
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @r.post("/api/economics/{sid}/ask")
+    def econ_ask(sid: str, body: dict[str, Any],
+                 sess: Session = Depends(_require_session),
+                 x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .economics import EconomicEngine
+        try:
+            return EconomicEngine().ask(sid, str((body or {}).get("message") or ""))
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @r.post("/api/economics/{sid}/critique")
+    def econ_critique(sid: str, body: dict[str, Any],
+                      sess: Session = Depends(_require_session),
+                      x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Cuestiona una idea hasta que funcione (o se caiga)."""
+        _require_csrf(sess, x_csrf_token)
+        from .economics import EconomicEngine
+        try:
+            return EconomicEngine().critique(sid, str((body or {}).get("idea") or ""))
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @r.post("/api/economics/{sid}/promote")
+    def econ_promote(sid: str, body: dict[str, Any],
+                     sess: Session = Depends(_require_session),
+                     x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        _require_csrf(sess, x_csrf_token)
+        from .economics import EconomicEngine
+        try:
+            return EconomicEngine().promote(sid, str((body or {}).get("idea") or ""))
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     @r.post("/api/projects/{project_id}/obsidian/sync")
     def obsidian_sync(project_id: str, sess: Session = Depends(_require_session),
                       x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
