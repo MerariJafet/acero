@@ -800,6 +800,18 @@ def build_portal_router() -> APIRouter:
         kw = {k: v for k, v in (body or {}).items() if k != "kind"}
         return verify(kind, **kw)
 
+    @r.post("/api/math-probe")
+    def math_probe_ep(body: dict[str, Any], sess: Session = Depends(_require_session),
+                      x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Ataca una afirmación matemática por computación + verificación formal + reintento."""
+        _require_csrf(sess, x_csrf_token)
+        claim = str((body or {}).get("claim") or "").strip()
+        if not claim:
+            raise HTTPException(422, "claim is required")
+        from ..science.math_probe import MathProbe
+        return MathProbe().probe(claim, formal_claim=(body or {}).get("formal_claim"),
+                                 max_tries=int((body or {}).get("max_tries") or 3))
+
     @r.post("/api/projects/{project_id}/sweep")
     def project_sweep(project_id: str, body: dict[str, Any],
                       sess: Session = Depends(_require_session),
