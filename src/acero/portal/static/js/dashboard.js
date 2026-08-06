@@ -229,6 +229,58 @@ async function wirePublicationPanel(view, pid) {
   });
 }
 
+// ⚡ Proactivity panel: mass sweep (generate→filter), novelty check (anti-Erdősgate),
+// and symbolic formal verification — the three capabilities wired to real endpoints.
+function wireProactivityPanel(view, pid) {
+  const $ = (s) => view.querySelector(s);
+  const base = `/portal/api/projects/${encodeURIComponent(pid)}`;
+  const sw = $("#sw-run");
+  if (sw) sw.addEventListener("click", async () => {
+    const out = $("#sw-out"); out.textContent = "⏳ generando y filtrando en paralelo…";
+    sw.disabled = true;
+    const { ok, body } = await post(base + "/sweep", {
+      n: Number($("#sw-n").value) || 6, focus: $("#sw-focus").value.trim(),
+      enqueue: $("#sw-enq").checked });
+    sw.disabled = false;
+    if (!ok) { out.textContent = "error en el barrido"; return; }
+    out.innerHTML = `generadas ${body.generated} · sobrevivientes <b>${body.kept}</b>`
+      + (body.missions_started != null ? ` · misiones ${body.missions_started}` : "")
+      + (body.survivors || []).map((s) =>
+          `<div class="pub-ok">✓ ${esc(s.title)} <span class="tag">score ${s.score} · ${esc(s.novelty)}</span></div>`).join("")
+      + (body.rejected || []).map((r) =>
+          `<div class="pub-no">✗ ${esc(r.title)} <span class="tag">${esc(r.reason)}</span></div>`).join("");
+  });
+  const nv = $("#nv-run");
+  if (nv) nv.addEventListener("click", async () => {
+    const claim = $("#nv-claim").value.trim(); const out = $("#nv-out");
+    if (!claim) { out.textContent = "escribe una afirmación"; return; }
+    out.textContent = "⏳ buscando en literatura…"; nv.disabled = true;
+    const { ok, body } = await post("/portal/api/novelty-check", { claim });
+    nv.disabled = false;
+    if (!ok) { out.textContent = "error"; return; }
+    const cls = { already_resolved: "bad", likely_open: "ok", uncertain: "warn" }[body.verdict] || "";
+    out.innerHTML = `${pill(body.verdict, cls)} riesgo de recuperación ${body.recovery_risk}
+      <div class="tag">${esc(body.recommendation || body.rationale || "")}</div>
+      ${(body.resolving_papers || []).map((p) => `<div class="tag">📄 ${esc(p.title)} — ${esc(p.why || "")}</div>`).join("")}`;
+  });
+  const fv = $("#fv-run");
+  if (fv) fv.addEventListener("click", async () => {
+    const kind = $("#fv-kind").value, a = $("#fv-a").value.trim(), b = $("#fv-b").value.trim();
+    const out = $("#fv-out");
+    const payload = { kind };
+    if (kind === "identity") { payload.lhs = a; payload.rhs = b; }
+    else if (kind === "inequality") { payload.expr = a; }
+    else if (kind === "limit") { payload.expr = a; payload.to = "0"; payload.expected = b; }
+    else { payload.expr = a; }
+    out.textContent = "⏳ verificando…";
+    const { ok, body } = await post("/portal/api/formal-verify", payload);
+    if (!ok) { out.textContent = "error"; return; }
+    const cls = { proved: "ok", refuted: "bad", unknown: "warn" }[body.result] || "";
+    out.innerHTML = `${pill(body.result, cls)} <span class="tag">${esc(body.detail || "")}</span>`
+      + (body.counterexample ? `<div class="tag">contraejemplo: ${esc(JSON.stringify(body.counterexample))}</div>` : "");
+  });
+}
+
 export async function renderProjectDash(view, pid, cb) {
   view.innerHTML = "<p class='loading'>Cargando investigación…</p>";
   const [{ ok, body: ph }, { body: st }] = await Promise.all([
@@ -376,6 +428,42 @@ export async function renderProjectDash(view, pid, cb) {
        <div id="pub-body"><p class="tag">cargando…</p></div>
      </section>
 
+     <section class="launch-bar" id="proact-panel" aria-label="Proactividad">
+       <div class="launch-head"><b>⚡ Proactividad — barrido · novedad · formal</b></div>
+       <div class="proact-grid">
+         <div class="canvas-card">
+           <h4>🌊 Barrido masivo</h4>
+           <p class="tag">Genera N hipótesis y las filtra en paralelo (novedad + EVA).</p>
+           <div class="chat-actions">
+             <input id="sw-n" class="pub-input" style="min-width:70px" type="number" value="6" min="2" max="20">
+             <input id="sw-focus" class="pub-input" placeholder="foco (opcional)">
+             <label class="tag"><input type="checkbox" id="sw-enq"> lanzar sobrevivientes</label>
+             <button class="act" id="sw-run">Barrer</button>
+           </div>
+           <div id="sw-out" class="tag" aria-live="polite"></div>
+         </div>
+         <div class="canvas-card">
+           <h4>🔎 Novedad (anti-Erdősgate)</h4>
+           <input id="nv-claim" class="pub-input" style="width:100%" placeholder="afirmación a verificar contra literatura">
+           <button class="act ghost" id="nv-run" style="margin-top:.4rem">Buscar en literatura</button>
+           <div id="nv-out" class="tag" aria-live="polite"></div>
+         </div>
+         <div class="canvas-card">
+           <h4>🧮 Verificación formal (sympy)</h4>
+           <select id="fv-kind" class="pub-input">
+             <option value="identity">identidad (lhs = rhs)</option>
+             <option value="inequality">desigualdad (para todo x)</option>
+             <option value="limit">límite</option>
+             <option value="boolean">tautología</option>
+           </select>
+           <input id="fv-a" class="pub-input" style="width:100%;margin-top:.3rem" placeholder="lhs / expr (ej: sin(x)**2+cos(x)**2)">
+           <input id="fv-b" class="pub-input" style="width:100%;margin-top:.3rem" placeholder="rhs / expected (según tipo)">
+           <button class="act ghost" id="fv-run" style="margin-top:.4rem">Verificar</button>
+           <div id="fv-out" class="tag" aria-live="polite"></div>
+         </div>
+       </div>
+     </section>
+
      <div class="kpi-strip">
        <div class="kpi">${ring(ph.progress_pct, "#4aa3ff")}
          <div><b>${ph.n_phases_done}/${ph.n_phases}</b><span>fases con trabajo</span>
@@ -423,6 +511,8 @@ export async function renderProjectDash(view, pid, cb) {
   wireLoopPanel(view, pid);
   // --- 📤 Publicación: bloqueadores + paquete verificable ------------------
   wirePublicationPanel(view, pid);
+  // --- ⚡ Proactividad: barrido · novedad · formal -------------------------
+  wireProactivityPanel(view, pid);
 
   // 🧭 EVA + Question Engine: hypotheses → fertile questions + discriminating test
   const evaBtn = view.querySelector("#epistemic-run");

@@ -749,3 +749,8 @@ button.hyp-step:hover { border-color: var(--accent); color: var(--fg); }
 .pub-input { padding: .5rem .7rem; border-radius: 8px; border: 1px solid var(--border);
   background: var(--bg); color: var(--fg); min-width: 260px; }
 #pub-packet-out code { word-break: break-all; }
+
+/* Panel de proactividad */
+.proact-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .7rem; }
+.proact-grid .canvas-card h4 { margin-top: 0; }
+@media (max-width: 1000px) { .proact-grid { grid-template-columns: 1fr; } }
