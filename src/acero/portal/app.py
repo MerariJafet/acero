@@ -778,6 +778,43 @@ def build_portal_router() -> APIRouter:
         proj = _ws().create_project(title, domain=domain, topic=q)
         return {"ok": True, "project": proj, "from_learning": sid}
 
+    # --- Publicación: ¿qué me falta? + exponer para verificación externa ------
+    @r.get("/api/projects/{project_id}/publication")
+    def publication_status(project_id: str,
+                           sess: Session = Depends(_require_session)) -> dict[str, Any]:
+        """Checklist real de publicación: nivel, bloqueadores y validación externa."""
+        from .publication_status import project_publication_status
+        return project_publication_status(project_id)
+
+    @r.post("/api/projects/{project_id}/publication/packet")
+    def publication_packet(project_id: str, body: dict[str, Any],
+                           sess: Session = Depends(_require_session),
+                           x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Genera un paquete autocontenido que un tercero puede verificar offline."""
+        _require_csrf(sess, x_csrf_token)
+        from .publication_status import build_packet_for_experiment
+        exp_id = str((body or {}).get("experiment_id") or "").strip()
+        if not exp_id:
+            raise HTTPException(422, "experiment_id is required")
+        try:
+            return build_packet_for_experiment(
+                project_id, exp_id, title=str((body or {}).get("title") or ""))
+        except FileNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @r.post("/api/projects/{project_id}/publication/attestation")
+    def publication_attestation(project_id: str, body: dict[str, Any],
+                                sess: Session = Depends(_require_session),
+                                x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Registra la attestation devuelta por un validador externo."""
+        _require_csrf(sess, x_csrf_token)
+        from ..publication.external_validation import AttestationError
+        from .publication_status import ingest_attestation
+        try:
+            return ingest_attestation(project_id, body or {}, author=sess.user)
+        except AttestationError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
     # --- Modo Económico: asesor sobre datos reales de NEXUS -------------------
     @r.get("/api/economics")
     def econ_home(sess: Session = Depends(_require_session)) -> dict[str, Any]:

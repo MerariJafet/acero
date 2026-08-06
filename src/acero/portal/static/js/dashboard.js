@@ -175,6 +175,60 @@ async function wireLoopPanel(view, pid) {
   await draw();
 }
 
+// 📤 Publication panel: shows, per dossier, exactly what blocks publication, plus
+// the external-validation state and a button to build a packet a third party can
+// verify offline. Read-only: ACERO never approves or publishes by itself.
+async function wirePublicationPanel(view, pid) {
+  const body = view.querySelector("#pub-body");
+  const statusEl = view.querySelector("#pub-status");
+  if (!body) return;
+  const base = `/portal/api/projects/${encodeURIComponent(pid)}/publication`;
+  const { ok, body: d } = await get(base);
+  if (!ok) { body.innerHTML = "<p class='tag'>no se pudo evaluar la publicación</p>"; return; }
+  const val = d.validation || {};
+  if (statusEl) {
+    statusEl.textContent = d.n_dossiers
+      ? `${d.exportable}/${d.n_dossiers} listo(s) para exportar`
+      : "sin dossiers aún";
+  }
+  const dossiers = (d.dossiers || []).map((r) => `
+    <div class="card">
+      <b>${esc(r.hyp_tag || r.dossier_id || "dossier")}</b>
+      ${pill(r.readiness, r.readiness === d.ceiling ? "ok" : "warn")}
+      ${r.can_export ? pill("exportable", "ok") : pill(`${r.blockers.length} bloqueador(es)`, "warn")}
+      <div class="tag">${esc(r.claim || "(sin afirmación central)")}</div>
+      <ul class="pub-checks">${(r.checks || []).map((c) =>
+        `<li class="${c.ok ? "pub-ok" : "pub-no"}">${c.ok ? "✅" : "⬜"} ${esc(c.label)}
+           <span class="tag">${esc(c.detail || "")}</span></li>`).join("")}</ul>
+    </div>`).join("") || "<p class='tag'>Aún no hay dossiers: corre una misión para generarlos.</p>";
+  const atts = (d.attestations || []).map((a) =>
+    `<li>${esc(a.validator)} (${esc(a.affiliation || "—")}) → <b>${esc(a.verdict)}</b></li>`).join("");
+  body.innerHTML = `
+    <p class="tag">${esc(d.note || "")}</p>
+    <div class="tag">Validación externa: <b>${val.independent_validators || 0}/${val.required || 1}</b>
+      validador(es) independiente(s)${(val.reasons || []).length ? " · " + esc(val.reasons.join("; ")) : ""}</div>
+    ${atts ? `<ul class="tag">${atts}</ul>` : ""}
+    <div class="launch-primary" style="margin:.5rem 0">
+      <input id="pub-exp" class="pub-input" placeholder="exp_… (id del experimento a empaquetar)">
+      <button class="act" id="pub-packet">📦 Generar paquete verificable</button>
+    </div>
+    <div id="pub-packet-out" class="tag" aria-live="polite"></div>
+    ${dossiers}`;
+  body.querySelector("#pub-packet").addEventListener("click", async () => {
+    const expId = body.querySelector("#pub-exp").value.trim();
+    const out = body.querySelector("#pub-packet-out");
+    if (!expId) { out.textContent = "indica el id del experimento"; return; }
+    out.textContent = "⏳ empaquetando…";
+    const { ok: pok, body: p } = await post(base + "/packet", { experiment_id: expId });
+    out.innerHTML = pok
+      ? `✅ paquete listo: <code>${esc(p.path)}</code><br>hash de manifiesto:
+         <code>${esc(p.manifest_hash)}</code><br>
+         <span class="tag">Compártelo; el revisor corre <code>python verify.py</code> y te
+         devuelve <code>attestation.json</code>.</span>`
+      : `error: ${esc((p && (p.detail || p.error)) || "no se pudo")}`;
+  });
+}
+
 export async function renderProjectDash(view, pid, cb) {
   view.innerHTML = "<p class='loading'>Cargando investigación…</p>";
   const [{ ok, body: ph }, { body: st }] = await Promise.all([
@@ -316,6 +370,12 @@ export async function renderProjectDash(view, pid, cb) {
        <div id="pi-loop-body"><p class="tag">cargando…</p></div>
      </section>
 
+     <section class="launch-bar" id="pub-panel" aria-label="Publicación">
+       <div class="launch-head"><b>📤 ¿Qué me falta para publicar?</b>
+         <span class="launch-status" id="pub-status" aria-live="polite"></span></div>
+       <div id="pub-body"><p class="tag">cargando…</p></div>
+     </section>
+
      <div class="kpi-strip">
        <div class="kpi">${ring(ph.progress_pct, "#4aa3ff")}
          <div><b>${ph.n_phases_done}/${ph.n_phases}</b><span>fases con trabajo</span>
@@ -361,6 +421,8 @@ export async function renderProjectDash(view, pid, cb) {
 
   // --- 🔁 Loop autónomo (Investigador Principal) ---------------------------
   wireLoopPanel(view, pid);
+  // --- 📤 Publicación: bloqueadores + paquete verificable ------------------
+  wirePublicationPanel(view, pid);
 
   // 🧭 EVA + Question Engine: hypotheses → fertile questions + discriminating test
   const evaBtn = view.querySelector("#epistemic-run");
