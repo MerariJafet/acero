@@ -778,6 +778,45 @@ def build_portal_router() -> APIRouter:
         proj = _ws().create_project(title, domain=domain, topic=q)
         return {"ok": True, "project": proj, "from_learning": sid}
 
+    # --- Proactividad: novedad (anti-Erdősgate) · formal · barrido masivo -----
+    @r.post("/api/novelty-check")
+    def novelty_check(body: dict[str, Any], sess: Session = Depends(_require_session),
+                      x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """¿Esta afirmación ya está resuelta en la literatura? (evita 'Erdősgate')."""
+        _require_csrf(sess, x_csrf_token)
+        claim = str((body or {}).get("claim") or "").strip()
+        if not claim:
+            raise HTTPException(422, "claim is required")
+        from ..discovery.novelty_check import NoveltyChecker
+        return NoveltyChecker().check(claim, query=(body or {}).get("query"))
+
+    @r.post("/api/formal-verify")
+    def formal_verify_ep(body: dict[str, Any], sess: Session = Depends(_require_session),
+                         x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Verificación simbólica (sympy): identity | inequality | limit | boolean."""
+        _require_csrf(sess, x_csrf_token)
+        from ..science.formal_verify import verify
+        kind = str((body or {}).get("kind") or "")
+        kw = {k: v for k, v in (body or {}).items() if k != "kind"}
+        return verify(kind, **kw)
+
+    @r.post("/api/projects/{project_id}/sweep")
+    def project_sweep(project_id: str, body: dict[str, Any],
+                      sess: Session = Depends(_require_session),
+                      x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Barrido masivo: genera N hipótesis, filtra por novedad+EVA, rankea."""
+        _require_csrf(sess, x_csrf_token)
+        from .sweep import SweepEngine
+        n = int((body or {}).get("n") or 8)
+        focus = str((body or {}).get("focus") or "")
+        enqueue = bool((body or {}).get("enqueue"))
+        eng = SweepEngine()
+        if enqueue:
+            return eng.run_and_enqueue(project_id, n=n, focus=focus)
+        out = eng.run(project_id, n=n, focus=focus)
+        out.pop("_survivors_full", None)       # internal (raw hyps) — not for the wire
+        return out
+
     # --- Publicación: ¿qué me falta? + exponer para verificación externa ------
     @r.get("/api/projects/{project_id}/publication")
     def publication_status(project_id: str,
