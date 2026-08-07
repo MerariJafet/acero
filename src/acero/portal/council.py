@@ -29,6 +29,17 @@ STAGES = [
     {"key": "publicar", "name": "Publicar", "ids": ["gauss"]},
 ]
 
+# the 3 macro-phases (the pies) and which persona lives in each
+PHASES = [
+    {"key": "creativa", "name": "Fase Creativa", "sub": "idear · plantear · explorar",
+     "ids": ["hilbert", "arquimedes", "davinci", "kepler", "feynman"]},
+    {"key": "investig", "name": "Fase de Investigación", "sub": "buscar · registrar · dirigir",
+     "ids": ["euler", "hipatia", "tycho", "bohr"]},
+    {"key": "critica", "name": "Fase Crítica", "sub": "probar · refutar · publicar",
+     "ids": ["popper", "euclides", "godel", "aristoteles", "gauss"]},
+]
+_PHASE_OF = {pid: ph["key"] for ph in PHASES for pid in ph["ids"]}
+
 # face params drive the vector portrait in council.js
 PERSONAS: list[dict[str, Any]] = [
     {"id": "hilbert", "name": "Hilbert", "role": "Plantea conjeturas precisas",
@@ -122,6 +133,38 @@ PERSONAS: list[dict[str, Any]] = [
                ["Cerrar una publicación", "todo"]]},
 ]
 
+# distinct engraved-portrait parameters per persona (drive the SVG face in council.js)
+_FACES = {
+    "hilbert": {"bald": 1, "fringe": 1, "beard": "full", "hairc": "#e8e2d2", "skin": 2,
+                "glasses": "pince", "mous": 1},
+    "arquimedes": {"hair": "wild", "beard": "long", "hairc": "#efe8d8", "skin": 4,
+                   "browc": "#cabfa8"},
+    "davinci": {"hair": "long", "beard": "long", "hairc": "#d9cbb0", "skin": 1,
+                "accent": "#54c08a", "browc": "#b7a888"},
+    "kepler": {"hair": "curly", "beard": "goatee", "mous": 1, "hairc": "#6b4a2f",
+               "skin": 1, "hat": "ruff"},
+    "feynman": {"hair": "wavy", "hairc": "#3b2f26", "skin": 1, "smile": 1, "browc": "#2c231b"},
+    "euler": {"hair": "recede", "hat": "cap", "hatc": "#2f3a54", "hairc": "#d8cfbd",
+              "skin": 3, "wide": 1},
+    "hipatia": {"hair": "bun", "earring": 1, "hairc": "#2a221c", "skin": 3,
+                "accent": "#54c08a", "browc": "#2a221c"},
+    "tycho": {"hair": "short", "beard": "full", "mous": 1, "nose": "metal",
+              "hairc": "#8a5a34", "skin": 2, "browc": "#6b4527"},
+    "bohr": {"hair": "short", "hairc": "#cfc7b6", "skin": 2, "long": 1, "browc": "#8a7f6a"},
+    "popper": {"bald": 1, "fringe": 1, "glasses": "square", "hairc": "#b9b2a2", "skin": 2,
+               "accent": "#54c08a", "browc": "#7a7060"},
+    "euclides": {"hair": "short", "beard": "full", "hat": "laurel", "hairc": "#e6ddca",
+                 "skin": 3, "accent": "#54c08a", "browc": "#cfc4ac"},
+    "godel": {"hair": "short", "glasses": "round", "hairc": "#2c2620", "skin": 3,
+              "long": 1, "accent": "#54c08a", "browc": "#2c2620"},
+    "aristoteles": {"bald": 1, "fringe": 1, "beard": "long", "hat": "laurel",
+                    "hairc": "#d6cdb8", "skin": 2, "accent": "#54c08a", "browc": "#bcb199"},
+    "gauss": {"hair": "recede", "hat": "cap", "hatc": "#241c14", "hairc": "#c9c0ad",
+              "skin": 3, "browc": "#8a7f6a"},
+}
+for _p in PERSONAS:
+    _p["face"] = _FACES.get(_p["id"], _p.get("face", {}))
+
 
 def _clamp(x: float) -> int:
     return max(0, min(100, int(round(x))))
@@ -150,20 +193,60 @@ def council_for(kpis: dict[str, Any] | None,
     }
 
     out = []
-    total = 0
+    prog_by = {}
     for p in PERSONAS:
         if p["id"] in project_signal and (hyp or exp or appr or doss):
             prog, source = _clamp(project_signal[p["id"]]), "project"
         else:
             prog, source = _BASE.get(p["status"], 50), "maturity"
-        total += prog
-        out.append({**p, "progress": prog, "source": source})
+        prog_by[p["id"]] = prog
+        out.append({**p, "phase": _PHASE_OF.get(p["id"], "creativa"),
+                    "progress": prog, "source": source})
+
+    # phase pies = average progress of the personas in each phase
+    phases = []
+    for ph in PHASES:
+        vals = [prog_by[i] for i in ph["ids"]]
+        phases.append({**ph, "progress": _clamp(sum(vals) / max(1, len(vals)))})
 
     return {
         "stages": STAGES,
+        "phases": phases,
         "personas": out,
-        "overall": _clamp(total / max(1, len(out))),
+        "overall": _clamp(sum(prog_by.values()) / max(1, len(prog_by))),
+        "balls": _flow_balls(hyp, appr, exp, verdicts),
         "verdicts": (verdicts or [])[:6],
         "kpis": {"hypotheses": hyp, "approved": appr, "experiments": exp,
                  "real_experiments": real, "dossiers": doss, "papers": papers},
     }
+
+
+def _flow_balls(hyp: int, appr: int, exp: int,
+                verdicts: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Each hypothesis is a 'ball' on the flow rail, placed in the phase it has reached.
+    Distribution derived from real counts (verdicts→crítica, approved→investigación,
+    the rest→creativa); the persona is a representative worker of that phase."""
+    n = max(0, min(hyp, 9))
+    if n == 0:
+        return []
+    done = min(n, len(verdicts or []) or min(exp, n))   # reached a verdict → crítica
+    inv = min(n - done, max(0, appr - done))             # approved, en curso → investig.
+    crea = n - done - inv
+    worker = {"creativa": ["davinci", "kepler", "feynman", "hilbert"],
+              "investig": ["hipatia", "tycho", "euler", "bohr"],
+              "critica": ["popper", "godel", "euclides", "aristoteles"]}
+    vlist = verdicts or []
+    balls, i = [], 0
+    plan = [("creativa", crea), ("investig", inv), ("critica", done)]
+    for zone, cnt in plan:
+        for j in range(cnt):
+            v = vlist[i] if (zone == "critica" and i < len(vlist)) else {}
+            balls.append({
+                "id": f"H{i + 1}", "phase": zone,
+                "persona": worker[zone][j % len(worker[zone])],
+                "status": v.get("status") or ("good" if zone == "critica" else
+                                              "warn" if zone == "investig" else "new"),
+                "verdict": v.get("verdict") or v.get("label") or "",
+            })
+            i += 1
+    return balls

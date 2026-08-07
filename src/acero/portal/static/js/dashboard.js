@@ -1,6 +1,7 @@
 "use strict";
 import { del, get, post } from "./api.js";
 import { esc, kv, pill } from "./components.js";
+import { BOHR_FACE, face as councilFace, renderCouncil } from "./council.js";
 
 // CIO-style dashboards: home (all investigations), project-by-phases, phase detail,
 // educational plan (floating panel), courses list, and the LMS course viewer.
@@ -401,6 +402,12 @@ export async function renderProjectDash(view, pid, cb) {
      <div class="pulse-head">
        <h1>${esc(ph.title)}</h1>
        <span class="tag">${pill(ph.domain)} ${pill(ph.state, "ok")} · creado ${esc(today)}</span>
+       <button class="act" id="dash-council" title="Bohr convoca al Consejo: los 14 personajes trabajan el problema"
+         style="margin-left:auto;display:inline-flex;align-items:center;gap:9px;padding:5px 14px 5px 5px">
+         <span style="width:34px;height:34px;display:inline-block;line-height:0;flex:0 0 34px">${councilFace({ id: "bohr-cta", face: BOHR_FACE }, 34)}</span>
+         <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.15">
+           <b>Iniciar Consejo</b><small style="opacity:.65;font-size:10px">dirige: Bohr</small></span>
+       </button>
      </div>
 
      <section class="brain-strip" aria-label="Cerebro de almacenamiento">
@@ -517,7 +524,6 @@ export async function renderProjectDash(view, pid, cb) {
 
      <div class="narrative-row">
        <p class="narrative">${esc(ph.narrative || "")}</p>
-       <button class="act" id="dash-council">🔭 Consejo</button>
        <button class="act ghost" id="dash-refresh">↻ Actualizar</button>
      </div>
 
@@ -644,8 +650,7 @@ export async function renderProjectDash(view, pid, cb) {
       input.value = "";
     }));
   view.querySelector("#dash-refresh").addEventListener("click", () => cb.openProject(pid));
-  view.querySelector("#dash-council").addEventListener("click", async () => {
-    const { renderCouncil } = await import("./council.js");
+  view.querySelector("#dash-council").addEventListener("click", () => {
     renderCouncil(view, pid, () => cb.openProject(pid));
   });
 }
