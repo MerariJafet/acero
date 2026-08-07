@@ -48,12 +48,17 @@ queda para confirmación humana) · `refuted` (contraejemplo real) · `needs_hum
 ## Cerrar el ciclo (formalizar el boceto)
 
 Cuando la actitud humana reduce el problema a un hecho verificable, el loop no solo
-escala: **FORMALIZA** ese núcleo. `_attempt_proof` → (1) intenta prueba formal directa
-del enunciado completo vía el Explorador; si no, (2) pide al FORMALIZADOR un lema núcleo
-como `formal_claim` y lo verifica con `formal_verify`. Si sympy lo **prueba** →
-`formally_supported` (con el lema y la prueba adjuntos). Honestidad estricta: probar el
-lema **no** prueba por máquina el puente de reducción, así que **nunca** se declara
-`verified` completo por esta vía — eso queda reservado a una prueba formal directa.
+escala: **FORMALIZA** ese núcleo y lo manda al motor de prueba adecuado. `_attempt_proof`
+→ (1) intenta prueba formal directa del enunciado completo vía el Explorador; si no,
+(2) el FORMALIZADOR emite un lema núcleo y elige motor:
+  * **📐 Euclides** (`formal_verify`, sympy) para **álgebra/análisis** (identity,
+    inequality, limit, boolean, summation/product), o
+  * **🔭 Gödel** (`proof_assistant`, Z3/SMT) para **lógica/conteo/cuantificadores** sobre
+    enteros o booleanos (¡el caso de la conjetura B!).
+Si cualquiera lo **prueba** → `formally_supported` (con `backend` = sympy|z3, el lema y la
+prueba adjuntos). Honestidad estricta: probar el lema **no** prueba por máquina el puente
+de reducción, así que **nunca** se declara `verified` completo por esta vía — eso queda
+reservado a una prueba formal directa del enunciado entero.
 
 ## Un detalle que el propio loop reveló
 

@@ -84,18 +84,36 @@ FORMALIZE_SCHEMA = {
             "required": ["kind", "lhs", "rhs", "expr", "var", "to", "expected",
                          "term", "index", "lower", "upper", "closed"],
             "additionalProperties": False},
+        # Gödel (Z3/SMT): for LOGIC / COUNTING / quantified claims over ints or booleans
+        "z3_claim": {
+            "type": "object",
+            "properties": {
+                "kind": {"type": "string"},          # int_forall|bool_forall|int_exists|""
+                "expr": {"type": "string"},          # relation over the declared vars
+                "vars": {"type": "array", "items": {"type": "string"}},
+                "assume": {"type": "array", "items": {"type": "string"}},
+                "sort": {"type": "string"}},         # int|real|bool
+            "required": ["kind", "expr", "vars", "assume", "sort"],
+            "additionalProperties": False},
     },
-    "required": ["lemma", "reduction", "formal_claim"], "additionalProperties": False,
+    "required": ["lemma", "reduction", "formal_claim", "z3_claim"],
+    "additionalProperties": False,
 }
 
 _FORMALIZE_SYS = (
     "Eres el FORMALIZADOR de ACERO. Te doy una afirmación y un boceto/reducción. Extrae el "
-    "LEMA NÚCLEO que, verificado simbólicamente, sostenga el argumento, y exprésalo como "
-    "formal_claim con el kind correcto (identity: lhs/rhs; inequality: expr/var; limit: "
-    "expr/var/to/expected; boolean: expr; summation/product: term/index/lower/upper/closed). "
-    "Rellena SOLO los campos del kind; deja los demás en \"\". Si nada del argumento se "
-    "reduce a algo verificable por sympy, kind = \"\". Da también reduction: por qué probar "
-    "ese lema (junto con el argumento) cerraría la afirmación."
+    "LEMA NÚCLEO que sostenga el argumento y exprésalo en el motor adecuado:\n"
+    "• formal_claim (sympy, para ÁLGEBRA/ANÁLISIS): identity con lhs/rhs; inequality con "
+    "expr/var; limit con expr/var/to/expected; boolean con expr; summation/product con "
+    "term/index/lower/upper/closed. Rellena SOLO los campos del kind; los demás en \"\".\n"
+    "• z3_claim (Z3/SMT, para LÓGICA/CONTEO/cuantificadores sobre enteros o booleanos, "
+    "p.ej. 'para todo entero n con tales restricciones se cumple X', o argumentos de "
+    "casillas): kind int_forall|bool_forall|int_exists; expr (relación con operadores "
+    "And/Or/Not/Implies/If/Sum y == <= >= sobre las variables); vars (lista de nombres); "
+    "assume (hipótesis); sort int|real|bool. Usa ESTE cuando sympy no aplique (¡el conteo "
+    "combinatorio va aquí!).\n"
+    "Elige UN motor (el otro déjalo con kind=\"\"). Si nada se reduce, ambos kind=\"\". "
+    "Da también reduction: por qué probar ese lema cerraría la afirmación."
 )
 
 
@@ -285,16 +303,43 @@ class ResearchLoop:
             return None
         if not isinstance(out, dict):
             return None
-        fc = out.get("formal_claim") or {}
-        fc = {k: v for k, v in fc.items() if isinstance(v, str) and v.strip()}
-        if not fc.get("kind"):
-            return None
-        from .formal_verify import verify
-        kind = str(fc.get("kind"))
-        kw = {k: v for k, v in fc.items() if k != "kind"}
-        res = verify(kind, **kw)
-        return {"lemma": out.get("lemma"), "reduction": out.get("reduction"),
-                "formal_claim": fc, "formal": res}
+        lemma, reduction = out.get("lemma"), out.get("reduction")
+        best: dict[str, Any] | None = None
+
+        # --- Euclides (sympy): algebra / analysis --------------------------------
+        fc = {k: v for k, v in (out.get("formal_claim") or {}).items()
+              if isinstance(v, str) and v.strip()}
+        if fc.get("kind"):
+            from .formal_verify import verify
+            res = verify(str(fc["kind"]), **{k: v for k, v in fc.items() if k != "kind"})
+            pack = {"lemma": lemma, "reduction": reduction, "backend": "sympy",
+                    "claim": fc, "formal": res}
+            if res.get("result") == "proved":
+                return pack
+            best = pack
+
+        # --- Gödel (Z3/SMT): logic / counting / quantified over ints·booleans -----
+        zc_raw = out.get("z3_claim") or {}
+        zc: dict[str, Any] = {}
+        for k in ("kind", "expr", "sort"):
+            v = zc_raw.get(k)
+            if isinstance(v, str) and v.strip():
+                zc[k] = v
+        for k in ("vars", "assume"):
+            v = zc_raw.get(k)
+            if isinstance(v, list):
+                zc[k] = [x for x in v if isinstance(x, str) and x.strip()]
+        if zc.get("kind") and zc.get("expr"):
+            from .proof_assistant import prove
+            zres = prove(str(zc["kind"]), expr=zc.get("expr"), vars=zc.get("vars"),
+                         assume=zc.get("assume"), sort=zc.get("sort"))
+            pack = {"lemma": lemma, "reduction": reduction, "backend": "z3",
+                    "claim": zc, "formal": zres}
+            if zres.get("result") == "proved":
+                return pack
+            if best is None:
+                best = pack
+        return best
 
     def _attempt_proof(self, statement: str, sketch_hint: str = "") -> dict[str, Any]:
         """Try to prove a survivor: (1) direct formal proof of the whole statement via the
@@ -316,7 +361,7 @@ class ResearchLoop:
         fv = self._formalize_and_verify(statement, sketch)
         if fv and (fv.get("formal") or {}).get("result") == "proved":
             return {"depth": "proof", "type": "reduction",
-                    "disposition": "formally_supported",
+                    "disposition": "formally_supported", "backend": fv.get("backend"),
                     "lemma": fv.get("lemma"), "reduction": fv.get("reduction"),
                     "formal": fv.get("formal"), "sketch": sketch}
         return {"depth": "proof", "type": "sketch",

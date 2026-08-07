@@ -132,6 +132,41 @@ def test_formally_supported_when_core_lemma_is_proved():
     assert r["lemma"] == "identidad núcleo"
 
 
+def test_formally_supported_via_godel_z3_backend():
+    """Automatic flow routes a COUNTING/logic lemma to Gödel (Z3), not sympy."""
+    import pytest
+    pytest.importorskip("z3")
+
+    class _FZProv:
+        def available(self):
+            return True
+
+        def complete_json(self, prompt, schema, temperature=0.0):
+            return {"lemma": "núcleo de conteo", "reduction": "cierra el argumento",
+                    "formal_claim": {"kind": ""},                       # sympy no aplica
+                    "z3_claim": {"kind": "int_forall", "expr": "n*n >= 0",
+                                 "vars": ["n"], "assume": [], "sort": "int"}}
+
+        class _R:
+            text = "boceto"
+
+        def complete(self, prompt, temperature=0.0, max_tokens=0):
+            return self._R()
+
+    loop = ResearchLoop(
+        provider=_FZProv(),
+        prober=lambda s: {"verdict": "holds_empirically", "n_tested": 9000,
+                          "counterexample": None},
+        attitude=lambda s, p, t: {"observation": "reduce a conteo",
+                                  "verdict_is_trivial": False, "refined_statement": "",
+                                  "alternative_angles": [], "next_action": "attempt_proof"},
+        ledger=_led())
+    r = loop.investigate("conjetura de conteo", max_depth=1)
+    assert r["disposition"] == "formally_supported"
+    proof = [t for t in r["trail"] if t.get("depth") == "proof"][0]
+    assert proof["backend"] == "z3"           # closed by Gödel, not Euclides
+
+
 def test_formalize_failure_still_escalates():
     class _FProv:
         def available(self):
