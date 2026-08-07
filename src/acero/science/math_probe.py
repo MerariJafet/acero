@@ -44,8 +44,17 @@ _CODEGEN_SYS = (
     "\"counterexample\": <valor o null>, \"n_tested\": <int>, \"detail\": <str>}\n"
     "verdict='refuted' SOLO si encontraste un contraejemplo concreto (ponlo en "
     "counterexample). 'holds_empirically' si NO hallaste contraejemplo tras probar "
-    "muchos casos. 'inconclusive' si no pudiste probar suficiente. NUNCA afirmes "
-    "'demostrado': buscar no es probar. Responde SOLO con el código."
+    "muchos casos. 'inconclusive' si no pudiste probar suficiente.\n"
+    "REGLA ANTIRREFUTACIÓN-FALSA (crítica): antes de declarar 'refuted', REVERIFICA el "
+    "contraejemplo de forma independiente y a MAYOR precisión (mpmath con mp.dps alto). Un "
+    "'refuted' solo vale si la discrepancia es GRANDE y reproducible. Para valores/límites/"
+    "series/constantes: usa alta precisión, suma SUFICIENTES términos o acelera la "
+    "convergencia, y NUNCA uses una tolerancia más estricta que la precisión real de tu "
+    "método. Si tu 'contraejemplo' difiere del valor esperado por menos de ~0.1% "
+    "(near-miss numérico) o solo por la COLA truncada de una serie, NO es contraejemplo: "
+    "reporta 'holds_empirically'. Prefiere aritmética EXACTA (sympy/fractions) cuando se "
+    "pueda, para no confundir error de redondeo con contraejemplo.\n"
+    "NUNCA afirmes 'demostrado': buscar no es probar. Responde SOLO con el código."
 )
 
 
