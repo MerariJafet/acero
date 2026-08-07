@@ -170,8 +170,36 @@ def _clamp(x: float) -> int:
     return max(0, min(100, int(round(x))))
 
 
+# qué "kind" del ledger es dueño cada personaje → sus fichas reales
+OWNER_KIND = {"hilbert": "candidate", "hipatia": "literature", "popper": "experiment",
+              "gauss": "dossier", "aristoteles": "critique"}
+KIND_LABEL = {"candidate": "hipótesis", "literature": "literatura",
+              "experiment": "experimentos", "dossier": "dossiers", "critique": "objeciones"}
+
+
+def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
+    """Turn a ledger object into a compact card for a persona's panel."""
+    o = obj or {}
+    if kind == "experiment":
+        res = o.get("result") or {}
+        return {"title": (o.get("claim") or "experimento")[:140],
+                "verdict": res.get("verdict") or "", "by": o.get("method") or ""}
+    if kind == "candidate":
+        return {"title": (o.get("claim") or o.get("statement") or "hipótesis")[:140],
+                "verdict": o.get("status") or "", "by": o.get("by") or ""}
+    if kind == "dossier":
+        return {"title": (o.get("synthesis") or o.get("claim") or "dossier")[:140],
+                "verdict": o.get("readiness") or "", "by": ""}
+    if kind == "literature":
+        return {"title": (o.get("title") or o.get("claim") or "referencia")[:140],
+                "verdict": str(o.get("year") or ""), "by": ""}
+    return {"title": (o.get("summary") or o.get("claim") or o.get("title") or "—")[:140],
+            "verdict": o.get("status") or "", "by": ""}
+
+
 def council_for(kpis: dict[str, Any] | None,
-                verdicts: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+                verdicts: list[dict[str, Any]] | None = None,
+                items: dict[str, list[dict[str, Any]]] | None = None) -> dict[str, Any]:
     """Assemble the council for one project from its real KPIs."""
     k = kpis or {}
     hyp = int(k.get("hypotheses") or 0)
@@ -200,8 +228,15 @@ def council_for(kpis: dict[str, Any] | None,
         else:
             prog, source = _BASE.get(p["status"], 50), "maturity"
         prog_by[p["id"]] = prog
-        out.append({**p, "phase": _PHASE_OF.get(p["id"], "creativa"),
-                    "progress": prog, "source": source})
+        entry = {**p, "phase": _PHASE_OF.get(p["id"], "creativa"),
+                 "progress": prog, "source": source}
+        kind = OWNER_KIND.get(p["id"])
+        if kind:
+            objs = (items or {}).get(kind) or []
+            entry["items"] = [_card(kind, o) for o in objs[:12]]
+            entry["items_label"] = KIND_LABEL.get(kind, kind)
+            entry["items_count"] = len(objs)
+        out.append(entry)
 
     # phase pies = average progress of the personas in each phase
     phases = []

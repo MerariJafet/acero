@@ -321,12 +321,20 @@ def build_portal_router() -> APIRouter:
     def project_council(project_id: str, sess: Session = Depends(_require_session)
                         ) -> dict[str, Any]:
         """El Consejo: los 14 personajes-científicos con su avance real en este proyecto."""
-        from .council import council_for
+        from ..discovery.store import DiscoveryStore
+        from ..ledger.db import default_session_factory
+        from ..ledger.service import ResearchLedger
+        from .council import OWNER_KIND, council_for
         from .phases import build_phases
         ph = build_phases(project_id)
         if ph is None:
             raise HTTPException(404, "project not found")
-        return council_for(ph.get("kpis") or {}, verdicts=ph.get("recent_verdicts") or [])
+        sf = default_session_factory()
+        st = DiscoveryStore(sf, ResearchLedger(sf))
+        items = {kind: st.list_objects(project_id, kind=kind)
+                 for kind in set(OWNER_KIND.values())}
+        return council_for(ph.get("kpis") or {},
+                           verdicts=ph.get("recent_verdicts") or [], items=items)
 
     @r.post("/api/projects/{project_id}/investigate")
     def project_investigate(project_id: str, body: dict[str, Any], bg: BackgroundTasks,

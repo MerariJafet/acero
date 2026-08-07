@@ -42,6 +42,16 @@ class WorkspaceService:
 
     def create_project(self, title: str, *, domain: str = "general",
                        program_id: str | None = None, topic: str = "") -> dict[str, Any]:
+        # dedup: reuse an existing project with the same title instead of duplicating
+        norm = title.strip().lower()
+        for p in self.ledger.list_projects():
+            if p.title.strip().lower() == norm:
+                if topic.strip():
+                    self.store.put(p.id, "brief", new_id("brief"),
+                                   {"topic": topic.strip()}, status="ISSUED", actor="human",
+                                   summary=f"tema: {topic.strip()[:80]}")
+                return {"id": p.id, "title": p.title, "domain": p.domain,
+                        "topic": topic.strip(), "reused": True}
         proj = self.ledger.create_project(title, domain=domain)
         if topic.strip():
             # the research topic/question — the free-text prompt that seeds hypotheses

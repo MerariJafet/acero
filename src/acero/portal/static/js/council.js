@@ -6,6 +6,8 @@ const SC = { good: "#54c08a", warn: "#e0a96d", new: "#5b8def", weak: "#e0736f" }
 const SL = { good: "sólido", warn: "mejorable", new: "nuevo", weak: "débil" };
 const TASK = { done: ["#54c08a", "hecho"], doing: ["#e0a96d", "en curso"], todo: ["#5f6d88", "pendiente"] };
 const PHC = { creativa: "#7ba7ff", investig: "#5ec7a8", critica: "#e0a96d" };
+const VC = { verified: "#54c08a", refuted: "#e0736f", formally_supported: "#54c08a", holds_empirically: "#e0a96d", inconclusive: "#93a1bd" };
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 function injectStyles() {
   if (document.getElementById("council-styles")) return;
@@ -196,6 +198,11 @@ export async function renderCouncil(view, pid, onBack) {
         <div class="cv-flow"><div><div class="cv-k">recibe de</div><div class="cv-v">${p.awaits}</div></div>
           <div><div class="cv-k">le pasa a</div><div class="cv-v">${p.hands_to}</div></div></div>
         ${held.length ? `<div><div class="cv-st">tiene la pelota</div><div style="font-size:13px;color:#cfd8ea">Trabaja ahora: <b style="color:${col}">${held.join(", ")}</b></div></div>` : ""}
+        ${p.items_label ? `<div><div class="cv-st">${esc(p.items_label)} del proyecto${p.items_count ? " (" + p.items_count + ")" : ""}</div>${
+          (p.items && p.items.length)
+            ? p.items.map((it) => `<div class="cv-task"><span class="cv-tt">${esc(it.title)}</span>${it.verdict ? `<span class="cv-ts" style="color:${VC[it.verdict] || "#93a1bd"}">${esc(it.verdict)}</span>` : ""}</div>`).join("")
+            : `<div style="color:#5f6d88;font-size:12px;padding:6px 0">Aún no hay ${esc(p.items_label)}. Inicia el Consejo (🎩 Bohr) para generarlas.</div>`
+        }</div>` : ""}
         <div><div class="cv-st">avance en este proyecto</div>
           <div style="display:flex;align-items:center;gap:14px;margin-top:8px">
             <div style="position:relative;width:54px;height:54px">${ring(p.progress, col, 54, 5)}<b style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px">${p.progress}</b></div>

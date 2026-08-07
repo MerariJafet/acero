@@ -35,3 +35,24 @@ def test_verdicts_pass_through_capped():
     v = [{"title": f"h{i}", "verdict": "verified", "status": "good"} for i in range(9)]
     c = council_for({"hypotheses": 1}, verdicts=v)
     assert len(c["verdicts"]) == 6
+
+
+def test_persona_shows_its_real_ledger_items():
+    """U2: each owner-persona surfaces its real fichas from the project ledger."""
+    items = {
+        "candidate": [{"claim": "phi(n) no divide n-1"}],
+        "experiment": [{"claim": "Lehmer", "result": {"verdict": "holds_empirically"},
+                        "method": "Popper"}],
+        "literature": [{"title": "Lehmer's totient problem", "year": 1932}],
+        "dossier": [], "critique": [],
+    }
+    c = council_for({"hypotheses": 1, "experiments": 1}, items=items)
+    by = {p["id"]: p for p in c["personas"]}
+    # Popper owns experiments → his ficha carries the verdict
+    assert by["popper"]["items_label"] == "experimentos"
+    assert by["popper"]["items"][0]["verdict"] == "holds_empirically"
+    # Hilbert owns hypotheses, Hipatia literature
+    assert by["hilbert"]["items"][0]["title"].startswith("phi(n)")
+    assert by["hipatia"]["items"][0]["title"] == "Lehmer's totient problem"
+    # a non-owner persona has no items panel
+    assert "items_label" not in by["davinci"]
