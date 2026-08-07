@@ -172,9 +172,11 @@ def _clamp(x: float) -> int:
 
 # qué "kind" del ledger es dueño cada personaje → sus fichas reales
 OWNER_KIND = {"hilbert": "candidate", "hipatia": "literature", "popper": "experiment",
-              "gauss": "dossier", "aristoteles": "critique"}
+              "gauss": "dossier", "aristoteles": "critique",
+              "feynman": "reformulation", "godel": "lemma"}
 KIND_LABEL = {"candidate": "hipótesis", "literature": "literatura",
-              "experiment": "experimentos", "dossier": "dossiers", "critique": "objeciones"}
+              "experiment": "experimentos", "dossier": "dossiers", "critique": "objeciones",
+              "reformulation": "reformulaciones", "lemma": "lemas y cotas"}
 
 
 def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
@@ -184,6 +186,13 @@ def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
         res = o.get("result") or {}
         return {"title": (o.get("claim") or "experimento")[:140],
                 "verdict": res.get("verdict") or "", "by": o.get("method") or ""}
+    if kind == "reformulation":
+        return {"title": (o.get("statement") or o.get("claim") or "reformulación")[:140],
+                "verdict": o.get("angle") or "segunda jugada", "by": ""}
+    if kind == "lemma":
+        return {"title": (o.get("statement") or o.get("claim") or "lema")[:140],
+                "verdict": ("probado" if o.get("proved") else (o.get("status") or "propuesto")),
+                "by": o.get("backend") or ""}
     if kind == "candidate":
         return {"title": (o.get("claim") or o.get("statement") or "hipótesis")[:140],
                 "verdict": o.get("status") or "", "by": o.get("by") or ""}

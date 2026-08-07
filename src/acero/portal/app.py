@@ -343,7 +343,7 @@ def build_portal_router() -> APIRouter:
         """Bohr convoca al Consejo: registra la conjetura y lanza el ataque en segundo
         plano; el veredicto se escribe al ledger → el dashboard/Consejo se actualizan."""
         _require_csrf(sess, x_csrf_token)
-        from .investigator_bridge import record_hypothesis, record_result
+        from .investigator_bridge import record_hypothesis, run_council
         claim = str((body or {}).get("claim") or "").strip()
         if not claim:
             from ..discovery.store import DiscoveryStore
@@ -359,14 +359,16 @@ def build_portal_router() -> APIRouter:
 
         def _attack() -> None:
             try:
-                from ..science.math_probe import MathProbe
-                r = MathProbe().probe(claim, max_tries=2)
-                record_result(project_id, claim, r, persona="popper", hypothesis_id=hid)
+                # Bohr dirige el ciclo AMBICIOSO: prueba → segunda jugada (Feynman) →
+                # intento de prueba/contribución parcial (Gödel/Euclides). No para en
+                # holds_empirically; registra el trabajo de cada personaje.
+                run_council(project_id, claim, hypothesis_id=hid)
             except Exception:  # noqa: BLE001 - background best-effort
                 pass
         bg.add_task(_attack)
         return {"hypothesis_id": hid, "claim": claim, "status": "investigando",
-                "message": "El Consejo está atacando la conjetura; refresca en un minuto."}
+                "message": "El Consejo está atacando la conjetura (ciclo ambicioso: "
+                           "reformular → probar → contribución parcial); refresca en un minuto."}
 
     @r.post("/api/copilot/global")
     def global_copilot(body: CopilotBody, sess: Session = Depends(_require_session),

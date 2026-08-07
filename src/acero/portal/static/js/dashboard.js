@@ -1,7 +1,7 @@
 "use strict";
 import { del, get, post } from "./api.js";
 import { esc, kv, pill } from "./components.js";
-import { BOHR_FACE, face as councilFace, renderCouncil } from "./council.js";
+import { BOHR_FACE, face as councilFace } from "./council.js";
 
 // CIO-style dashboards: home (all investigations), project-by-phases, phase detail,
 // educational plan (floating panel), courses list, and the LMS course viewer.
@@ -544,7 +544,7 @@ export async function renderProjectDash(view, pid, cb) {
     if (sEl) sEl.textContent = rok
       ? "✓ listo — actualizando…"
       : "error: " + ((body && (body.detail || body.error)) || "flujo");
-    cb.openProject(pid);
+    cb.openOperations(pid);
   }
   view.querySelectorAll(".launch-btn").forEach((b) =>
     b.addEventListener("click", () => runFlow(b, b.dataset.ep, statusEl)));
@@ -649,10 +649,9 @@ export async function renderProjectDash(view, pid, cb) {
         : `<span class="err">error: ${esc((ans && (ans.detail || ans.error)) || "copiloto")}</span>`;
       input.value = "";
     }));
-  view.querySelector("#dash-refresh").addEventListener("click", () => cb.openProject(pid));
-  view.querySelector("#dash-council").addEventListener("click", () => {
-    renderCouncil(view, pid, () => cb.openProject(pid));
-  });
+  view.querySelector("#dash-refresh").addEventListener("click", () => cb.openOperations(pid));
+  // El Consejo es la portada del proyecto → volver a él.
+  view.querySelector("#dash-council").addEventListener("click", () => cb.openProject(pid));
 }
 
 const KIND_STYLE = {
@@ -834,7 +833,7 @@ export async function renderPhaseDetail(view, pid, phaseKey, cb) {
      ${items || "<p class='muted'>Sin items en esta fase todavía.</p>"}
      ${rejectedBlock}
      <p class="tag" style="margin-top:.6rem">${esc(ph.honesty)}</p>`;
-  view.querySelector("#ph-back").addEventListener("click", () => cb.openProject(pid));
+  view.querySelector("#ph-back").addEventListener("click", () => cb.openOperations(pid));
 
   // hypothesis interactions
   view.querySelectorAll("[data-htoggle]").forEach((b) =>
@@ -1298,7 +1297,7 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
        <div class="pulse-head"><h1>${esc(phaseKey === "literatura" ? "📚 Investigación de literatura" : "⚗️ Experimentos")}</h1></div>
        <p class="muted">Aún no hay hipótesis <b>aprobadas</b>. Ve a la fase <b>Hipótesis</b>,
        aprueba una (con su razón) y aquí aparecerá su propia investigación.</p>`;
-    view.querySelector("#ph-back").addEventListener("click", () => cb.openProject(pid));
+    view.querySelector("#ph-back").addEventListener("click", () => cb.openOperations(pid));
     return;
   }
 
@@ -1680,7 +1679,7 @@ async function renderHypFlow(view, pid, phaseKey, ph, cb) {
       });
     });
   }
-  view.querySelector("#ph-back").addEventListener("click", () => cb.openProject(pid));
+  view.querySelector("#ph-back").addEventListener("click", () => cb.openOperations(pid));
 }
 
 /* --------------------------------------------------------- educational plan -- */

@@ -202,3 +202,64 @@ def test_survivor_escalates_with_a_sketch():
     r = loop.investigate("conjetura fuerte", max_depth=1)
     assert r["disposition"] == "needs_human_review"
     assert r["sketch"]                                   # produced a proof sketch to hand off
+
+
+class _AmbProv:
+    """Provider for the AMBITION path: the FORMALIZER finds nothing reducible, but the
+    CONTRIBUTION step proposes a necessary condition expressible as a provable identity."""
+
+    def available(self):
+        return True
+
+    def complete_json(self, prompt, schema, temperature=0.0):
+        if "FORMALIZADOR" in prompt:                     # full-proof reduction fails
+            return {"lemma": "", "reduction": "",
+                    "formal_claim": {"kind": ""}, "z3_claim": {"kind": ""}}
+        # the CONTRIBUTION step (second move on an open survivor)
+        return {"kind": "necessary_condition",
+                "statement": "todo contraejemplo cumple x = x",
+                "why_partial": "acota dónde buscar; NO resuelve el problema abierto",
+                "formal_claim": {"kind": "identity", "lhs": "x", "rhs": "x", "expr": "",
+                                 "var": "", "to": "", "expected": "", "term": "", "index": "",
+                                 "lower": "", "upper": "", "closed": ""},
+                "z3_claim": {"kind": ""}}
+
+    class _R:
+        text = "boceto honesto: la conjetura parece cierta pero no se cierra"
+
+    def complete(self, prompt, temperature=0.0, max_tokens=0):
+        return self._R()
+
+
+def test_open_survivor_seeks_verified_partial_contribution():
+    """U3 ambition: an open survivor that we can't fully prove still yields an honest,
+    mechanically VERIFIED partial contribution → disposition 'partial_progress', never
+    'verified'."""
+    loop = ResearchLoop(
+        provider=_AmbProv(),
+        prober=lambda s: {"verdict": "holds_empirically", "n_tested": 250000,
+                          "counterexample": None},
+        attitude=lambda s, p, t: {"observation": "parece cierto, sin contraejemplo",
+                                  "verdict_is_trivial": False, "refined_statement": "",
+                                  "alternative_angles": [], "next_action": "escalate_to_human"},
+        ledger=_led())
+    r = loop.investigate("conjetura probablemente abierta", max_depth=1)
+    assert r["disposition"] == "partial_progress"        # did NOT stop at holds_empirically
+    assert r["final_verdict"] != "verified"              # honesty: never overclaims
+    assert r["contributions"] and r["contributions"][0]["proved"] is True
+    assert r["contributions"][0]["kind"] == "necessary_condition"
+
+
+def test_open_survivor_without_engine_still_escalates_offline():
+    """With an injected prober but NO provider, the loop stays deterministic (no Codex):
+    it escalates honestly instead of running the LLM second move."""
+    loop = ResearchLoop(
+        prober=lambda s: {"verdict": "holds_empirically", "n_tested": 5000,
+                          "counterexample": None},
+        attitude=lambda s, p, t: {"observation": "sobrevive", "verdict_is_trivial": False,
+                                  "refined_statement": "", "alternative_angles": [],
+                                  "next_action": "escalate_to_human"},
+        ledger=_led())
+    r = loop.investigate("conjetura sin motor", max_depth=1)
+    assert r["disposition"] == "needs_human_review"
+    assert r["contributions"] == []                      # no engine → no fabricated work

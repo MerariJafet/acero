@@ -6,7 +6,17 @@ const SC = { good: "#54c08a", warn: "#e0a96d", new: "#5b8def", weak: "#e0736f" }
 const SL = { good: "sólido", warn: "mejorable", new: "nuevo", weak: "débil" };
 const TASK = { done: ["#54c08a", "hecho"], doing: ["#e0a96d", "en curso"], todo: ["#5f6d88", "pendiente"] };
 const PHC = { creativa: "#7ba7ff", investig: "#5ec7a8", critica: "#e0a96d" };
-const VC = { verified: "#54c08a", refuted: "#e0736f", formally_supported: "#54c08a", holds_empirically: "#e0a96d", inconclusive: "#93a1bd" };
+const VC = { verified: "#54c08a", refuted: "#e0736f", formally_supported: "#54c08a", holds_empirically: "#e0a96d", inconclusive: "#93a1bd", probado: "#54c08a", propuesto: "#5b8def", partial_progress: "#7ba7ff" };
+// A qué tablero rico (fichas para dar seguimiento) lleva cada personaje: ["phase", clave] o ["ops"].
+const PERSONA_VIEW = {
+  hilbert: ["phase", "hipotesis"], euler: ["phase", "hipotesis"],
+  hipatia: ["phase", "literatura"], tycho: ["phase", "experimentos"],
+  davinci: ["phase", "experimentos"], kepler: ["phase", "experimentos"],
+  popper: ["phase", "experimentos"], euclides: ["phase", "resultados"],
+  godel: ["phase", "resultados"], aristoteles: ["phase", "hipotesis"],
+  feynman: ["phase", "hipotesis"], gauss: ["phase", "conclusiones"],
+  arquimedes: ["ops"], bohr: ["ops"],
+};
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 function injectStyles() {
@@ -76,6 +86,13 @@ function injectStyles() {
   .cv-task{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #28324a}.cv-task:last-child{border-bottom:0}
   .cv-tb{width:8px;height:8px;border-radius:50%;flex:0 0 8px}.cv-tt{flex:1;font-size:13px}.cv-ts{font-family:var(--mono);font-size:10px;color:#93a1bd;text-transform:uppercase}
   .cv-close{margin-left:auto;background:#151d2e;border:1px solid #28324a;color:#93a1bd;width:34px;height:34px;border-radius:9px;cursor:pointer}
+  .cv-fiches{display:flex;flex-direction:column;gap:9px;margin-top:8px}
+  .cv-fiche{background:#151d2e;border:1px solid #28324a;border-left:3px solid var(--fc,#5f6d88);border-radius:11px;padding:10px 12px}
+  .cv-fiche-t{font-size:13px;line-height:1.42;color:#eef2fb}
+  .cv-fiche-m{display:flex;gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap}
+  .cv-chip{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid currentColor}
+  .cv-by{font-family:var(--mono);font-size:10px;color:#93a1bd}
+  .cv-note{color:#93a1bd;font-size:12.5px;line-height:1.5;background:#151d2e;border:1px dashed #28324a;border-radius:11px;padding:10px 12px;margin-top:8px}
   @media(prefers-reduced-motion:reduce){.cv *{transition:none!important}}`;
   document.head.appendChild(s);
 }
@@ -131,7 +148,16 @@ function ring(pct, color, S, w) {
   return `<svg viewBox="0 0 ${S} ${S}"><circle cx="${S / 2}" cy="${S / 2}" r="${r}" fill="none" stroke="#28324a" stroke-width="${w}"/><circle cx="${S / 2}" cy="${S / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>`;
 }
 
-export async function renderCouncil(view, pid, onBack) {
+export async function renderCouncil(view, pid, cb, opts = {}) {
+  // `cb` puede ser el objeto de callbacks del app o (compat) una función onBack.
+  const onBack = () => { if (typeof cb === "function") return cb(); if (cb && cb.openHome) return cb.openHome(); };
+  const onOps = () => { if (cb && cb.openOperations) return cb.openOperations(pid); };
+  // Doble clic / botón → el tablero rico del personaje (sus fichas de seguimiento).
+  const openPersonaDash = (id) => {
+    const v = PERSONA_VIEW[id] || ["ops"];
+    if (v[0] === "phase" && cb && cb.openPhase) return cb.openPhase(pid, v[1]);
+    if (cb && cb.openOperations) return cb.openOperations(pid);
+  };
   injectStyles();
   view.innerHTML = `<div class="cv"><p style="color:#93a1bd;padding:30px">Convocando al Consejo…</p></div>`;
   let d;
@@ -141,9 +167,9 @@ export async function renderCouncil(view, pid, onBack) {
   } catch (e) { view.innerHTML = `<div class="cv"><p style="color:#e0736f;padding:30px">No se pudo cargar el Consejo.</p></div>`; return; }
   if (!d || !d.phases) {
     view.innerHTML = `<div class="cv"><div class="cv-top"><h2 style="font-family:var(--serif)">El <em style="color:#e0a96d">Consejo</em></h2>
-      <button class="cv-back" id="cv-back2">← Dashboard</button></div>
+      <button class="cv-back" id="cv-back2">← Investigaciones</button></div>
       <p style="color:#e0a96d;padding:20px 4px">Reinicia el portal para cargar la vista nueva del Consejo (el servidor está sirviendo una versión anterior del endpoint).</p></div>`;
-    const b = view.querySelector("#cv-back2"); if (b && onBack) b.onclick = () => onBack();
+    const b = view.querySelector("#cv-back2"); if (b) b.onclick = () => onBack();
     return;
   }
   const byId = Object.fromEntries(d.personas.map((p) => [p.id, p]));
@@ -167,8 +193,10 @@ export async function renderCouncil(view, pid, onBack) {
   view.innerHTML = `<div class="cv"><canvas class="cv-stars"></canvas>
     <div class="cv-top"><div><div class="cv-eyebrow">ACERO · consejo de investigación</div>
       <h2>El <em>Consejo</em></h2>
-      <div class="cv-tag">Tres fases, catorce mentes. Cada hipótesis es una <b>pelota</b> que viaja por el riel: quien la tiene, la trabaja.</div></div>
-      <button class="cv-back" id="cv-back">← Dashboard</button></div>
+      <div class="cv-tag">Tres fases, catorce mentes. Cada hipótesis es una <b>pelota</b> que viaja por el riel: quien la tiene, la trabaja. <span style="color:#c8863c">Un clic = resumen · doble clic = su tablero.</span></div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="cv-back" id="cv-ops" title="Panel clásico: barras de lanzamiento, loop, publicación, proactividad">⚙ Operaciones</button>
+        <button class="cv-back" id="cv-back">← Investigaciones</button></div></div>
     <div class="cv-board"><div class="cv-phases">${phasesHtml}</div>
       <div class="cv-rail"><div class="cv-rail-h">flujo · hipótesis</div><div class="cv-track"></div>
         <div class="cv-zone"><span class="cv-zl">creativa</span><div class="cv-balls" data-b="creativa"></div></div>
@@ -186,7 +214,8 @@ export async function renderCouncil(view, pid, onBack) {
   });
 
   const scrim = root.querySelector("#cv-scrim"), drawer = root.querySelector("#cv-drawer");
-  const back = root.querySelector("#cv-back"); if (back && onBack) back.onclick = () => onBack();
+  const back = root.querySelector("#cv-back"); if (back) back.onclick = () => onBack();
+  const ops = root.querySelector("#cv-ops"); if (ops) ops.onclick = () => onOps();
   function open(id) {
     const p = byId[id]; if (!p) return; const col = SC[p.status];
     const held = (d.balls || []).filter((b) => b.persona === id).map((b) => b.id);
@@ -194,21 +223,31 @@ export async function renderCouncil(view, pid, onBack) {
       <div><div class="cv-dn">${p.name}</div><div class="cv-dr">${p.role}</div><div class="cv-dm">${p.module}</div></div>
       <button class="cv-close" id="cv-x">✕</button></div>
       <div class="cv-db"><div class="cv-dsum">${p.summary}</div>
+        <button id="cv-persona-dash" style="background:#1b2438;border:1px solid #c8863c;color:#e0a96d;border-radius:10px;padding:11px 14px;font-weight:600;font-size:13px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px">📋 Abrir el tablero de ${esc(p.name)} <span style="color:#93a1bd;font-weight:400">— fichas para dar seguimiento →</span></button>
         ${id === "bohr" ? `<button id="cv-investigate" style="background:#e0a96d;color:#0d121e;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px;cursor:pointer">▶ Investigar esta conjetura (correr el ciclo)</button><div id="cv-inv-msg" style="font-size:12px;color:#93a1bd"></div>` : ""}
         <div class="cv-flow"><div><div class="cv-k">recibe de</div><div class="cv-v">${p.awaits}</div></div>
           <div><div class="cv-k">le pasa a</div><div class="cv-v">${p.hands_to}</div></div></div>
         ${held.length ? `<div><div class="cv-st">tiene la pelota</div><div style="font-size:13px;color:#cfd8ea">Trabaja ahora: <b style="color:${col}">${held.join(", ")}</b></div></div>` : ""}
-        ${p.items_label ? `<div><div class="cv-st">${esc(p.items_label)} del proyecto${p.items_count ? " (" + p.items_count + ")" : ""}</div>${
-          (p.items && p.items.length)
-            ? p.items.map((it) => `<div class="cv-task"><span class="cv-tt">${esc(it.title)}</span>${it.verdict ? `<span class="cv-ts" style="color:${VC[it.verdict] || "#93a1bd"}">${esc(it.verdict)}</span>` : ""}</div>`).join("")
-            : `<div style="color:#5f6d88;font-size:12px;padding:6px 0">Aún no hay ${esc(p.items_label)}. Inicia el Consejo (🎩 Bohr) para generarlas.</div>`
-        }</div>` : ""}
+        ${p.items_label
+          ? `<div><div class="cv-st">${esc(p.items_label)} del proyecto${p.items_count ? " (" + p.items_count + ")" : ""}</div>${
+              (p.items && p.items.length)
+                ? `<div class="cv-fiches">${p.items.map((it) => {
+                    const vc = VC[it.verdict] || "#93a1bd";
+                    return `<div class="cv-fiche" style="--fc:${it.verdict ? vc : "#5f6d88"}">
+                      <div class="cv-fiche-t">${esc(it.title)}</div>
+                      ${(it.verdict || it.by) ? `<div class="cv-fiche-m">${it.verdict ? `<span class="cv-chip" style="color:${vc}">${esc(it.verdict)}</span>` : ""}${it.by ? `<span class="cv-by">· ${esc(it.by)}</span>` : ""}</div>` : ""}</div>`;
+                  }).join("")}</div>`
+                : `<div class="cv-note">Aún no hay ${esc(p.items_label)}. Abre <b>🎩 Bohr</b> y pulsa <b>Investigar</b> para que el Consejo las genere.</div>`
+            }</div>`
+          : `<div><div class="cv-st">cómo contribuye</div><div class="cv-note">${esc(p.name)} no acumula fichas propias: trabaja lo que recibe de <b>${esc(p.awaits)}</b> y lo pasa a <b>${esc(p.hands_to)}</b>.</div></div>`}
         <div><div class="cv-st">avance en este proyecto</div>
           <div style="display:flex;align-items:center;gap:14px;margin-top:8px">
             <div style="position:relative;width:54px;height:54px">${ring(p.progress, col, 54, 5)}<b style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px">${p.progress}</b></div>
             <div style="color:#93a1bd;font-size:13px">estado <b style="color:${col}">${SL[p.status]}</b> · <span style="color:#5f6d88">${p.source === "project" ? "señal real" : "madurez"}</span></div></div></div>
         <div><div class="cv-st">tareas</div>${(p.tasks || []).map((t) => `<div class="cv-task"><span class="cv-tb" style="background:${TASK[t[1]][0]}"></span><span class="cv-tt">${t[0]}</span><span class="cv-ts">${TASK[t[1]][1]}</span></div>`).join("")}</div></div>`;
     drawer.classList.add("open"); scrim.classList.add("open"); drawer.querySelector("#cv-x").onclick = close;
+    const pdash = drawer.querySelector("#cv-persona-dash");
+    if (pdash) pdash.onclick = () => { close(); openPersonaDash(id); };
     const inv = drawer.querySelector("#cv-investigate");
     if (inv) inv.onclick = async () => {
       inv.disabled = true; inv.textContent = "Convocando al Consejo…";
@@ -223,8 +262,17 @@ export async function renderCouncil(view, pid, onBack) {
   }
   function close() { drawer.classList.remove("open"); scrim.classList.remove("open"); }
   scrim.onclick = close; document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
-  root.querySelectorAll(".cv-med").forEach((m) => { m.onclick = () => open(m.dataset.id); m.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(m.dataset.id); } }; });
-  root.querySelectorAll(".cv-ball").forEach((b) => (b.onclick = () => open(b.dataset.id)));
+  root.querySelectorAll(".cv-med").forEach((m) => {
+    m.onclick = () => open(m.dataset.id);
+    m.ondblclick = () => { close(); openPersonaDash(m.dataset.id); };
+    m.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(m.dataset.id); } };
+  });
+  root.querySelectorAll(".cv-ball").forEach((b) => {
+    b.onclick = () => open(b.dataset.id);
+    b.ondblclick = () => { close(); openPersonaDash(b.dataset.id); };
+  });
+  // Apertura directa de un personaje (p.ej. Bohr tras crear la investigación desde el chat).
+  if (opts && opts.openPersona && byId[opts.openPersona]) open(opts.openPersona);
 
   const cvs = root.querySelector(".cv-stars"), x = cvs.getContext("2d");
   requestAnimationFrame(() => { cvs.width = root.clientWidth; cvs.height = root.clientHeight; for (let i = 0; i < 130; i++) { const a = Math.random() * cvs.width, b = Math.random() * cvs.height * 0.55, r = Math.random() * 1.3; x.globalAlpha = Math.random() * 0.7 + 0.15; x.fillStyle = Math.random() > 0.85 ? "#e0a96d" : "#cfe0ff"; x.beginPath(); x.arc(a, b, r, 0, 6.28); x.fill(); } x.globalAlpha = 1; });

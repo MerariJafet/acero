@@ -6,6 +6,7 @@ import {
   eduPlanFlow, renderCourse, renderCourses, renderHome,
   renderPhaseDetail, renderProjectDash,
 } from "./dashboard.js";
+import { renderCouncil } from "./council.js";
 import { renderLearning } from "./learning.js";
 import { renderEconomics } from "./economics.js";
 
@@ -15,6 +16,7 @@ const $ = (s) => document.querySelector(s);
 const state = {
   project: null,          // current project id (null = home/global)
   context: { scope: "global", label: "Chat general — todas las investigaciones" },
+  lastTopic: "",          // último tema hablado en el chat global (semilla de investigación)
 };
 
 const SUGGESTIONS = {
@@ -32,7 +34,21 @@ const SUGGESTIONS = {
 // ---- callbacks passed to dashboards ---------------------------------------
 const cb = {
   openHome: () => { state.project = null; syncSelect(); setContext({ scope: "global" }); renderHome($("#view"), cb); },
+  // El Consejo (los 14 personajes) ES la portada del proyecto — el flujo unificado.
   openProject: (pid) => {
+    state.project = pid; syncSelect();
+    setContext({ scope: "project", project_id: pid });
+    renderCouncil($("#view"), pid, cb);
+  },
+  // Como openProject, pero abre el Consejo con el cajón de Bohr YA abierto (su botón
+  // "Investigar" a la vista) — el destino de "Iniciar investigación desde el chat".
+  openProjectInvoke: (pid) => {
+    state.project = pid; syncSelect();
+    setContext({ scope: "project", project_id: pid });
+    renderCouncil($("#view"), pid, cb, { openPersona: "bohr" });
+  },
+  // El panel clásico de operaciones (barras de lanzamiento, loop, publicación…) a un clic.
+  openOperations: (pid) => {
     state.project = pid; syncSelect();
     setContext({ scope: "project", project_id: pid });
     renderProjectDash($("#view"), pid, cb);
@@ -104,7 +120,59 @@ function setContext(ctx) {
   document.querySelectorAll(".suggestion-btn").forEach((b) =>
     b.addEventListener("click", () => { $("#question").value = b.textContent; $("#question").focus(); }));
   $("#edu-plan-btn").hidden = !(ctx.scope === "project" || ctx.scope === "phase");
+  renderSpawnInvest();
   loadThread();
+}
+
+// 🔬 "Iniciar nueva investigación con este tema": en el chat GLOBAL, tras platicar el
+// tema, un botón sobre el chat crea el proyecto con esa conjetura y abre el Consejo con
+// Bohr listo para arrancar el ciclo.
+function renderSpawnInvest() {
+  const el = $("#spawn-invest");
+  if (!el) return;
+  if (state.context.scope !== "global") { el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false;
+  el.style.cssText = "display:flex;flex-direction:column;gap:6px;padding:9px 11px;margin:8px 0 0;"
+    + "border:1px solid #2b3550;border-radius:11px;background:rgba(224,169,109,.07)";
+  const topic = (state.lastTopic || "").trim();
+  const ready = topic.length > 0;
+  el.innerHTML =
+    `<button id="spawn-invest-btn" type="button" class="act${ready ? "" : " ghost"}"${ready ? "" : " disabled"}>`
+    + `🔬 Iniciar nueva investigación con este tema</button>`
+    + `<small class="tag">${ready
+        ? "Cuando la conjetura esté clara, pulsa aquí y el Consejo (Bohr) la tomará."
+        : "Platica el tema abajo; en cuanto escribas la conjetura, se activa este botón."}</small>`;
+  const b = $("#spawn-invest-btn");
+  if (b) b.addEventListener("click", spawnInvestConfirm);
+}
+
+function spawnInvestConfirm() {
+  const el = $("#spawn-invest");
+  const topic = (state.lastTopic || "").trim();
+  el.innerHTML =
+    `<label class="tag" for="spawn-topic">Conjetura / tema a investigar (edítalo si hace falta)</label>
+     <textarea id="spawn-topic" rows="3" style="width:100%">${esc(topic)}</textarea>
+     <label class="tag" for="spawn-title">Nombre corto</label>
+     <input id="spawn-title" style="width:100%" value="${esc(topic.slice(0, 60))}">
+     <div class="chat-actions" style="margin-top:6px">
+       <button id="spawn-go" class="act" type="button">🎩 Crear e invocar a Bohr</button>
+       <button id="spawn-cancel" class="act ghost" type="button">Cancelar</button>
+     </div>
+     <span id="spawn-out" class="tag" aria-live="polite"></span>`;
+  $("#spawn-cancel").addEventListener("click", renderSpawnInvest);
+  $("#spawn-go").addEventListener("click", async () => {
+    const t = $("#spawn-topic").value.trim();
+    const name = $("#spawn-title").value.trim() || t.slice(0, 60);
+    const out = $("#spawn-out");
+    if (!t) { out.textContent = "Escribe la conjetura o tema."; return; }
+    out.textContent = "Creando investigación…";
+    const { ok, body } = await post("/portal/api/workspace/project",
+      { title: name, domain: "general", topic: t });
+    if (!ok) { out.textContent = "Error: " + esc((body && (body.detail || body.error)) || "no se pudo"); return; }
+    state.lastTopic = "";
+    await loadProjects();
+    cb.openProjectInvoke(body.id);      // Consejo con el cajón de Bohr abierto
+  });
 }
 
 async function loadThread() {
@@ -131,6 +199,9 @@ async function sendChat(text) {
   box.insertAdjacentHTML("beforeend", `<div class="msg user">${esc(text)}</div>` +
     `<div class="msg assistant loading" id="chat-wait">Pensando… (Codex puede tardar 1–3 min)</div>`);
   box.scrollTop = box.scrollHeight;
+  // En el chat GLOBAL, la última cosa que escribes es la semilla/"frase que detona"
+  // la investigación → activa el botón "Iniciar nueva investigación".
+  if (state.context.scope === "global") { state.lastTopic = text; renderSpawnInvest(); }
   const loc = { scope: state.context.scope, phase: state.context.phase,
                 course_id: state.context.course_id };
   let res;

@@ -78,3 +78,75 @@ def record_result(project_id: str, claim: str, result: dict[str, Any], *,
                   status="CONFIRMED", parent_id=hid, actor=PERSONA_ACTOR.get(persona, persona),
                   summary=f"contraejemplo a: {claim[:80]}")
     return {"hypothesis_id": hid, "experiment_id": eid, "verdict": verdict}
+
+
+def record_reformulation(project_id: str, statement: str, *, angle: str = "",
+                         parent_id: str | None = None, sf: Any = None) -> str:
+    """Feynman's 'second move': a sharpened/alternative statement (kind='reformulation')."""
+    store = _store(sf)
+    rid = new_id("ref")
+    store.put(project_id, "reformulation", rid,
+              {"statement": statement, "angle": angle, "origin": "consejo"},
+              status="PROPOSED", parent_id=parent_id, actor="Feynman",
+              summary=statement[:120])
+    return rid
+
+
+def record_lemma(project_id: str, statement: str, *, proved: bool = False, backend: str = "",
+                 detail: str = "", kind: str = "", parent_id: str | None = None,
+                 sf: Any = None) -> str:
+    """Gödel/Euclides' verifiable partial result (kind='lemma'): a proved lemma, a
+    necessary condition on any counterexample, a bound, or a weaker variant. Honest:
+    `proved` reflects the mechanical verification, and a proved contribution is partial
+    progress, NEVER a solution to an open problem."""
+    store = _store(sf)
+    lid = new_id("lem")
+    store.put(project_id, "lemma", lid,
+              {"statement": statement, "proved": bool(proved), "backend": backend,
+               "detail": detail, "contribution_kind": kind, "origin": "consejo"},
+              status=("PROVED" if proved else "PROPOSED"), parent_id=parent_id,
+              actor="Gödel", summary=statement[:120])
+    return lid
+
+
+def run_council(project_id: str, claim: str, *, sf: Any = None, loop: Any = None,
+                hypothesis_id: str | None = None) -> dict[str, Any]:
+    """Bohr dirige el ciclo AMBICIOSO sobre `claim` y registra el trabajo por personaje:
+    Hilbert (hipótesis), Popper (resultado empírico/veredicto), Feynman (reformulaciones),
+    Gödel/Euclides (lemas y contribuciones parciales verificadas). Un solo flujo → el
+    dashboard y las fichas del Consejo se actualizan solos. Nada se infla: el veredicto y
+    el estado 'partial_progress' salen tal cual del ResearchLoop."""
+    from ..science.research_loop import ResearchLoop
+    hid = hypothesis_id or record_hypothesis(project_id, claim, persona="hilbert", sf=sf)
+    lp = loop or ResearchLoop()
+    res = lp.investigate(claim)
+    disp = str(res.get("disposition") or "inconclusive")
+    final_v = res.get("final_verdict")
+    final_stmt = res.get("final_statement") or claim
+    # Popper: el resultado empírico / veredicto principal (con su cota de búsqueda)
+    record_result(project_id, final_stmt,
+                  {"verdict": final_v or disp, "detail": res.get("sketch") or "",
+                   "disposition": disp}, persona="popper", hypothesis_id=hid, sf=sf)
+    # Feynman: reformulaciones (pasos del trail que cambiaron el enunciado)
+    seen = {claim.strip()}
+    for t in res.get("trail") or []:
+        st = str(t.get("statement") or "").strip()
+        if st and st not in seen and t.get("observation") is not None:
+            record_reformulation(project_id, st, angle=str(t.get("observation") or "")[:80],
+                                  parent_id=hid, sf=sf)
+            seen.add(st)
+    # Gödel/Euclides: lema formalmente apoyado (si lo hubo)
+    if res.get("lemma"):
+        record_lemma(project_id, str(res["lemma"]),
+                     proved=disp in ("formally_supported", "verified"),
+                     detail="lema núcleo de la reducción", parent_id=hid, sf=sf)
+    # Gödel/Euclides: contribuciones parciales verificadas (condición necesaria/cota/variante)
+    for c in res.get("contributions") or []:
+        record_lemma(project_id, str(c.get("statement") or ""), proved=bool(c.get("proved")),
+                     backend=str(c.get("backend") or ""), detail=str(c.get("why_partial") or ""),
+                     kind=str(c.get("kind") or ""), parent_id=hid, sf=sf)
+    return {"hypothesis_id": hid, "disposition": disp, "final_verdict": final_v,
+            "final_statement": final_stmt,
+            "n_reformulations": len(seen) - 1,
+            "contributions": res.get("contributions") or [],
+            "lemma": res.get("lemma")}
