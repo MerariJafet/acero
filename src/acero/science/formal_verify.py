@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import Any
 
 RESULTS = ("proved", "refuted", "unknown")
-KINDS = ("identity", "inequality", "limit", "boolean")
+KINDS = ("identity", "inequality", "limit", "boolean", "summation", "product")
 
 
 def _sympify(expr: str) -> Any:
@@ -44,6 +44,12 @@ def verify(kind: str, **kw: Any) -> dict[str, Any]:
             return _limit(kw["expr"], kw.get("var", "x"), kw["to"], kw["expected"])
         if kind == "boolean":
             return _boolean(kw["expr"])
+        if kind == "summation":
+            return _summation(kw["term"], kw.get("index", "k"), kw.get("lower", "1"),
+                              kw.get("upper", "n"), kw["closed"])
+        if kind == "product":
+            return _product(kw["term"], kw.get("index", "k"), kw.get("lower", "1"),
+                            kw.get("upper", "n"), kw["closed"])
         return _out("unknown", kind, f"tipo no soportado: {kind!r}")
     except KeyError as exc:
         return _out("unknown", kind, f"falta argumento {exc}")
@@ -125,6 +131,57 @@ def _limit(expr: str, var: str, to: str, expected: str) -> dict[str, Any]:
         return _out("proved", "limit", f"lim {expr} → {to} = {expected}")
     return _out("refuted", "limit", f"el límite es {val}, no {expected}",
                 counterexample={"actual_limit": str(val)})
+
+
+def _closed_form_over_index(kind: str, op: Any, term: str, index: str, lower: str,
+                            upper: str, closed: str) -> dict[str, Any]:
+    """Shared core: PROVE  op_{index=lower}^{upper} term(index) == closed(upper).
+
+    `op` is sympy.summation or sympy.product. `upper` is a symbol name (e.g. "n").
+    Symbolic equality ⇒ proved; a disagreeing integer ⇒ refuted; else honest unknown.
+    """
+    import sympy
+    k = sympy.Symbol(index, integer=True)
+    n = sympy.Symbol(upper, integer=True, positive=True)
+    t = sympy.sympify(term, locals={index: k, upper: n})
+    lo = sympy.sympify(lower, locals={upper: n})
+    closed_e = sympy.sympify(closed, locals={upper: n, index: k})
+    val = op(t, (k, lo, n))
+    if getattr(val, "has", lambda *_: False)(sympy.Sum, sympy.Product):
+        val = sympy.simplify(val.doit()) if hasattr(val, "doit") else val
+    diff = sympy.simplify(val - closed_e)
+    sign = "Σ" if kind == "summation" else "Π"
+    if diff == 0:
+        return _out("proved", kind,
+                    f"{sign}_{{{index}={lower}}}^{{{upper}}} {term} ≡ {closed} "
+                    "(cerrado simbólicamente)")
+    # symbolic didn't close — look for a concrete integer upper that disagrees
+    for nv in (1, 2, 3, 4, 5, 8, 13):
+        try:
+            lhs = op(t.subs(n, nv) if lo.free_symbols else t, (k, lo.subs(n, nv), nv))
+            lhs = sympy.nsimplify(lhs) if not lhs.free_symbols else lhs
+            rhs = closed_e.subs(n, nv)
+            if sympy.simplify(lhs - rhs) != 0:
+                return _out("refuted", kind, f"discrepa en {upper}={nv}: {lhs} ≠ {rhs}",
+                            counterexample={upper: nv, "lhs": str(lhs), "rhs": str(rhs)})
+        except Exception:  # noqa: BLE001
+            continue
+    return _out("unknown", kind,
+                f"coincide numéricamente pero sympy no cerró la forma ({sign} {term})")
+
+
+def _summation(term: str, index: str, lower: str, upper: str,
+               closed: str) -> dict[str, Any]:
+    import sympy
+    return _closed_form_over_index("summation", sympy.summation, term, index,
+                                   lower, upper, closed)
+
+
+def _product(term: str, index: str, lower: str, upper: str,
+             closed: str) -> dict[str, Any]:
+    import sympy
+    return _closed_form_over_index("product", sympy.product, term, index,
+                                   lower, upper, closed)
 
 
 def _boolean(expr: str) -> dict[str, Any]:

@@ -279,6 +279,28 @@ function wireProactivityPanel(view, pid) {
     out.innerHTML = `${pill(body.result, cls)} <span class="tag">${esc(body.detail || "")}</span>`
       + (body.counterexample ? `<div class="tag">contraejemplo: ${esc(JSON.stringify(body.counterexample))}</div>` : "");
   });
+  const ex = $("#ex-run");
+  if (ex) ex.addEventListener("click", async () => {
+    const goal = $("#ex-goal").value.trim(); const out = $("#ex-out");
+    if (!goal) { out.textContent = "escribe un objetivo"; return; }
+    out.textContent = "⏳ explorando enfoques en paralelo… (puede tardar minutos)";
+    ex.disabled = true;
+    const { ok, body } = await post("/portal/api/math-explore", {
+      goal, approaches: Number($("#ex-k").value) || 4, rounds: 2 });
+    ex.disabled = false;
+    if (!ok) { out.textContent = "error en la exploración"; return; }
+    const scls = { settled: "ok", candidate: "warn", inconclusive: "bad" }[body.status] || "";
+    const vcls = { verified: "ok", refuted: "bad", holds_empirically: "warn" }[body.verdict] || "";
+    out.innerHTML = `${pill(body.status, scls)} `
+      + (body.hypothesis ? `<b>${esc(body.hypothesis)}</b>` : esc(body.note || ""))
+      + (body.verdict ? ` ${pill(body.verdict, vcls)}` : "")
+      + (body.novelty ? ` <span class="tag">novedad: ${esc(body.novelty)}</span>` : "")
+      + (body.why ? `<div class="tag">por qué: ${esc(body.why)}</div>` : "")
+      + (body.viable_approaches || []).map((v) =>
+          `<div class="pub-ok">✓ ${esc(v.method)} → ${esc(String(v.candidate ?? ""))}</div>`).join("")
+      + (body.rounds || []).map((r) => r.tried ? `<div class="tag">ronda ${r.round}: `
+          + r.tried.map((t) => `${t.found ? "✓" : "·"}${esc(t.method)}`).join(" ") + `</div>` : "").join("");
+  });
 }
 
 export async function renderProjectDash(view, pid, cb) {
@@ -460,6 +482,19 @@ export async function renderProjectDash(view, pid, cb) {
            <input id="fv-b" class="pub-input" style="width:100%;margin-top:.3rem" placeholder="rhs / expected (según tipo)">
            <button class="act ghost" id="fv-run" style="margin-top:.4rem">Verificar</button>
            <div id="fv-out" class="tag" aria-live="polite"></div>
+         </div>
+         <div class="canvas-card" style="grid-column:1/-1">
+           <h4>🧭 Explorador (poder predictivo)</h4>
+           <p class="tag">De un OBJETIVO, prueba varios enfoques como piezas de LEGO
+             (numérico · álgebra · cálculo · geometría), corre cada uno, conserva los
+             que funcionan, sintetiza una hipótesis y la confronta (prueba + novedad).</p>
+           <div class="chat-actions">
+             <input id="ex-goal" class="pub-input" style="flex:1;min-width:240px"
+               placeholder="objetivo (ej: fórmula del área de un rectángulo)">
+             <input id="ex-k" class="pub-input" style="min-width:64px" type="number" value="4" min="2" max="8" title="enfoques">
+             <button class="act" id="ex-run">Explorar</button>
+           </div>
+           <div id="ex-out" class="tag" aria-live="polite"></div>
          </div>
        </div>
      </section>

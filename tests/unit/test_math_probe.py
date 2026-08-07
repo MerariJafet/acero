@@ -31,12 +31,48 @@ def test_formal_proof_yields_verified():
     assert r["verdict"] == "verified" and r["formal"]["result"] == "proved"
 
 
-def test_formal_refutation_is_decisive_and_skips_search():
-    prov = _Prov()
-    p = MathProbe(provider=prov, runner=_runner_for("x"),
+def test_formal_refutation_trusted_when_no_empirical_conflict():
+    # formal refutes AND the search finds no contradicting evidence → refuted
+    out = 'RESULT_JSON: {"verdict":"inconclusive","counterexample":null,"n_tested":0,"detail":""}'
+    p = MathProbe(provider=_Prov(), runner=_runner_for(out),
                   formal=lambda fc: {"result": "refuted", "counterexample": {"x": 2}})
-    r = p.probe("(x+1)^2 = x^2+1", formal_claim={"kind": "identity", "lhs": "a", "rhs": "b"})
-    assert r["verdict"] == "refuted" and prov.calls == 0     # never bothered to codegen
+    r = p.probe("(x+1)^2 = x^2+1", formal_claim={"kind": "identity", "lhs": "a", "rhs": "b"},
+                max_tries=1)
+    assert r["verdict"] == "refuted"
+
+
+def test_formal_refutation_downgraded_to_inconclusive_on_conflict():
+    # formal says false, but the search finds NO counterexample → misencoding suspected
+    out = 'RESULT_JSON: {"verdict":"holds_empirically","counterexample":null,"n_tested":99999,"detail":""}'
+    p = MathProbe(provider=_Prov(), runner=_runner_for(out),
+                  formal=lambda fc: {"result": "refuted", "counterexample": {"x": 2}})
+    r = p.probe("Binet F_n=(phi^n-psi^n)/sqrt5",
+                formal_claim={"kind": "identity", "lhs": "a", "rhs": "b"}, max_tries=1)
+    assert r["verdict"] == "inconclusive"     # abstains instead of falsely refuting
+
+
+def test_numeric_nearmiss_is_not_a_refutation():
+    # a 'counterexample' within 0.1% of expected is precision noise, not a refutation
+    ce = '{"method":"quad","computed":1.7724512,"expected":1.7724538,"abs_error":2.6e-6}'
+    out = f'RESULT_JSON: {{"verdict":"refuted","counterexample":{ce},"n_tested":1,"detail":""}}'
+    r = MathProbe(provider=_Prov(), runner=_runner_for(out)).probe("I = sqrt(pi)", max_tries=1)
+    assert r["verdict"] == "holds_empirically"    # the value actually holds
+
+
+def test_truncation_tail_is_not_a_refutation():
+    # Basel-style: 'refuted' justified only by a tiny leftover tail → not a real CE
+    ce = '{"N":5217276,"tail_estimate":1.9e-07,"detail":"partial sum short of pi^2/6"}'
+    out = f'RESULT_JSON: {{"verdict":"refuted","counterexample":{ce},"n_tested":1,"detail":""}}'
+    r = MathProbe(provider=_Prov(), runner=_runner_for(out)).probe("sum 1/n^2 = pi^2/6",
+                                                                   max_tries=1)
+    assert r["verdict"] == "holds_empirically"
+
+
+def test_robust_counterexample_still_refutes():
+    ce = '{"computed":5.0,"expected":1.77,"abs_error":3.23}'   # gross mismatch
+    out = f'RESULT_JSON: {{"verdict":"refuted","counterexample":{ce},"n_tested":1,"detail":""}}'
+    r = MathProbe(provider=_Prov(), runner=_runner_for(out)).probe("claim", max_tries=1)
+    assert r["verdict"] == "refuted"
 
 
 def test_computational_counterexample_refutes():

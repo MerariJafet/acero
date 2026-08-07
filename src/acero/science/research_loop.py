@@ -1,0 +1,323 @@
+"""ResearchLoop — el salto de "asistente que testea" a INVESTIGADOR.
+
+Antes: generar → probar → refutar/conservar, y parar. Un investigador humano hace una
+SEGUNDA JUGADA: ve que "falla trivial en n=1", excluye el borde y ataca el núcleo; ve un
+superviviente y en vez de más fuerza bruta intenta PROBARLO o entender por qué se cumple.
+
+El corazón de este loop es el filtro **ACTITUD HUMANA** (`HumanAttitude`): una chispa
+creativa que OBSERVA como un matemático astuto con mentalidad de hacker —para DESCUBRIR,
+no para romper— y propone las opciones que la máquina no ve: refinar un borde, reformular,
+fortalecer, cambiar el cuantificador, buscar el patrón, intentar una demostración.
+
+El loop compone lo ya construido:
+    conjetura
+      → PROBAR (MathProbe + guardas anti-refutación-falsa)
+      → ACTITUD HUMANA (¿trivial? ¿otra forma? ¿probar? ¿fortalecer?)
+      → actuar (refinar y reintentar / intentar prueba / escalar a humano)
+      → persistir (ledger) y disponer
+
+Honestidad: la creatividad genera IDEAS y mejores enunciados; los VEREDICTOS siguen
+saliendo del probador y sus guardas. La actitud humana nunca "declara" un resultado.
+Todo (provider/prober/explorer/ledger) es inyectable para tests offline.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+HUMAN_ATTITUDE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "observation": {"type": "string"},          # qué nota un humano astuto
+        "verdict_is_trivial": {"type": "boolean"},   # ¿el resultado es borde/degenerado?
+        "refined_statement": {"type": "string"},     # enunciado más filoso (o "")
+        "alternative_angles": {"type": "array", "items": {"type": "string"}},
+        "next_action": {"type": "string"},           # ver _ACTIONS
+    },
+    "required": ["observation", "verdict_is_trivial", "refined_statement",
+                 "alternative_angles", "next_action"],
+    "additionalProperties": False,
+}
+
+_ACTIONS = ("refine_and_retry", "strengthen_and_retry", "attempt_proof",
+            "escalate_to_human", "drop")
+
+_HUMAN_ATTITUDE_SYS = (
+    "Eres ACTITUD HUMANA: la chispa creativa de ACERO. NO ejecutas cálculos; OBSERVAS "
+    "como un matemático astuto con mentalidad de HACKER —para DESCUBRIR opciones que aún "
+    "no se ven, no para romper—. Te doy una conjetura y QUÉ pasó al atacarla "
+    "computacionalmente. Ve lo que la máquina no ve:\n"
+    " • Si la refutación es TRIVIAL (un borde como n=1, un caso degenerado, una hipótesis "
+    "que nadie querría): dilo (verdict_is_trivial=true) y da un refined_statement que "
+    "EXCLUYA el borde y conserve el núcleo interesante.\n"
+    " • Si SOBREVIVIÓ a muchas pruebas: propón una jugada de investigador — intentar una "
+    "DEMOSTRACIÓN (¿hay estructura, inducción, biyección, invariante?), o una versión MÁS "
+    "FUERTE que sea más fértil, o un ángulo no probado.\n"
+    "Sé concreto y creativo: reformula, cambia el cuantificador, añade/quita una hipótesis, "
+    "busca el patrón oculto. Da observation, verdict_is_trivial, refined_statement (o \"\"), "
+    "alternative_angles (lista breve), y next_action ∈ {refine_and_retry, "
+    "strengthen_and_retry, attempt_proof, escalate_to_human, drop}."
+)
+
+_SKETCH_SYS = (
+    "Eres un demostrador de ACERO con actitud humana. Da un BOCETO de demostración honesto "
+    "para esta afirmación (idea central: inducción, biyección, invariante, principio de "
+    "casillas, etc.), señalando qué faltaría para cerrarlo. NO afirmes que está demostrado. "
+    "Sé breve y concreto."
+)
+
+# --- cerrar el ciclo: reducir el boceto a un LEMA verificable simbólicamente ------
+FORMALIZE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "lemma": {"type": "string"},          # el hecho clave, en palabras
+        "reduction": {"type": "string"},      # por qué probar el lema cierra el argumento
+        "formal_claim": {
+            "type": "object",
+            "properties": {
+                "kind": {"type": "string"}, "lhs": {"type": "string"},
+                "rhs": {"type": "string"}, "expr": {"type": "string"},
+                "var": {"type": "string"}, "to": {"type": "string"},
+                "expected": {"type": "string"}, "term": {"type": "string"},
+                "index": {"type": "string"}, "lower": {"type": "string"},
+                "upper": {"type": "string"}, "closed": {"type": "string"}},
+            "required": ["kind", "lhs", "rhs", "expr", "var", "to", "expected",
+                         "term", "index", "lower", "upper", "closed"],
+            "additionalProperties": False},
+    },
+    "required": ["lemma", "reduction", "formal_claim"], "additionalProperties": False,
+}
+
+_FORMALIZE_SYS = (
+    "Eres el FORMALIZADOR de ACERO. Te doy una afirmación y un boceto/reducción. Extrae el "
+    "LEMA NÚCLEO que, verificado simbólicamente, sostenga el argumento, y exprésalo como "
+    "formal_claim con el kind correcto (identity: lhs/rhs; inequality: expr/var; limit: "
+    "expr/var/to/expected; boolean: expr; summation/product: term/index/lower/upper/closed). "
+    "Rellena SOLO los campos del kind; deja los demás en \"\". Si nada del argumento se "
+    "reduce a algo verificable por sympy, kind = \"\". Da también reduction: por qué probar "
+    "ese lema (junto con el argumento) cerraría la afirmación."
+)
+
+
+class HumanAttitude:
+    """El filtro creativo. Reutilizable: se le puede dar SIEMPRE esta actitud."""
+
+    def __init__(self, *, provider: Any = None) -> None:
+        self._provider = provider
+
+    def _prov(self) -> Any:
+        if self._provider is not None:
+            return self._provider
+        from ..llm.providers import CodexCliProvider
+        return CodexCliProvider(timeout_sec=180)
+
+    def observe(self, statement: str, probe_result: dict[str, Any],
+                trail: list[dict[str, Any]]) -> dict[str, Any]:
+        prov = self._prov()
+        if prov is None or not getattr(prov, "available", lambda: False)():
+            return {"observation": "", "verdict_is_trivial": False,
+                    "refined_statement": "", "alternative_angles": [],
+                    "next_action": "escalate_to_human"}
+        ctx = (f"CONJETURA: {statement}\n"
+               f"RESULTADO DEL ATAQUE: veredicto={probe_result.get('verdict')}; "
+               f"contraejemplo={probe_result.get('counterexample')}; "
+               f"casos_probados={probe_result.get('n_tested')}; "
+               f"detalle={str(probe_result.get('detail'))[:200]}")
+        if trail:
+            ctx += f"\nJUGADAS PREVIAS: {[t.get('next_action') for t in trail]}"
+        out = prov.complete_json(f"{_HUMAN_ATTITUDE_SYS}\n\n{ctx}",
+                                 HUMAN_ATTITUDE_SCHEMA, temperature=0.7)
+        if not isinstance(out, dict):
+            return {"observation": "", "verdict_is_trivial": False,
+                    "refined_statement": "", "alternative_angles": [],
+                    "next_action": "escalate_to_human"}
+        act = out.get("next_action")
+        if act not in _ACTIONS:
+            out["next_action"] = "escalate_to_human"
+        return out
+
+
+class ResearchLoop:
+    def __init__(self, *, provider: Any = None, prober: Any = None, attitude: Any = None,
+                 explorer: Any = None, ledger: Any = None, max_depth: int = 3) -> None:
+        self._provider = provider
+        self._prober = prober
+        self._attitude = attitude
+        self._explorer = explorer
+        self._ledger = ledger
+        self._max_depth = max(1, max_depth)
+
+    # --- injectable primitives ------------------------------------------------
+    def _probe(self, statement: str) -> dict[str, Any]:
+        if self._prober is not None:
+            return self._prober(statement)
+        from .math_probe import MathProbe
+        r = MathProbe(provider=self._provider).probe(statement, max_tries=2)
+        comp = r.get("computational") or {}
+        return {"verdict": r.get("verdict"), "detail": r.get("detail"),
+                "counterexample": comp.get("counterexample"),
+                "n_tested": comp.get("n_tested")}
+
+    def _observe(self, statement: str, probe: dict[str, Any],
+                 trail: list[dict[str, Any]]) -> dict[str, Any]:
+        att = self._attitude or HumanAttitude(provider=self._provider)
+        if callable(att):
+            return att(statement, probe, trail)
+        return att.observe(statement, probe, trail)
+
+    def _sketch(self, statement: str) -> str:
+        prov = self._provider
+        if prov is None:
+            from ..llm.providers import CodexCliProvider
+            prov = CodexCliProvider(timeout_sec=150)
+        if prov is None or not getattr(prov, "available", lambda: False)():
+            return ""
+        try:
+            return prov.complete(f"{_SKETCH_SYS}\n\nAFIRMACIÓN: {statement}",
+                                 temperature=0.4, max_tokens=700).text.strip()[:1200]
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _record(self, statement: str, result: dict[str, Any]) -> None:
+        if self._ledger is None:
+            return
+        try:
+            self._ledger.record(statement, {
+                "status": result.get("disposition"),
+                "verdict": result.get("final_verdict"),
+                "hypothesis": result.get("final_statement"),
+                "viable_approaches": []})
+        except Exception:  # noqa: BLE001
+            pass
+
+    # --- the investigator loop ------------------------------------------------
+    def investigate(self, statement: str, *, max_depth: int | None = None) -> dict[str, Any]:
+        depth_cap = max_depth or self._max_depth
+        trail: list[dict[str, Any]] = []
+        current = statement
+        disposition = "inconclusive"
+        final_verdict = None
+        sketch = ""
+        formal_support: dict[str, Any] | None = None
+        lemma: str | None = None
+        for depth in range(depth_cap):
+            probe = self._probe(current)
+            v = probe.get("verdict")
+            final_verdict = v
+            att = self._observe(current, probe, trail)
+            action = att.get("next_action", "escalate_to_human")
+            trail.append({
+                "depth": depth + 1, "statement": current, "verdict": v,
+                "counterexample": probe.get("counterexample"),
+                "n_tested": probe.get("n_tested"),
+                "observation": att.get("observation"),
+                "trivial": bool(att.get("verdict_is_trivial")),
+                "alternative_angles": att.get("alternative_angles") or [],
+                "next_action": action,
+            })
+            if v == "verified":
+                disposition = "verified"
+                break
+            # --- the human 'second move' on a refutation --------------------------
+            if v == "refuted":
+                refined = (att.get("refined_statement") or "").strip()
+                # honor the creative move whenever the attitude proposes a *different*
+                # sharpened statement (a boundary exclusion, a fixed hypothesis, a
+                # reorientation) — not only on a strictly 'trivial' flag.
+                if action == "refine_and_retry" and refined and refined != current:
+                    current = refined
+                    continue                      # attack the sharpened core
+                disposition = "refuted"
+                break
+            # --- survivor (holds_empirically / inconclusive) ----------------------
+            refined = (att.get("refined_statement") or "").strip()
+            if action == "strengthen_and_retry" and refined and refined != current:
+                current = refined
+                continue
+            if action == "attempt_proof":
+                proof = self._attempt_proof(current, att.get("observation") or "")
+                trail.append(proof)
+                disp = proof.get("disposition")
+                if disp == "verified":
+                    disposition, final_verdict = "verified", "verified"
+                elif disp == "formally_supported":
+                    # a core lemma is formally proved; the reduction bridge awaits a human
+                    disposition = "formally_supported"
+                    final_verdict = "formally_supported"
+                    sketch = proof.get("sketch", "")
+                    formal_support = proof.get("formal")
+                    lemma = proof.get("lemma")
+                else:
+                    disposition = "needs_human_review"
+                    sketch = proof.get("sketch", "")
+                break
+            # escalate_to_human / drop
+            disposition = ("needs_human_review" if v == "holds_empirically" else "dropped")
+            if disposition == "needs_human_review":
+                sketch = self._sketch(current)
+            break
+        result = {
+            "original": statement, "final_statement": current,
+            "disposition": disposition, "final_verdict": final_verdict,
+            "sketch": sketch or None, "lemma": lemma,
+            "formal_support": formal_support, "trail": trail,
+        }
+        self._record(statement, result)
+        return result
+
+    def _formalize_and_verify(self, statement: str, sketch: str) -> dict[str, Any] | None:
+        """Reduce the human sketch to a symbolic LEMMA and try to PROVE it with sympy.
+
+        Honesty: proving the lemma supports the argument; it does NOT machine-prove the
+        reduction bridge. So a success yields `formally_supported`, never full `verified`.
+        """
+        prov = self._provider
+        if prov is None:
+            from ..llm.providers import CodexCliProvider
+            prov = CodexCliProvider(timeout_sec=150)
+        if prov is None or not getattr(prov, "available", lambda: False)():
+            return None
+        try:
+            out = prov.complete_json(
+                f"{_FORMALIZE_SYS}\n\nAFIRMACIÓN: {statement}\nBOCETO/REDUCCIÓN: {sketch[:900]}",
+                FORMALIZE_SCHEMA, temperature=0.2)
+        except Exception:  # noqa: BLE001
+            return None
+        if not isinstance(out, dict):
+            return None
+        fc = out.get("formal_claim") or {}
+        fc = {k: v for k, v in fc.items() if isinstance(v, str) and v.strip()}
+        if not fc.get("kind"):
+            return None
+        from .formal_verify import verify
+        kind = str(fc.get("kind"))
+        kw = {k: v for k, v in fc.items() if k != "kind"}
+        res = verify(kind, **kw)
+        return {"lemma": out.get("lemma"), "reduction": out.get("reduction"),
+                "formal_claim": fc, "formal": res}
+
+    def _attempt_proof(self, statement: str, sketch_hint: str = "") -> dict[str, Any]:
+        """Try to prove a survivor: (1) direct formal proof of the whole statement via the
+        explorer; (2) else reduce the sketch to a lemma and verify it symbolically; (3) else
+        escalate with an honest proof sketch."""
+        sketch = sketch_hint
+        if self._explorer is not None:
+            try:
+                r = self._explorer.explore(statement, approaches=3, rounds=1)
+                if r.get("verdict") == "verified":
+                    return {"depth": "proof", "type": "formal_full",
+                            "disposition": "verified", "detail": r.get("verdict_detail")}
+                sketch = sketch or (r.get("why") or "")
+            except Exception:  # noqa: BLE001
+                pass
+        if not sketch:
+            sketch = self._sketch(statement)
+        # (2) reduce the sketch to a verifiable core lemma
+        fv = self._formalize_and_verify(statement, sketch)
+        if fv and (fv.get("formal") or {}).get("result") == "proved":
+            return {"depth": "proof", "type": "reduction",
+                    "disposition": "formally_supported",
+                    "lemma": fv.get("lemma"), "reduction": fv.get("reduction"),
+                    "formal": fv.get("formal"), "sketch": sketch}
+        return {"depth": "proof", "type": "sketch",
+                "disposition": "needs_human_review", "sketch": sketch}

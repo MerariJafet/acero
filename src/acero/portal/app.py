@@ -812,6 +812,34 @@ def build_portal_router() -> APIRouter:
         return MathProbe().probe(claim, formal_claim=(body or {}).get("formal_claim"),
                                  max_tries=int((body or {}).get("max_tries") or 3))
 
+    @r.post("/api/math-explore")
+    def math_explore_ep(body: dict[str, Any], sess: Session = Depends(_require_session),
+                        x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Exploración proactiva: de un OBJETIVO, prueba K enfoques como piezas de LEGO,
+        conserva los viables, sintetiza una hipótesis y la confronta (prueba+novedad)."""
+        _require_csrf(sess, x_csrf_token)
+        goal = str((body or {}).get("goal") or "").strip()
+        if not goal:
+            raise HTTPException(422, "goal is required")
+        from ..science.math_explorer import MathExplorer
+        return MathExplorer().explore(
+            goal, approaches=int((body or {}).get("approaches") or 4),
+            rounds=int((body or {}).get("rounds") or 2))
+
+    @r.post("/api/research-loop")
+    def research_loop_ep(body: dict[str, Any], sess: Session = Depends(_require_session),
+                         x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Investigador: ataca una conjetura, aplica ACTITUD HUMANA (¿trivial? ¿otra forma?
+        ¿probar?) y refina/prueba/escala — no solo testea."""
+        _require_csrf(sess, x_csrf_token)
+        statement = str((body or {}).get("statement") or "").strip()
+        if not statement:
+            raise HTTPException(422, "statement is required")
+        from ..science.math_explorer import MathExplorer
+        from ..science.research_loop import ResearchLoop
+        return ResearchLoop(explorer=MathExplorer()).investigate(
+            statement, max_depth=int((body or {}).get("max_depth") or 3))
+
     @r.post("/api/projects/{project_id}/sweep")
     def project_sweep(project_id: str, body: dict[str, Any],
                       sess: Session = Depends(_require_session),

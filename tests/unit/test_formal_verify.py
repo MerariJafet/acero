@@ -48,3 +48,24 @@ def test_malformed_claim_is_unknown_not_crash():
     r = verify("identity", lhs="))(", rhs="1")
     assert r["result"] == "unknown"
     assert verify("nonsense_kind")["result"] == "unknown"
+
+
+def test_summation_gauss_is_proved():
+    r = verify("summation", term="k", lower="1", upper="n", closed="n*(n+1)/2")
+    assert r["result"] == "proved"
+
+
+def test_summation_squares_is_proved():
+    r = verify("summation", term="k**2", lower="1", upper="n",
+               closed="n*(n+1)*(2*n+1)/6")
+    assert r["result"] == "proved"
+
+
+def test_summation_wrong_closed_form_is_refuted():
+    r = verify("summation", term="k", lower="1", upper="n", closed="n*(n+1)/3")
+    assert r["result"] == "refuted"
+
+
+def test_product_factorial_is_proved():
+    r = verify("product", term="k", lower="1", upper="n", closed="factorial(n)")
+    assert r["result"] == "proved"

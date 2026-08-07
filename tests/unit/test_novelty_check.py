@@ -55,3 +55,41 @@ def test_abstract_reconstruction_from_inverted_index():
     inv = {"we": [0], "prove": [1], "it": [2]}
     assert _reconstruct_abstract(inv) == "we prove it"
     assert _reconstruct_abstract(None) == ""
+
+
+def test_multi_query_search_dedups_across_queries():
+    calls = []
+
+    def searcher(q, k):
+        calls.append(q)
+        return [{"title": "Same paper", "doi": "10.1/x", "year": 2020,
+                 "abstract": "a", "source": "openalex"}]
+
+    prov = _Prov({"verdict": "likely_open", "recovery_risk": 0.3, "confidence": 0.6,
+                  "resolving_papers": [], "related_papers": [], "rationale": "r",
+                  "recommendation": "c"})
+    nc = NoveltyChecker(provider=prov, searcher=searcher, query_gen=lambda c: ["q1", "q2"])
+    r = nc.check("claim")
+    assert r["queries"] == ["q1", "q2"]
+    assert len(calls) == 2                 # both crafted queries were searched
+    assert len(r["hits"]) == 1             # same paper deduped across queries
+
+
+def test_resolving_paper_forces_already_resolved_even_if_judge_hedged():
+    prov = _Prov({"verdict": "likely_open",           # judge hedged...
+                  "recovery_risk": 0.8, "confidence": 0.7,
+                  "resolving_papers": [{"title": "T", "doi": "10/2", "why": "resuelve"}],
+                  "related_papers": [], "rationale": "r", "recommendation": "c"})
+    r = NoveltyChecker(provider=prov, searcher=lambda q, k: HITS,
+                       query_gen=lambda c: ["q"]).check("x")
+    assert r["verdict"] == "already_resolved"          # ...a concrete resolver is decisive
+
+
+def test_sources_and_queries_are_reported():
+    hits = [{"title": "P", "doi": "10/9", "year": 2019, "abstract": "a", "source": "arxiv"}]
+    prov = _Prov({"verdict": "likely_open", "recovery_risk": 0.3, "confidence": 0.5,
+                  "resolving_papers": [], "related_papers": [], "rationale": "r",
+                  "recommendation": "c"})
+    r = NoveltyChecker(provider=prov, searcher=lambda q, k: hits,
+                       query_gen=lambda c: ["q"]).check("x")
+    assert r["sources"] == ["arxiv"] and r["queries"] == ["q"]
