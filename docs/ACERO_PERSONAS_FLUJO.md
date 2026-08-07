@@ -17,7 +17,8 @@ pasa → cuándo regresa y por qué → estado.
 | 🪐 **Kepler** | Sintetiza la hipótesis/ley desde los resultados | `MathExplorer._synthesize` | 🟡 |
 | 🔭 **Tycho Brahe** | Registra y recuerda qué funcionó | `science/explorer_ledger.py` (`ExplorerLedger`) | 🔵 |
 | ❌ **Popper** | Refuta: busca contraejemplos (falsación) | `science/math_probe.py` (`MathProbe`) | 🟡 |
-| 📐 **Euclides** | Prueba formal simbólica (sympy) | `science/formal_verify.py` (`verify`) | 🟢 |
+| 📐 **Euclides** | Prueba formal simbólica (sympy): álgebra/análisis | `science/formal_verify.py` (`verify`) | 🟢 |
+| 🔭 **Gödel** | Prueba mecanizada (Z3/SMT): lógica y conteo que sympy no alcanza | `science/proof_assistant.py` (`prove`) | 🔵 |
 | 🧩 **Feynman** | Actitud humana/hacker: ve lo que otros no ven, refina, reduce | `science/research_loop.py` (`HumanAttitude`) | 🔵 |
 | ⚖️ **Aristóteles** | Crítico: corrobora, exige evidencia, frena falsedades | guardas anti-refutación (`math_probe`) + EVA / panel adversarial | 🟢 |
 | 🎩 **Bohr** | Director del bucle: decide refinar/probar/escalar | `science/research_loop.py` (`ResearchLoop`) | 🔵 |
@@ -91,7 +92,8 @@ Escala de estado: 🟢 sólido · 🟡 mejorable (punto débil identificado) · 
 | Personaje | Estado | Punto a mejorar |
 |-----------|:--:|-----------------|
 | 🎨 Da Vinci | 🟢 | Sólido: 10/10 respuestas correctas en el benchmark. |
-| 📐 Euclides | 🟢 | Sólido: ahora prueba identidades, sumatorias y productos. |
+| 📐 Euclides | 🟢 | Sólido: prueba identidades, sumatorias y productos (álgebra/análisis). |
+| 🔭 Gödel | 🔵 | Nuevo (Z3/SMT): prueba lógica y conteo — cerró la conjetura B (n=5..10) que sympy no podía. Falta enchufarlo al research loop (que el formalizador emita claims tipo Z3) y, más allá, un backend Lean. |
 | ⚖️ Aristóteles | 🟢 | Sólido (nuevo): eliminó las 3 refutaciones falsas decisivas. |
 | 🎩 Bohr | 🔵 | Nuevo: lógica de control simple; ampliar decisiones. |
 | 🧩 Feynman | 🔵 | Nuevo/prometedor: segundas jugadas reales; falta rodaje. |
