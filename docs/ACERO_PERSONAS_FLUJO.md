@@ -16,7 +16,7 @@ pasa → cuándo regresa y por qué → estado.
 | 🎨 **Da Vinci** | Explora múltiples enfoques creativos, corre scripts | `science/math_explorer.py` (`MathExplorer`) | 🟢 |
 | 🪐 **Kepler** | Sintetiza la hipótesis/ley desde los resultados | `MathExplorer._synthesize` | 🟡 |
 | 🔭 **Tycho Brahe** | Registra y recuerda qué funcionó | `science/explorer_ledger.py` (`ExplorerLedger`) | 🔵 |
-| ❌ **Popper** | Refuta: busca contraejemplos (falsación) | `science/math_probe.py` (`MathProbe`) | 🟡 |
+| ❌ **Popper** | Refuta: busca contraejemplos (falsación) | `science/math_probe.py` (`MathProbe`) | 🟢 |
 | 📐 **Euclides** | Prueba formal simbólica (sympy): álgebra/análisis | `science/formal_verify.py` (`verify`) | 🟢 |
 | 🔭 **Gödel** | Prueba mecanizada (Z3/SMT): lógica y conteo que sympy no alcanza | `science/proof_assistant.py` (`prove`) | 🔵 |
 | 🧩 **Feynman** | Actitud humana/hacker: ve lo que otros no ven, refina, reduce | `science/research_loop.py` (`HumanAttitude`) | 🔵 |
@@ -93,7 +93,7 @@ Escala de estado: 🟢 sólido · 🟡 mejorable (punto débil identificado) · 
 |-----------|:--:|-----------------|
 | 🎨 Da Vinci | 🟢 | Sólido: 10/10 respuestas correctas en el benchmark. |
 | 📐 Euclides | 🟢 | Sólido: prueba identidades, sumatorias y productos (álgebra/análisis). |
-| 🔭 Gödel | 🔵 | Nuevo (Z3/SMT): prueba lógica y conteo — cerró la conjetura B (n=5..10) que sympy no podía. Falta enchufarlo al research loop (que el formalizador emita claims tipo Z3) y, más allá, un backend Lean. |
+| 🔭 Gödel | 🟢 | Z3/SMT: prueba lógica y conteo. **Enchufado al research loop y funcionando en automático** — cerró la conjetura B en `formally_supported` sin ayuda manual (el formalizador emitió el z3_claim, Z3 lo probó). Futuro: backend Lean para pruebas generales (no acotadas). |
 | ⚖️ Aristóteles | 🟢 | Sólido (nuevo): eliminó las 3 refutaciones falsas decisivas. |
 | 🎩 Bohr | 🔵 | Nuevo: lógica de control simple; ampliar decisiones. |
 | 🧩 Feynman | 🔵 | Nuevo/prometedor: segundas jugadas reales; falta rodaje. |
@@ -102,12 +102,13 @@ Escala de estado: 🟢 sólido · 🟡 mejorable (punto débil identificado) · 
 | 🏛️ Hilbert | 🟡 | Plantea preciso, pero a veces conjeturas con bordes triviales. |
 | ♾️ Euler | 🟡 | Existe; poco rodaje reciente. |
 | 🪐 Kepler | 🟡 | No codifica de forma FIABLE la forma formal (sumatorias) → se queda en empírico. |
-| ❌ Popper | 🟡 | Aún genera refutaciones falsas (las atrapan las guardas); endurecer el codegen de contraejemplos. |
+| ❌ Popper | 🟢 | Reforzado con la regla antirrefutación-falsa (reverificar a alta precisión, no refutar por near-miss/cola/tolerancia, aritmética exacta). En vivo dejó de refutar en falso Basilea (π²/6), serie geométrica y gaussiana (√π) → ahora `holds_empirically`. Las 3 guardas siguen como red de seguridad. |
 | 🏅 Gauss | 🟡 | Sin cerrar un ciclo real de attestation externa (pendiente). |
 | 🔎 **Hipatia** | 🟢 | **De 🔴 a 🟢:** en vivo detectó 2 de 3 "supervivientes" como YA RESUELTOS con cita concreta (bipartito ← grafos de incidencia de planos proyectivos; 321-consecutivo ← "double descent" en un survey). Endurecida contra timeouts (reintento + timeout mayor). |
 
-**Prioridad de mejora sugerida:** (1) ❌ Popper (falsas refutaciones), (2) 🪐 Kepler
-(codificación formal), (3) 🏅 Gauss (cerrar publicación).
+**Prioridad de mejora sugerida:** (1) 🪐 Kepler (codificación formal fiable de sumatorias),
+(2) 🏅 Gauss (cerrar una publicación con attestation externa), (3) 🔭→Lean (pruebas
+generales no acotadas). *(🔎 Hipatia, ❌ Popper y 🔭 Gödel ya reforzados esta sesión.)*
 
 > Nota: los otros modos (Aprender, Económico) tendrán su propio reparto cuando toque —
 > este documento cubre el **investigador**.
