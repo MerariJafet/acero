@@ -307,6 +307,17 @@ def build_portal_router() -> APIRouter:
             raise HTTPException(404, "project not found")
         return ph
 
+    @r.get("/api/projects/{project_id}/council")
+    def project_council(project_id: str, sess: Session = Depends(_require_session)
+                        ) -> dict[str, Any]:
+        """El Consejo: los 14 personajes-científicos con su avance real en este proyecto."""
+        from .council import council_for
+        from .phases import build_phases
+        ph = build_phases(project_id)
+        if ph is None:
+            raise HTTPException(404, "project not found")
+        return council_for(ph.get("kpis") or {}, verdicts=ph.get("recent_verdicts") or [])
+
     @r.post("/api/copilot/global")
     def global_copilot(body: CopilotBody, sess: Session = Depends(_require_session),
                        x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:

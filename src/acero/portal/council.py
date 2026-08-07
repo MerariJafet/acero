@@ -1,0 +1,169 @@
+"""El Consejo — the 14 scientist-personas of ACERO as a dashboard view.
+
+Each persona IS a real flow of the program (module in parentheses). This module is the
+single source of truth: names, roles, stage, module, maturity status, hand-offs, summary,
+face parameters and the task list travel to the frontend as JSON, so `council.js` is a
+pure renderer.
+
+Per-project PROGRESS is computed from the project's REAL KPIs (from `build_phases`) where a
+persona maps to a measurable signal (Hilbert↔hypotheses, Da Vinci↔experiments, Kepler↔
+approved, Gauss↔dossiers…); personas without a direct project signal fall back to their
+capability MATURITY (green/amber/blue/red). This mix is intentional and honest — see the
+`source` field on each persona ('project' vs 'maturity').
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+# maturity → baseline progress when there is no direct project signal
+_BASE = {"good": 88, "warn": 60, "new": 55, "weak": 32}
+
+STAGES = [
+    {"key": "plantear", "name": "Plantear", "ids": ["hilbert", "euler", "hipatia"]},
+    {"key": "explorar", "name": "Explorar / crear",
+     "ids": ["arquimedes", "davinci", "kepler", "tycho"]},
+    {"key": "confrontar", "name": "Confrontar",
+     "ids": ["popper", "euclides", "godel", "aristoteles"]},
+    {"key": "segunda", "name": "Segunda jugada", "ids": ["feynman", "bohr"]},
+    {"key": "publicar", "name": "Publicar", "ids": ["gauss"]},
+]
+
+# face params drive the vector portrait in council.js
+PERSONAS: list[dict[str, Any]] = [
+    {"id": "hilbert", "name": "Hilbert", "role": "Plantea conjeturas precisas",
+     "module": "question_engine", "status": "warn", "hands_to": "Hipatia", "awaits": "—",
+     "summary": "Formula problemas falsables y fértiles — el punto de partida de toda investigación.",
+     "face": {"hair": "recede", "beard": "full", "hairc": "#d9d2c4"},
+     "tasks": [["Generar conjeturas", "done"], ["Evitar bordes triviales", "doing"],
+               ["Priorizar por fertilidad", "todo"]]},
+    {"id": "euler", "name": "Euler", "role": "Genera hipótesis en masa y filtra",
+     "module": "sweep.py", "status": "warn", "hands_to": "Bohr", "awaits": "Hilbert",
+     "summary": "Barrido masivo en paralelo: produce muchas hipótesis y las filtra por novedad y vulnerabilidad.",
+     "face": {"hair": "short", "hairc": "#e6dccb", "skin": 2},
+     "tasks": [["Barrido paralelo", "done"], ["Filtro EVA+novedad", "done"],
+               ["Rodaje reciente", "todo"]]},
+    {"id": "hipatia", "name": "Hipatia", "role": "¿Ya se hizo? Novedad multi-fuente",
+     "module": "novelty_check.py", "status": "good", "hands_to": "Bohr", "awaits": "Hilbert",
+     "summary": "Redacta consultas de experto y busca en OpenAlex+arXiv+Crossref; distingue descubrimiento de recuperación.",
+     "face": {"hair": "bun", "hairc": "#3a2f26", "skin": 3, "accent": "#54c08a"},
+     "tasks": [["Query-craft (LLM)", "done"], ["Multi-fuente + dedup", "done"],
+               ["Juez + timeout paciente", "done"]]},
+    {"id": "arquimedes", "name": "Arquímedes", "role": "La caja de piezas LEGO",
+     "module": "method_catalog.py", "status": "new", "hands_to": "Da Vinci", "awaits": "—",
+     "summary": "Catálogo curado de técnicas (grafos, teoría de números, Z3, optimización…) que el programa posee.",
+     "face": {"hair": "wild", "beard": "full", "hairc": "#e6dccb"},
+     "tasks": [["26 piezas curadas", "done"], ["Retrieval determinista", "done"],
+               ["Crecer con learn()", "doing"]]},
+    {"id": "davinci", "name": "Da Vinci", "role": "Explora múltiples enfoques",
+     "module": "math_explorer.py", "status": "good", "hands_to": "Kepler",
+     "awaits": "Arquímedes",
+     "summary": "De un objetivo, diverge en enfoques creativos y corre cada uno como script en el sandbox.",
+     "face": {"hair": "long", "beard": "full", "hairc": "#d8cbb4", "accent": "#54c08a"},
+     "tasks": [["Diverge K enfoques", "done"], ["Corre en paralelo", "done"],
+               ["10/10 correctas", "done"]]},
+    {"id": "kepler", "name": "Kepler", "role": "Sintetiza la hipótesis",
+     "module": "_synthesize", "status": "warn", "hands_to": "Popper", "awaits": "Da Vinci",
+     "summary": "Destila una ley precisa de los enfoques que funcionaron y le da forma formal.",
+     "face": {"hair": "short", "beard": "mous", "hairc": "#cbb89c", "hat": "ruff"},
+     "tasks": [["Destilar hipótesis", "done"], ["Forma formal fiable", "doing"],
+               ["Codificar sumatorias", "todo"]]},
+    {"id": "tycho", "name": "Tycho", "role": "Registra qué funcionó",
+     "module": "explorer_ledger.py", "status": "new", "hands_to": "—", "awaits": "Kepler",
+     "summary": "Memoria persistente de los caminos que sirvieron; los reofrece como pistas en el futuro.",
+     "face": {"hair": "short", "beard": "full", "nose": "metal", "hairc": "#d9cdb8"},
+     "tasks": [["Persistir resultados", "done"], ["Reofrecer pistas", "done"],
+               ["Explotar más memoria", "todo"]]},
+    {"id": "popper", "name": "Popper", "role": "Refuta: busca contraejemplos",
+     "module": "math_probe.py", "status": "good", "hands_to": "Bohr", "awaits": "Kepler",
+     "summary": "Ataca cada hipótesis buscando contraejemplos; ya no refuta en falso (regla anti-near-miss).",
+     "face": {"hair": "recede", "glasses": 1, "hairc": "#d9d2c4", "accent": "#54c08a"},
+     "tasks": [["Codegen contraejemplos", "done"], ["Regla anti-refutación-falsa", "done"],
+               ["Sin falsos en Basilea/√π", "done"]]},
+    {"id": "euclides", "name": "Euclides", "role": "Prueba formal (sympy)",
+     "module": "formal_verify.py", "status": "good", "hands_to": "Bohr", "awaits": "Popper",
+     "summary": "Demuestra álgebra y análisis: identidades, desigualdades, sumatorias, límites.",
+     "face": {"hair": "short", "beard": "full", "hairc": "#e6dccb", "hat": "laurel",
+              "accent": "#54c08a"},
+     "tasks": [["Identidades/límites", "done"], ["Sumatorias/productos", "done"]]},
+    {"id": "godel", "name": "Gödel", "role": "Prueba lógica/conteo (Z3)",
+     "module": "proof_assistant.py", "status": "good", "hands_to": "Bohr", "awaits": "Feynman",
+     "summary": "Motor SMT: demuestra lógica, conteo y cuantificadores donde sympy no llega. Cerró la conjetura B.",
+     "face": {"hair": "short", "glasses": 1, "hairc": "#cfc6b4", "accent": "#54c08a"},
+     "tasks": [["Backend Z3", "done"], ["Enchufado al loop", "done"],
+               ["Backend Lean", "todo"]]},
+    {"id": "aristoteles", "name": "Aristóteles", "role": "Corrobora, frena falsedades",
+     "module": "guardas + EVA", "status": "good", "hands_to": "Popper", "awaits": "Popper",
+     "summary": "El crítico: exige corroboración; degrada refutaciones no confirmadas a revisión humana.",
+     "face": {"hair": "short", "beard": "full", "hairc": "#dcd3c2", "hat": "laurel",
+              "accent": "#54c08a"},
+     "tasks": [["Near-miss/cola", "done"], ["Conflicto formal-empírico", "done"],
+               ["Consenso de enfoques", "done"]]},
+    {"id": "feynman", "name": "Feynman", "role": "Actitud hacker: segunda jugada",
+     "module": "HumanAttitude", "status": "new", "hands_to": "Popper / Gödel",
+     "awaits": "Bohr",
+     "summary": "La chispa creativa: ve lo que otros no ven, refina bordes triviales y reduce a un lema probable.",
+     "face": {"hair": "wild", "hairc": "#cbb89c"},
+     "tasks": [["Refinar refutaciones", "done"], ["Reducir a lema", "done"],
+               ["Más rodaje", "doing"]]},
+    {"id": "bohr", "name": "Bohr", "role": "Dirige el bucle",
+     "module": "ResearchLoop", "status": "new", "hands_to": "Feynman / Gauss",
+     "awaits": "todos",
+     "summary": "El director: orquesta probar→actitud→refinar/probar/escalar y decide la disposición final.",
+     "face": {"hair": "short", "hairc": "#d9d2c4", "skin": 2},
+     "tasks": [["Orquestar el bucle", "done"], ["Disposiciones honestas", "done"],
+               ["Ampliar decisiones", "doing"]]},
+    {"id": "gauss", "name": "Gauss", "role": "Publica solo lo maduro",
+     "module": "external_validation.py", "status": "warn", "hands_to": "revisión humana",
+     "awaits": "Bohr",
+     "summary": "Pauca sed matura: empaqueta, exige validación externa humana y marca listo para revisión.",
+     "face": {"hair": "short", "hairc": "#e6dccb", "skin": 3},
+     "tasks": [["Paquete verificable", "done"], ["Motor de attestation", "done"],
+               ["Cerrar una publicación", "todo"]]},
+]
+
+
+def _clamp(x: float) -> int:
+    return max(0, min(100, int(round(x))))
+
+
+def council_for(kpis: dict[str, Any] | None,
+                verdicts: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Assemble the council for one project from its real KPIs."""
+    k = kpis or {}
+    hyp = int(k.get("hypotheses") or 0)
+    appr = int(k.get("approved") or 0)
+    exp = int(k.get("experiments") or 0)
+    real = int(k.get("real_experiments") or 0)
+    doss = int(k.get("dossiers") or 0)
+    papers = int(k.get("papers") or 0)
+
+    # personas with a direct project signal → real progress; others → maturity baseline
+    project_signal = {
+        "hilbert": min(100, hyp * 12),
+        "euler": min(100, hyp * 9),
+        "davinci": min(100, exp * 13),
+        "kepler": min(100, appr * 16),
+        "popper": min(100, exp * 11 + real * 4),
+        "tycho": min(100, (exp + appr) * 8),
+        "gauss": min(100, (doss + papers) * 24),
+    }
+
+    out = []
+    total = 0
+    for p in PERSONAS:
+        if p["id"] in project_signal and (hyp or exp or appr or doss):
+            prog, source = _clamp(project_signal[p["id"]]), "project"
+        else:
+            prog, source = _BASE.get(p["status"], 50), "maturity"
+        total += prog
+        out.append({**p, "progress": prog, "source": source})
+
+    return {
+        "stages": STAGES,
+        "personas": out,
+        "overall": _clamp(total / max(1, len(out))),
+        "verdicts": (verdicts or [])[:6],
+        "kpis": {"hypotheses": hyp, "approved": appr, "experiments": exp,
+                 "real_experiments": real, "dossiers": doss, "papers": papers},
+    }

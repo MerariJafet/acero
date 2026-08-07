@@ -517,6 +517,7 @@ export async function renderProjectDash(view, pid, cb) {
 
      <div class="narrative-row">
        <p class="narrative">${esc(ph.narrative || "")}</p>
+       <button class="act" id="dash-council">🔭 Consejo</button>
        <button class="act ghost" id="dash-refresh">↻ Actualizar</button>
      </div>
 
@@ -643,6 +644,10 @@ export async function renderProjectDash(view, pid, cb) {
       input.value = "";
     }));
   view.querySelector("#dash-refresh").addEventListener("click", () => cb.openProject(pid));
+  view.querySelector("#dash-council").addEventListener("click", async () => {
+    const { renderCouncil } = await import("./council.js");
+    renderCouncil(view, pid, () => cb.openProject(pid));
+  });
 }
 
 const KIND_STYLE = {
