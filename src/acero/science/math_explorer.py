@@ -87,7 +87,10 @@ _DIVERGE_SYS = (
 
 _ASSEMBLE_SYS = (
     "Eres un MATEMÁTICO COMPUTACIONAL en ACERO. Implementa ESTE enfoque para el objetivo "
-    "en UN programa Python autocontenido (solo stdlib + numpy/sympy/scipy/mpmath). Usa las "
+    "en UN programa Python autocontenido. CAJA DE LIBRERÍAS disponible (úsala como piezas "
+    "de LEGO, elige la adecuada): numpy, scipy, sympy (álgebra, sympy.ntheory para teoría "
+    "de números, sympy.combinatorics), mpmath (alta precisión), networkx (grafos), z3 "
+    "(lógica/SMT), pandas, scikit-learn. Usa las "
     "PIEZAS indicadas (te doy sus idioms). El programa debe INTENTAR el objetivo con este "
     "enfoque y, si lo logra, reportar un RESULTADO concreto (una fórmula, una relación, un "
     "valor, una identidad). Cuando obtengas un valor numérico de una constante, intenta "

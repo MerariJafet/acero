@@ -169,6 +169,48 @@ _SEED: list[Technique] = [
               "mira cómo cambia el resultado al escalar cada variable de entrada",
               "# duplicar r ⇒ área ×4 ⇒ área ∝ r^2",
               "hay magnitudes con unidades o simetrías de escala"),
+    Technique("graph_enum", "Grafos: enumeración y invariantes (networkx)",
+              ("grafos", "combinatoria", "numerico"),
+              "explorar/enumerar grafos pequeños y calcular invariantes (dominación, "
+              "matching, cromático, conectividad, ciclos)",
+              "genera todos los grafos/árboles pequeños y evalúa la propiedad; busca "
+              "contraejemplos por fuerza bruta estructurada",
+              "import networkx as nx; [T for T in nx.nonisomorphic_trees(8)]; "
+              "nx.domination.dominating_set(G); nx.max_weight_matching(G)",
+              "la conjetura es sobre grafos, árboles, redes, matchings o dominación"),
+    Technique("number_theory", "Teoría de números (sympy.ntheory)",
+              ("numeros", "algebra", "combinatoria"),
+              "primos, factorización, divisores, congruencias, funciones aritméticas",
+              "usa sympy.ntheory: isprime, factorint, divisors, totient, mobius, jacobi",
+              "from sympy import factorint, totient, divisors, isprime, primerange",
+              "aparecen primos, divisibilidad, residuos o funciones aritméticas"),
+    Technique("smt_logic", "Prueba lógica / SMT (Z3 = Gödel)",
+              ("logica", "combinatoria", "numeros"),
+              "DEMOSTRAR o refutar afirmaciones lógicas/cuantificadas sobre enteros/"
+              "booleanos, y argumentos de conteo/casillas (donde sympy no llega)",
+              "declara variables z3.Int/Bool, añade hipótesis, y comprueba UNSAT de la "
+              "negación para probar ∀; SAT da contraejemplo/testigo",
+              "import z3; s=z3.Solver(); n=z3.Int('n'); s.add(z3.Not(n*n>=0)); s.check()",
+              "hay un ∀/∃ sobre enteros o booleanos, restricciones lógicas o conteo exacto"),
+    Technique("combinatorial_enum", "Enumeración combinatoria (itertools/sympy)",
+              ("combinatoria",),
+              "recorrer permutaciones, subconjuntos, particiones, palabras y contar/verificar",
+              "itertools.permutations/combinations/product; sympy.utilities.iterables",
+              "from itertools import permutations, combinations, product; "
+              "from sympy.utilities.iterables import partitions, multiset_permutations",
+              "el objeto es una permutación, subconjunto, partición o palabra"),
+    Technique("optimization", "Optimización (scipy.optimize / linprog)",
+              ("numerico", "algebra_lineal"),
+              "hallar máximos/mínimos, resolver programas lineales, ajustar parámetros",
+              "scipy.optimize: minimize, linprog, curve_fit, root; para cotas extremales",
+              "from scipy.optimize import linprog, minimize; linprog(c, A_ub=A, b_ub=b)",
+              "buscas el caso extremo, una cota óptima o el mejor ajuste"),
+    Technique("statistics", "Estadística e inferencia (scipy.stats)",
+              ("numerico", "datos"),
+              "distribuciones, pruebas de hipótesis, correlación, remuestreo",
+              "scipy.stats: distribuciones, ttest, pearsonr, bootstrap; numpy para datos",
+              "from scipy import stats; stats.pearsonr(x, y); stats.bootstrap(...)",
+              "la afirmación involucra datos, aleatoriedad o significancia estadística"),
 ]
 
 

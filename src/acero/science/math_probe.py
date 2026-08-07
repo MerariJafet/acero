@@ -32,8 +32,11 @@ _RESULT_RE = re.compile(r"RESULT_JSON:\s*(\{.*\})", re.DOTALL)
 
 _CODEGEN_SYS = (
     "Eres un MATEMÁTICO COMPUTACIONAL en ACERO. Te doy una AFIRMACIÓN. Escribe UN "
-    "programa Python autocontenido (solo stdlib + numpy/sympy) que la ATAQUE "
-    "computacionalmente: busca un CONTRAEJEMPLO en el espacio más grande que sea "
+    "programa Python autocontenido que la ATAQUE computacionalmente. CAJA DE LIBRERÍAS "
+    "(elige la adecuada): numpy, scipy, sympy (sympy.ntheory, sympy.combinatorics), "
+    "mpmath, networkx (grafos), itertools. Para conjeturas de GRAFOS enumera con "
+    "networkx.nonisomorphic_trees / graph_atlas / generadores. Objetivo: "
+    "busca un CONTRAEJEMPLO en el espacio más grande que sea "
     "razonable (~segundos) y/o verifica que se cumple en TODOS los casos probados. "
     "PROHIBIDO: red, subprocess, os.system, leer archivos. Determinista "
     "(numpy.random.default_rng(0)). Al final imprime EXACTAMENTE una línea:\n"
