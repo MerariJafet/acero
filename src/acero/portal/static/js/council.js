@@ -1,5 +1,6 @@
 // El Consejo — 3 fases (pasteles) + rostros distintos + riel de pelotas (hipótesis en flujo).
 // Fetches /portal/api/projects/{pid}/council.
+import { post } from "./api.js";
 
 const SC = { good: "#54c08a", warn: "#e0a96d", new: "#5b8def", weak: "#e0736f" };
 const SL = { good: "sólido", warn: "mejorable", new: "nuevo", weak: "débil" };
@@ -191,6 +192,7 @@ export async function renderCouncil(view, pid, onBack) {
       <div><div class="cv-dn">${p.name}</div><div class="cv-dr">${p.role}</div><div class="cv-dm">${p.module}</div></div>
       <button class="cv-close" id="cv-x">✕</button></div>
       <div class="cv-db"><div class="cv-dsum">${p.summary}</div>
+        ${id === "bohr" ? `<button id="cv-investigate" style="background:#e0a96d;color:#0d121e;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px;cursor:pointer">▶ Investigar esta conjetura (correr el ciclo)</button><div id="cv-inv-msg" style="font-size:12px;color:#93a1bd"></div>` : ""}
         <div class="cv-flow"><div><div class="cv-k">recibe de</div><div class="cv-v">${p.awaits}</div></div>
           <div><div class="cv-k">le pasa a</div><div class="cv-v">${p.hands_to}</div></div></div>
         ${held.length ? `<div><div class="cv-st">tiene la pelota</div><div style="font-size:13px;color:#cfd8ea">Trabaja ahora: <b style="color:${col}">${held.join(", ")}</b></div></div>` : ""}
@@ -200,6 +202,17 @@ export async function renderCouncil(view, pid, onBack) {
             <div style="color:#93a1bd;font-size:13px">estado <b style="color:${col}">${SL[p.status]}</b> · <span style="color:#5f6d88">${p.source === "project" ? "señal real" : "madurez"}</span></div></div></div>
         <div><div class="cv-st">tareas</div>${(p.tasks || []).map((t) => `<div class="cv-task"><span class="cv-tb" style="background:${TASK[t[1]][0]}"></span><span class="cv-tt">${t[0]}</span><span class="cv-ts">${TASK[t[1]][1]}</span></div>`).join("")}</div></div>`;
     drawer.classList.add("open"); scrim.classList.add("open"); drawer.querySelector("#cv-x").onclick = close;
+    const inv = drawer.querySelector("#cv-investigate");
+    if (inv) inv.onclick = async () => {
+      inv.disabled = true; inv.textContent = "Convocando al Consejo…";
+      const msg = drawer.querySelector("#cv-inv-msg");
+      const { ok, body } = await post(`/portal/api/projects/${encodeURIComponent(pid)}/investigate`, {});
+      inv.textContent = ok ? "✓ El Consejo está trabajando" : "▶ Investigar esta conjetura";
+      inv.disabled = !ok;
+      if (msg) msg.textContent = ok
+        ? (body.message || "Refresca en un minuto para ver hipótesis y veredicto.")
+        : "No se pudo iniciar. ¿El proyecto tiene un tema?";
+    };
   }
   function close() { drawer.classList.remove("open"); scrim.classList.remove("open"); }
   scrim.onclick = close; document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
