@@ -5,7 +5,7 @@ from __future__ import annotations
 from acero.discovery.store import DiscoveryStore
 from acero.ledger.service import ResearchLedger
 from acero.portal.investigator_bridge import (
-    record_hypothesis, record_result, run_council)
+    _live, cycle_running, record_hypothesis, record_result, run_council)
 
 
 class _FakeLoop:
@@ -147,3 +147,65 @@ def test_run_council_records_ambitious_work_per_persona(session_factory):
     assert "Informe narrativo" in md and "NARRATIVA DE PRUEBA" in md
     assert "Resumen ejecutivo (en cristiano)" in md
     assert "APÉNDICE" in md
+
+
+# --- paquete de EFICIENCIA ----------------------------------------------------------
+
+_RES_MIN = {"original": "C", "final_statement": "C",
+            "disposition": "needs_human_review", "final_verdict": "holds_empirically",
+            "sketch": "s", "lemma": None, "formal_support": None,
+            "contributions": [], "trail": []}
+
+
+def test_hipatia_cache_reuses_prior_reading(session_factory):
+    """Relanzar el ciclo sobre la MISMA conjetura NO repite la búsqueda de Hipatia:
+    el ledger ES el caché (cero tokens, cero papers duplicados)."""
+    lg = ResearchLedger(session_factory)
+    p = lg.create_project("cache-h", domain="física")
+    calls = []
+
+    def novelty(c):
+        calls.append(c)
+        return {"verdict": "likely_open", "rationale": "r", "recommendation": "x",
+                "resolving_papers": [], "hits": [{"title": "Paper A", "year": 2020,
+                                                  "doi": "10/a", "source": "arxiv"}]}
+
+    run_council(p.id, "C", sf=session_factory, loop=_FakeLoop(_RES_MIN),
+                novelty=novelty)
+    assert len(calls) == 1
+    out2 = run_council(p.id, "C", sf=session_factory, loop=_FakeLoop(_RES_MIN),
+                       novelty=novelty)
+    assert len(calls) == 1                        # 2ª vez: caché del ledger
+    assert out2["novelty"] == "likely_open"       # veredicto reutilizado
+    store = DiscoveryStore(session_factory, lg)
+    assert len(store.list_objects(p.id, kind="literature")) == 1   # sin duplicar
+    decs = store.list_objects(p.id, kind="decision")
+    assert any("reutilicé la lectura previa" in (d.get("reason") or "") for d in decs)
+
+
+def test_cycle_running_guard(session_factory):
+    """Guard anti-duplicados: LIVE reciente bloquea; DONE o stale no bloquean."""
+    lg = ResearchLedger(session_factory)
+    p = lg.create_project("guard", domain="math")
+    assert cycle_running(p.id, sf=session_factory) is False
+    _live(p.id, {"persona": "popper", "label": "trabajando", "pct": 30,
+                 "done": False, "seq": 1}, sf=session_factory)
+    assert cycle_running(p.id, sf=session_factory) is True
+    assert cycle_running(p.id, sf=session_factory, max_age_s=0.0) is False  # stale
+    _live(p.id, {"persona": "bohr", "label": "fin", "pct": 100,
+                 "done": True, "seq": 2}, sf=session_factory)
+    assert cycle_running(p.id, sf=session_factory) is False
+
+
+def test_report_is_deterministic_without_narrator(session_factory):
+    """EFICIENCIA: el ciclo NO paga narrativa LLM — guarda el informe determinista;
+    la redacción se pide bajo demanda (🔁 Regenerar)."""
+    lg = ResearchLedger(session_factory)
+    p = lg.create_project("det", domain="math")
+    run_council(p.id, "D", sf=session_factory, loop=_FakeLoop(_RES_MIN))
+    reps = DiscoveryStore(session_factory, lg).list_objects(p.id, kind="report")
+    assert len(reps) == 1
+    md = reps[0]["markdown"]
+    assert "Informe narrativo" not in md          # sin gasto de LLM en el ciclo
+    assert "Resumen ejecutivo (en cristiano)" in md   # pero sí legible y completo
+    assert "FRONTERA" in md

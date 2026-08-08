@@ -1,0 +1,102 @@
+{"event": "RUNNER_START", "total": 50, "ts": 1786158643.023153}
+{"n": 1, "title": "R50-01 Collatz", "pid": "proj_01KZFNKXTSBWT65FRMYTRWH29N", "status": "LAUNCHED", "ts": 1786158643.051062}
+{"n": 1, "title": "R50-01 Collatz", "pid": "proj_01KZFNKXTSBWT65FRMYTRWH29N", "status": "DONE", "disposition": "partial_progress", "mins": 3.5, "ts": 1786158853.1658654}
+{"n": 2, "title": "R50-02 Goldbach fuerte", "pid": "proj_01KZFNTB1HYFY17A39YK16K0VH", "status": "LAUNCHED", "ts": 1786158853.2303913}
+{"n": 2, "title": "R50-02 Goldbach fuerte", "pid": "proj_01KZFNTB1HYFY17A39YK16K0VH", "status": "DONE", "disposition": "needs_human_review", "mins": 3.5, "ts": 1786159063.4813757}
+{"n": 3, "title": "R50-03 Primos gemelos", "pid": "proj_01KZFP0RDWTVC1SMDQD1QVYQNZ", "status": "LAUNCHED", "ts": 1786159063.504337}
+{"n": 3, "title": "R50-03 Primos gemelos", "pid": "proj_01KZFP0RDWTVC1SMDQD1QVYQNZ", "status": "DONE", "disposition": "formally_supported", "mins": 3.0, "ts": 1786159243.592194}
+{"n": 4, "title": "R50-04 Perfectos impares", "pid": "proj_01KZFP68AB1PT8XY33CF4523H7", "status": "LAUNCHED", "ts": 1786159243.614538}
+{"n": 4, "title": "R50-04 Perfectos impares", "pid": "proj_01KZFP68AB1PT8XY33CF4523H7", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786159483.7242844}
+{"n": 5, "title": "R50-05 Cuboide perfecto", "pid": "proj_01KZFPDJTF2XK0Z6SF5MB3NDCT", "status": "LAUNCHED", "ts": 1786159483.7462175}
+{"n": 5, "title": "R50-05 Cuboide perfecto", "pid": "proj_01KZFPDJTF2XK0Z6SF5MB3NDCT", "status": "DONE", "disposition": "TIMEOUT", "mins": 25.0, "ts": 1786160984.447096}
+{"n": 6, "title": "R50-06 Erdos-Straus", "pid": "proj_01KZFQVCC2ZSBB4XM24FK31EZQ", "status": "LAUNCHED", "ts": 1786160984.4717555}
+{"n": 6, "title": "R50-06 Erdos-Straus", "pid": "proj_01KZFQVCC2ZSBB4XM24FK31EZQ", "status": "DONE", "disposition": "formally_supported", "mins": 4.0, "ts": 1786161224.595238}
+{"n": 7, "title": "R50-07 Gamma irracional", "pid": "proj_01KZFR2PWPBVYYBYE29VVTMR9V", "status": "LAUNCHED", "ts": 1786161224.6177385}
+{"n": 7, "title": "R50-07 Gamma irracional", "pid": "proj_01KZFR2PWPBVYYBYE29VVTMR9V", "status": "DONE", "disposition": "needs_human_review", "mins": 3.5, "ts": 1786161434.7225344}
+{"n": 8, "title": "R50-08 Pi normal", "pid": "proj_01KZFR943670BVWJ2E167JMF77", "status": "LAUNCHED", "ts": 1786161434.7472212}
+{"n": 8, "title": "R50-08 Pi normal", "pid": "proj_01KZFR943670BVWJ2E167JMF77", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786161674.8813438}
+{"n": 9, "title": "R50-09 Brocard-Ramanujan", "pid": "proj_01KZFRGEM42TQDC8PEWSN3YNAM", "status": "LAUNCHED", "ts": 1786161674.9042854}
+{"n": 9, "title": "R50-09 Brocard-Ramanujan", "pid": "proj_01KZFRGEM42TQDC8PEWSN3YNAM", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786161915.0217633}
+{"n": 10, "title": "R50-10 Erdos-Moser", "pid": "proj_01KZFRQS4G0HPP074SDSWMKB8P", "status": "LAUNCHED", "ts": 1786161915.0442514}
+{"n": 10, "title": "R50-10 Erdos-Moser", "pid": "proj_01KZFRQS4G0HPP074SDSWMKB8P", "status": "DONE", "disposition": "needs_human_review", "mins": 5.0, "ts": 1786162215.2085552}
+{"n": 11, "title": "R50-11 Legendre", "pid": "proj_01KZFS0Y9CZNK430R4DKR3JFHQ", "status": "LAUNCHED", "ts": 1786162215.2354364}
+{"n": 11, "title": "R50-11 Legendre", "pid": "proj_01KZFS0Y9CZNK430R4DKR3JFHQ", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786162455.3598282}
+{"n": 12, "title": "R50-12 Cramer", "pid": "proj_01KZFS88T35NGJWEH4820SKHTN", "status": "LAUNCHED", "ts": 1786162455.3867013}
+{"n": 12, "title": "R50-12 Cramer", "pid": "proj_01KZFS88T35NGJWEH4820SKHTN", "status": "DONE", "disposition": "needs_human_review", "mins": 3.5, "ts": 1786162665.4932442}
+{"n": 13, "title": "R50-13 Lehmer totiente", "pid": "proj_01KZFSEP0R9TJM9WV1GFS0QVP3", "status": "LAUNCHED", "ts": 1786162665.519184}
+{"n": 13, "title": "R50-13 Lehmer totiente", "pid": "proj_01KZFSEP0R9TJM9WV1GFS0QVP3", "status": "DONE", "disposition": "needs_human_review", "mins": 3.5, "ts": 1786162875.7696059}
+{"n": 14, "title": "R50-14 Beal", "pid": "proj_01KZFSN3BWVNTMD9W0WFQSRF5K", "status": "LAUNCHED", "ts": 1786162875.7906747}
+{"n": 14, "title": "R50-14 Beal", "pid": "proj_01KZFSN3BWVNTMD9W0WFQSRF5K", "status": "DONE", "disposition": "needs_human_review", "mins": 3.5, "ts": 1786163085.9011552}
+{"n": 15, "title": "R50-15 Fermat-Catalan", "pid": "proj_01KZFSVGJKM1FQH5SAXCSEB8CF", "status": "LAUNCHED", "ts": 1786163085.9274309}
+{"n": 15, "title": "R50-15 Fermat-Catalan", "pid": "proj_01KZFSVGJKM1FQH5SAXCSEB8CF", "status": "DONE", "disposition": "needs_human_review", "mins": 5.0, "ts": 1786163386.0739832}
+{"n": 16, "title": "R50-16 Hadamard matrices", "pid": "proj_01KZFT4NPX1C4J9X5EJHWS04E9", "status": "LAUNCHED", "ts": 1786163386.1401029}
+{"n": 16, "title": "R50-16 Hadamard matrices", "pid": "proj_01KZFT4NPX1C4J9X5EJHWS04E9", "status": "DONE", "disposition": "dropped", "mins": 4.0, "ts": 1786163626.9258583}
+{"n": 17, "title": "R50-17 Corredor solitario", "pid": "proj_01KZFTC0YH44X41S6Y8GPG6J9F", "status": "LAUNCHED", "ts": 1786163627.1073267}
+{"n": 17, "title": "R50-17 Corredor solitario", "pid": "proj_01KZFTC0YH44X41S6Y8GPG6J9F", "status": "DONE", "disposition": "needs_human_review", "mins": 5.0, "ts": 1786163928.1251698}
+{"n": 18, "title": "R50-18 Frankl union-cerrada", "pid": "proj_01KZFTN72RW66KXWMY3TEBA63G", "status": "LAUNCHED", "ts": 1786163928.2739842}
+{"n": 18, "title": "R50-18 Frankl union-cerrada", "pid": "proj_01KZFTN72RW66KXWMY3TEBA63G", "status": "DONE", "disposition": "needs_human_review", "mins": 6.0, "ts": 1786164289.4652047}
+{"n": 19, "title": "R50-19 Happy Ending exacto", "pid": "proj_01KZFV07YQY36GDVXXS55YZH8P", "status": "LAUNCHED", "ts": 1786164289.627054}
+{"n": 19, "title": "R50-19 Happy Ending exacto", "pid": "proj_01KZFV07YQY36GDVXXS55YZH8P", "status": "DONE", "disposition": "needs_human_review", "mins": 5.5, "ts": 1786164620.5625656}
+{"n": 20, "title": "R50-20 Hadwiger-Nelson", "pid": "proj_01KZFVAB9AN4Y8KYGQXNH11KY9", "status": "LAUNCHED", "ts": 1786164620.6871302}
+{"n": 20, "title": "R50-20 Hadwiger-Nelson", "pid": "proj_01KZFVAB9AN4Y8KYGQXNH11KY9", "status": "DONE", "disposition": "needs_human_review", "mins": 7.5, "ts": 1786165071.2969055}
+{"n": 21, "title": "R50-21 Reconstruccion grafos", "pid": "proj_01KZFVR3E4RBMJ66TRKB5QXYE3", "status": "LAUNCHED", "ts": 1786165071.3180215}
+{"n": 21, "title": "R50-21 Reconstruccion grafos", "pid": "proj_01KZFVR3E4RBMJ66TRKB5QXYE3", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786165311.7471213}
+{"n": 22, "title": "R50-22 Caccetta-Haggkvist", "pid": "proj_01KZFVZE86JE6Q3RDZ4CA7DGC0", "status": "LAUNCHED", "ts": 1786165311.7949128}
+{"n": 22, "title": "R50-22 Caccetta-Haggkvist", "pid": "proj_01KZFVZE86JE6Q3RDZ4CA7DGC0", "status": "DONE", "disposition": "needs_human_review", "mins": 4.5, "ts": 1786165581.9331574}
+{"n": 23, "title": "R50-23 Hadwiger grafos", "pid": "proj_01KZFW7P3G8NR4EMVWT6G8J0EH", "status": "LAUNCHED", "ts": 1786165581.956341}
+{"n": 23, "title": "R50-23 Hadwiger grafos", "pid": "proj_01KZFW7P3G8NR4EMVWT6G8J0EH", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786165822.1056461}
+{"n": 24, "title": "R50-24 Erdos-Hajnal", "pid": "proj_01KZFWF0MXDJHNYVRDGD2YK4WB", "status": "LAUNCHED", "ts": 1786165822.1719458}
+{"n": 24, "title": "R50-24 Erdos-Hajnal", "pid": "proj_01KZFWF0MXDJHNYVRDGD2YK4WB", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786166062.2971694}
+{"n": 25, "title": "R50-25 Sidorenko", "pid": "proj_01KZFWPB70YHY1DH01VNBQ4EBE", "status": "LAUNCHED", "ts": 1786166062.3217752}
+{"n": 25, "title": "R50-25 Sidorenko", "pid": "proj_01KZFWPB70YHY1DH01VNBQ4EBE", "status": "DONE", "disposition": "needs_human_review", "mins": 5.5, "ts": 1786166392.503482}
+{"n": 26, "title": "R50-26 Falconer", "pid": "proj_01KZFX0DNVGD6PXZYB1ZZJB31S", "status": "LAUNCHED", "ts": 1786166392.52667}
+{"n": 26, "title": "R50-26 Falconer", "pid": "proj_01KZFX0DNVGD6PXZYB1ZZJB31S", "status": "DONE", "disposition": "needs_human_review", "mins": 5.5, "ts": 1786166722.699575}
+{"n": 27, "title": "R50-27 Kakeya d>=4", "pid": "proj_01KZFXAG4FR6SH6PVW215RG192", "status": "LAUNCHED", "ts": 1786166722.7218826}
+{"n": 27, "title": "R50-27 Kakeya d>=4", "pid": "proj_01KZFXAG4FR6SH6PVW215RG192", "status": "DONE", "disposition": "needs_human_review", "mins": 4.5, "ts": 1786166992.881234}
+{"n": 28, "title": "R50-28 Restriccion de Stein", "pid": "proj_01KZFXJQZMT8G7Q0VNM91XHWG7", "status": "LAUNCHED", "ts": 1786166992.9022121}
+{"n": 28, "title": "R50-28 Restriccion de Stein", "pid": "proj_01KZFXJQZMT8G7Q0VNM91XHWG7", "status": "DONE", "disposition": "needs_human_review", "mins": 7.0, "ts": 1786167413.1197305}
+{"n": 29, "title": "R50-29 Littlewood", "pid": "proj_01KZFXZJC3A8523114AKACBJQ8", "status": "LAUNCHED", "ts": 1786167413.1443431}
+{"n": 29, "title": "R50-29 Littlewood", "pid": "proj_01KZFXZJC3A8523114AKACBJQ8", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786167653.446358}
+{"n": 30, "title": "R50-30 Elliott-Halberstam", "pid": "proj_01KZFY6X29VJ01BYNAX3X65SD7", "status": "LAUNCHED", "ts": 1786167653.4793036}
+{"n": 30, "title": "R50-30 Elliott-Halberstam", "pid": "proj_01KZFY6X29VJ01BYNAX3X65SD7", "status": "DONE", "disposition": "needs_human_review", "mins": 5.0, "ts": 1786167953.6215107}
+{"n": 31, "title": "R50-31 Chowla", "pid": "proj_01KZFYG26SJEYNK7289NVZGW5K", "status": "LAUNCHED", "ts": 1786167953.6852152}
+{"n": 31, "title": "R50-31 Chowla", "pid": "proj_01KZFYG26SJEYNK7289NVZGW5K", "status": "DONE", "disposition": "needs_human_review", "mins": 3.5, "ts": 1786168163.8079116}
+{"n": 32, "title": "R50-32 Sarnak-Mobius", "pid": "proj_01KZFYPFF3KJR4W445M13DX2M8", "status": "LAUNCHED", "ts": 1786168163.830536}
+{"n": 32, "title": "R50-32 Sarnak-Mobius", "pid": "proj_01KZFYPFF3KJR4W445M13DX2M8", "status": "DONE", "disposition": "needs_human_review", "mins": 5.0, "ts": 1786168464.0133069}
+{"n": 33, "title": "R50-33 Lindelof", "pid": "proj_01KZFYZMMGJ74CMS4539Q4KWSJ", "status": "LAUNCHED", "ts": 1786168464.0602415}
+{"n": 33, "title": "R50-33 Lindelof", "pid": "proj_01KZFYZMMGJ74CMS4539Q4KWSJ", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786168704.1968637}
+{"n": 34, "title": "R50-34 Cuatro exponenciales", "pid": "proj_01KZFZ6Z68TJMV5QFHH63R88VW", "status": "LAUNCHED", "ts": 1786168704.219218}
+{"n": 34, "title": "R50-34 Cuatro exponenciales", "pid": "proj_01KZFZ6Z68TJMV5QFHH63R88VW", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786168944.343775}
+{"n": 35, "title": "R50-35 Schanuel", "pid": "proj_01KZFZE9PV3JSR23PNEFDR035K", "status": "LAUNCHED", "ts": 1786168944.4087558}
+{"n": 35, "title": "R50-35 Schanuel", "pid": "proj_01KZFZE9PV3JSR23PNEFDR035K", "status": "DONE", "disposition": "needs_human_review", "mins": 4.5, "ts": 1786169214.5533953}
+{"n": 36, "title": "R50-36 Galois inverso", "pid": "proj_01KZFZPHJXXP76C2YW27J8MHQ5", "status": "LAUNCHED", "ts": 1786169214.5801713}
+{"n": 36, "title": "R50-36 Galois inverso", "pid": "proj_01KZFZPHJXXP76C2YW27J8MHQ5", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786169454.7098105}
+{"n": 37, "title": "R50-37 Hilbert 10 sobre Q", "pid": "proj_01KZFZXW3S1QSVKDFE18F2QQ23", "status": "LAUNCHED", "ts": 1786169454.7339401}
+{"n": 37, "title": "R50-37 Hilbert 10 sobre Q", "pid": "proj_01KZFZXW3S1QSVKDFE18F2QQ23", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786169695.0828996}
+{"n": 38, "title": "R50-38 Jacobiano JC2", "pid": "proj_01KZG056VEGH6634QQ9QCKXC4P", "status": "LAUNCHED", "ts": 1786169695.1081889}
+{"n": 38, "title": "R50-38 Jacobiano JC2", "pid": "proj_01KZG056VEGH6634QQ9QCKXC4P", "status": "DONE", "disposition": "needs_human_review", "mins": 4.5, "ts": 1786169965.2510698}
+{"n": 39, "title": "R50-39 Poincare suave 4D", "pid": "proj_01KZG0DEP6R1GG8E3NAD2M8NY2", "status": "LAUNCHED", "ts": 1786169965.3186674}
+{"n": 39, "title": "R50-39 Poincare suave 4D", "pid": "proj_01KZG0DEP6R1GG8E3NAD2M8NY2", "status": "DONE", "disposition": "needs_human_review", "mins": 4.5, "ts": 1786170235.4677634}
+{"n": 40, "title": "R50-40 Andrews-Curtis", "pid": "proj_01KZG0NPJFR42EEGQKR99SQ6GH", "status": "LAUNCHED", "ts": 1786170235.4908807}
+{"n": 40, "title": "R50-40 Andrews-Curtis", "pid": "proj_01KZG0NPJFR42EEGQKR99SQ6GH", "status": "DONE", "disposition": "needs_human_review", "mins": 4.5, "ts": 1786170505.680771}
+{"n": 41, "title": "R50-41 Hilbert-Smith", "pid": "proj_01KZG0XYEP04P4WXR7G3909654", "status": "LAUNCHED", "ts": 1786170505.7125611}
+{"n": 41, "title": "R50-41 Hilbert-Smith", "pid": "proj_01KZG0XYEP04P4WXR7G3909654", "status": "DONE", "disposition": "needs_human_review", "mins": 4.5, "ts": 1786170775.93162}
+{"n": 42, "title": "R50-42 Cannon", "pid": "proj_01KZG166C3V84H62DS3FQFPA8H", "status": "LAUNCHED", "ts": 1786170775.977664}
+{"n": 42, "title": "R50-42 Cannon", "pid": "proj_01KZG166C3V84H62DS3FQFPA8H", "status": "DONE", "disposition": "needs_human_review", "mins": 4.5, "ts": 1786171046.1461933}
+{"n": 43, "title": "R50-43 Tate", "pid": "proj_01KZG1EE889GEQE8TVA10BTE7S", "status": "LAUNCHED", "ts": 1786171046.1717732}
+{"n": 43, "title": "R50-43 Tate", "pid": "proj_01KZG1EE889GEQE8TVA10BTE7S", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786171286.3011994}
+{"n": 44, "title": "R50-44 Bombieri-Lang", "pid": "proj_01KZG1NRS4FMTKDTGQWPDTV2K5", "status": "LAUNCHED", "ts": 1786171286.3291245}
+{"n": 44, "title": "R50-44 Bombieri-Lang", "pid": "proj_01KZG1NRS4FMTKDTGQWPDTV2K5", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786171526.4496222}
+{"n": 45, "title": "R50-45 Riemann", "pid": "proj_01KZG1X39RPRXEHTKEW8BV4YHE", "status": "LAUNCHED", "ts": 1786171526.474196}
+{"n": 45, "title": "R50-45 Riemann", "pid": "proj_01KZG1X39RPRXEHTKEW8BV4YHE", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786171766.6352637}
+{"n": 46, "title": "R50-46 P vs NP", "pid": "proj_01KZG24DVNY5M2GGJWH8XTATQM", "status": "LAUNCHED", "ts": 1786171766.69724}
+{"n": 46, "title": "R50-46 P vs NP", "pid": "proj_01KZG24DVNY5M2GGJWH8XTATQM", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786172007.0294247}
+{"n": 47, "title": "R50-47 BSD", "pid": "proj_01KZG2BRKSWQTRMM6NP8K8JX4M", "status": "LAUNCHED", "ts": 1786172007.0565126}
+{"n": 47, "title": "R50-47 BSD", "pid": "proj_01KZG2BRKSWQTRMM6NP8K8JX4M", "status": "DONE", "disposition": "needs_human_review", "mins": 4.0, "ts": 1786172247.1830173}
+{"n": 48, "title": "R50-48 Hodge", "pid": "proj_01KZG2K34J1FX06011EG4D0FD7", "status": "LAUNCHED", "ts": 1786172247.2472076}
+{"n": 48, "title": "R50-48 Hodge", "pid": "proj_01KZG2K34J1FX06011EG4D0FD7", "status": "DONE", "disposition": "needs_human_review", "mins": 4.5, "ts": 1786172517.3916337}
+{"n": 49, "title": "R50-49 Navier-Stokes", "pid": "proj_01KZG2VB0J7V60V004F7ZTJZ0H", "status": "LAUNCHED", "ts": 1786172517.4554532}
+{"n": 49, "title": "R50-49 Navier-Stokes", "pid": "proj_01KZG2VB0J7V60V004F7ZTJZ0H", "status": "DONE", "disposition": "needs_human_review", "mins": 4.5, "ts": 1786172787.5904496}
+{"n": 50, "title": "R50-50 Yang-Mills", "pid": "proj_01KZG33JW9KDRVJSJZNTVPDS6E", "status": "LAUNCHED", "ts": 1786172787.6106465}
+{"n": 50, "title": "R50-50 Yang-Mills", "pid": "proj_01KZG33JW9KDRVJSJZNTVPDS6E", "status": "DONE", "disposition": "needs_human_review", "mins": 4.5, "ts": 1786173057.7454286}
+{"event": "RUNNER_DONE", "ts": 1786173057.7454863}

@@ -31,8 +31,36 @@ def _sympify(expr: str) -> Any:
     return sympy.sympify(expr)
 
 
-def verify(kind: str, **kw: Any) -> dict[str, Any]:
-    """Dispatch a formal check. Returns {result, kind, detail, counterexample?}.
+def verify(kind: str, timeout_s: float = 120.0, **kw: Any) -> dict[str, Any]:
+    """Dispatch a formal check WITH A HARD TIMEOUT. The actual verification runs in a
+    child process; if it exceeds `timeout_s` the child is killed and the result is an
+    honest `unknown` (timeout). Rationale: sympy can hang without bound on pathological
+    simplify/limit inputs — a single claim must never freeze a Council cycle (this froze
+    the Cuboide problem for 25 min during RETO 50)."""
+    import multiprocessing as mp
+    try:
+        ctx = mp.get_context("fork")
+        q: Any = ctx.Queue(1)
+        p = ctx.Process(target=_verify_child, args=(q, kind, kw), daemon=True)
+        p.start()
+        p.join(timeout_s)
+        if p.is_alive():
+            p.kill()
+            p.join(5)
+            return _out("unknown", kind,
+                        f"timeout: la verificación excedió {timeout_s:.0f}s")
+        return q.get(timeout=5)
+    except Exception as exc:  # noqa: BLE001 - fallback sin proceso hijo
+        del exc
+        return _verify_dispatch(kind, **kw)
+
+
+def _verify_child(q: Any, kind: str, kw: dict[str, Any]) -> None:
+    q.put(_verify_dispatch(kind, **kw))
+
+
+def _verify_dispatch(kind: str, **kw: Any) -> dict[str, Any]:
+    """Dispatch real (sin límite). Returns {result, kind, detail, counterexample?}.
     Never raises on a bad claim — a malformed claim is `unknown` with the reason."""
     try:
         if kind == "identity":

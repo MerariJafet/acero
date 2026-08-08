@@ -351,7 +351,12 @@ def build_portal_router() -> APIRouter:
         """Bohr convoca al Consejo: registra la conjetura y lanza el ataque en segundo
         plano; el veredicto se escribe al ledger → el dashboard/Consejo se actualizan."""
         _require_csrf(sess, x_csrf_token)
-        from .investigator_bridge import record_hypothesis, run_council
+        from .investigator_bridge import (cycle_running, record_hypothesis,
+                                          run_bohr_cycle, run_council)
+        if cycle_running(project_id):
+            raise HTTPException(409, "ya hay un ciclo del Consejo corriendo en este "
+                                     "proyecto — espera a que termine (dos ciclos "
+                                     "traslapados duplican el gasto)")
         claim = str((body or {}).get("claim") or "").strip()
         if not claim:
             from ..discovery.store import DiscoveryStore
@@ -365,18 +370,53 @@ def build_portal_router() -> APIRouter:
             raise HTTPException(422, "no hay conjetura/tema que investigar")
         hid = record_hypothesis(project_id, claim, persona="hilbert")
 
+        mode = str((body or {}).get("mode") or "bohr")
+
         def _attack() -> None:
             try:
-                # Bohr dirige el ciclo AMBICIOSO: prueba → segunda jugada (Feynman) →
-                # intento de prueba/contribución parcial (Gödel/Euclides). No para en
-                # holds_empirically; registra el trabajo de cada personaje.
-                run_council(project_id, claim, hypothesis_id=hid)
+                if mode == "clasico":
+                    # el guion fijo original (Hipatia→Popper→Feynman→Gödel→…)
+                    run_council(project_id, claim, hypothesis_id=hid)
+                else:
+                    # BOHR v2: el director DECIDE jugada a jugada (repite, pide
+                    # segunda opinión, chispa/Turing, reformula, cierra honesto)
+                    run_bohr_cycle(project_id, claim)
             except Exception:  # noqa: BLE001 - background best-effort
                 pass
         bg.add_task(_attack)
         return {"hypothesis_id": hid, "claim": claim, "status": "investigando",
-                "message": "El Consejo está atacando la conjetura (ciclo ambicioso: "
-                           "reformular → probar → contribución parcial); refresca en un minuto."}
+                "message": ("Bohr dirige en modo dinámico: decide jugada a jugada "
+                            "quién trabaja y por qué — sigue la barra EN VIVO."
+                            if mode != "clasico" else
+                            "El Consejo corre el ciclo clásico; refresca en un minuto.")}
+
+    @r.post("/api/projects/{project_id}/spark")
+    def project_spark(project_id: str, body: dict[str, Any], bg: BackgroundTasks,
+                      sess: Session = Depends(_require_session),
+                      x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """El flujo de la chispa: ante una FRONTERA ('no se puede con lo actual'),
+        Ramanujan genera ideas laterales (¿y si…?), se eligen piezas del TOOLBOX y
+        Turing programa/instala/experimenta con presupuesto de horas. Todo al ledger."""
+        _require_csrf(sess, x_csrf_token)
+        from .investigator_bridge import cycle_running, run_spark_flow
+        if cycle_running(project_id):
+            raise HTTPException(409, "ya hay un ciclo del Consejo corriendo en este "
+                                     "proyecto — espera a que termine")
+        frontier = str((body or {}).get("frontier") or "").strip()
+        why = str((body or {}).get("why") or "los métodos actuales se agotaron").strip()
+        budget_s = min(int((body or {}).get("budget_s") or 3600), 6 * 3600)
+        if not frontier:
+            raise HTTPException(422, "describe la frontera: ¿qué es lo que 'no se puede'?")
+
+        def _spark() -> None:
+            try:
+                run_spark_flow(project_id, frontier, why, budget_s=budget_s)
+            except Exception:  # noqa: BLE001 - background best-effort
+                pass
+        bg.add_task(_spark)
+        return {"status": "chispeando",
+                "message": "Ramanujan busca la chispa y Turing construirá el "
+                           "experimento — sigue el avance en la barra EN VIVO."}
 
     @r.post("/api/conjecture")
     def distill_conjecture(body: dict[str, Any], sess: Session = Depends(_require_session),

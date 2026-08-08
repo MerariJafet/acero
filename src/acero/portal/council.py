@@ -19,7 +19,7 @@ from typing import Any
 STAGES = [
     {"key": "plantear", "name": "Plantear", "ids": ["hilbert", "euler", "hipatia"]},
     {"key": "explorar", "name": "Explorar / crear",
-     "ids": ["arquimedes", "davinci", "kepler", "tycho"]},
+     "ids": ["arquimedes", "davinci", "kepler", "tycho", "ramanujan", "turing"]},
     {"key": "confrontar", "name": "Confrontar",
      "ids": ["popper", "euclides", "godel", "aristoteles"]},
     {"key": "segunda", "name": "Segunda jugada", "ids": ["feynman", "bohr"]},
@@ -29,7 +29,8 @@ STAGES = [
 # the 3 macro-phases (the pies) and which persona lives in each
 PHASES = [
     {"key": "creativa", "name": "Fase Creativa", "sub": "idear · plantear · explorar",
-     "ids": ["hilbert", "arquimedes", "davinci", "kepler", "feynman"]},
+     "ids": ["hilbert", "arquimedes", "davinci", "kepler", "feynman",
+             "ramanujan", "turing"]},
     {"key": "investig", "name": "Fase de Investigación", "sub": "buscar · registrar · dirigir",
      "ids": ["euler", "hipatia", "tycho", "bohr"]},
     {"key": "critica", "name": "Fase Crítica", "sub": "probar · refutar · publicar",
@@ -130,6 +131,23 @@ PERSONAS: list[dict[str, Any]] = [
      "face": {"hair": "short", "hairc": "#e6dccb", "skin": 3},
      "tasks": [["Paquete verificable", "done"], ["Motor de attestation", "done"],
                ["Cerrar una publicación", "todo"]]},
+    {"id": "ramanujan", "name": "Ramanujan", "role": "La chispa en la frontera (¿y si…?)",
+     "module": "spark.py", "status": "new", "hands_to": "Turing", "awaits": "Bohr",
+     "summary": "Cuando el problema dice 'no se puede', él pregunta ¿y si sí? — ideas "
+                "laterales, analogías entre ramas, probabilidad honesta y el primer "
+                "experimento barato que las mata o las aviva.",
+     "face": {"hair": "short", "hairc": "#1d1712", "skin": 4},
+     "tasks": [["Leer el TOOLBOX (LEGO)", "done"], ["Chispas con probabilidad", "done"],
+               ["Rodaje en fronteras reales", "doing"]]},
+    {"id": "turing", "name": "Turing", "role": "Construye y corre lo que haga falta",
+     "module": "turing.py + toolbox.py", "status": "new",
+     "hands_to": "Gödel / Aristóteles", "awaits": "Ramanujan",
+     "summary": "El matemático que programa: escribe el experimento en Python, instala "
+                "piezas faltantes (pip/docker, Sage incluido) o las construye, repara "
+                "sus errores y reintenta con presupuesto de HORAS.",
+     "face": {"hair": "side", "hairc": "#2c231b", "skin": 1},
+     "tasks": [["Codegen + sandbox + repair", "done"], ["ensure() de piezas", "done"],
+               ["Sage jaulado (docker)", "done"]]},
 ]
 
 # distinct engraved-portrait parameters per persona (drive the SVG face in council.js)
@@ -160,6 +178,10 @@ _FACES = {
                     "hairc": "#d6cdb8", "skin": 2, "accent": "#54c08a", "browc": "#bcb199"},
     "gauss": {"hair": "recede", "hat": "cap", "hatc": "#241c14", "hairc": "#c9c0ad",
               "skin": 3, "browc": "#8a7f6a"},
+    "ramanujan": {"hair": "short", "hairc": "#141010", "skin": 4, "browc": "#141010",
+                  "accent": "#e8b23c"},
+    "turing": {"hair": "side", "hairc": "#2c231b", "skin": 1, "browc": "#2c231b",
+               "accent": "#4c8fd6"},
 }
 for _p in PERSONAS:
     _p["face"] = _FACES.get(_p["id"], _p.get("face", {}))
@@ -172,11 +194,13 @@ def _clamp(x: float) -> int:
 # qué "kind" del ledger es dueño cada personaje → sus fichas reales
 OWNER_KIND = {"hilbert": "candidate", "hipatia": "literature", "popper": "experiment",
               "gauss": "dossier", "aristoteles": "critique",
-              "feynman": "reformulation", "godel": "lemma", "bohr": "decision"}
+              "feynman": "reformulation", "godel": "lemma", "bohr": "decision",
+              "ramanujan": "spark", "turing": "build"}
 KIND_LABEL = {"candidate": "hipótesis", "literature": "literatura",
               "experiment": "experimentos", "dossier": "dossiers", "critique": "objeciones",
               "reformulation": "reformulaciones", "lemma": "lemas y cotas",
-              "decision": "decisiones de orquestación"}
+              "decision": "decisiones de orquestación",
+              "spark": "chispas (¿y si…?)", "build": "experimentos construidos"}
 
 
 def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
@@ -205,6 +229,14 @@ def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
     if kind == "literature":
         return {"title": (o.get("title") or o.get("claim") or "referencia")[:140],
                 "verdict": str(o.get("year") or ""), "by": ""}
+    if kind == "spark":
+        prob = o.get("probabilidad")
+        return {"title": (o.get("chispa") or "chispa")[:140],
+                "verdict": (f"p={prob}" if prob is not None else "idea"),
+                "by": (o.get("analogia") or "")[:60]}
+    if kind == "build":
+        return {"title": (o.get("verdict") or o.get("idea") or "experimento")[:140],
+                "verdict": o.get("status") or "", "by": "Turing"}
     return {"title": (o.get("summary") or o.get("claim") or o.get("title") or "—")[:140],
             "verdict": o.get("status") or "", "by": ""}
 
@@ -212,11 +244,13 @@ def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
 # qué personaje ejecuta cada tipo de evento del ledger (para el rastreo del flujo)
 KIND_PERSONA = {"candidate": "hilbert", "literature": "hipatia", "experiment": "popper",
                 "reformulation": "feynman", "lemma": "godel", "negative": "popper",
-                "critique": "aristoteles", "dossier": "gauss"}
+                "critique": "aristoteles", "dossier": "gauss",
+                "spark": "ramanujan", "build": "turing"}
 KIND_STEP = {"candidate": "planteó", "literature": "buscó literatura",
              "experiment": "corrió experimento", "reformulation": "reformuló",
              "lemma": "probó lema/cota", "negative": "halló contraejemplo",
-             "critique": "objetó", "dossier": "empaquetó"}
+             "critique": "objetó", "dossier": "empaquetó",
+             "spark": "lanzó una chispa", "build": "construyó y corrió"}
 _NAME_TO_ID = {p["name"].lower(): p["id"] for p in PERSONAS}
 
 
@@ -408,6 +442,20 @@ def _story_line(step: dict[str, Any], nxt: str | None) -> str:
             "empaqueté el dossier con evidencia y límites explícitos. ¿Por qué? Nada "
             "se publica solo: el techo de ACERO es 'listo para revisión humana'. "
             "Significa: te toca a ti decidir si esto avanza",
+        "spark":
+            f"lancé {n} chispa(s) en la frontera: donde el problema dice 'no se "
+            "puede', yo pregunto ¿y si sí? ¿Cómo? Leyendo el catálogo de piezas "
+            "(LEGO) y buscando analogías laterales — el clásico '¿y si mejor usamos "
+            "matrices?'. ¿Por qué? Los métodos directos ya se agotaron ahí. "
+            "Significa: hay ideas nuevas sobre la mesa, cada una con su apuesta "
+            "honesta y su experimento barato",
+        "build":
+            "construí y corrí el experimento de la chispa: escribí el código, leí "
+            "mis errores, los reparé y reintenté. ¿Cómo? Con las piezas que me "
+            "eligieron (instalando las faltantes — Sage incluido) y aritmética "
+            "exacta. ¿Por qué? Una idea sin experimento es solo poesía. Significa: "
+            "la chispa ya tiene evidencia a favor o en contra — nunca un teorema "
+            "hasta que Gödel y Aristóteles la pasen",
     }.get(k, step.get("did") or str(k))
     if nxt:
         txt += f". Se la pasé a {_NAME_OF.get(nxt, nxt)}"

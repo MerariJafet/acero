@@ -26,6 +26,7 @@ PERSONA_ACTOR = {
     "arquimedes": "Arquímedes", "davinci": "Da Vinci", "kepler": "Kepler",
     "tycho": "Tycho", "popper": "Popper", "euclides": "Euclides", "godel": "Gödel",
     "aristoteles": "Aristóteles", "feynman": "Feynman", "bohr": "Bohr", "gauss": "Gauss",
+    "ramanujan": "Ramanujan", "turing": "Turing",
 }
 
 
@@ -71,13 +72,31 @@ def record_hypothesis(project_id: str, claim: str, *, persona: str = "hilbert",
 # y % de avance del ciclo. El dashboard lo consulta en polling.
 def _live(project_id: str, payload: dict[str, Any], *, sf: Any = None) -> None:
     try:
+        import time
         store = _store(sf)
         store.put(project_id, "council_status", f"cstat_{project_id}",
-                  {**payload, "seq": int(payload.get("seq") or 0)},
+                  {**payload, "seq": int(payload.get("seq") or 0),
+                   "ts": time.time()},
                   status=("DONE" if payload.get("done") else "LIVE"), actor="Bohr",
                   summary=str(payload.get("label") or "")[:120])
     except Exception:  # noqa: BLE001 - el estado en vivo nunca rompe el ciclo
         pass
+
+
+def cycle_running(project_id: str, *, sf: Any = None,
+                  max_age_s: float = 1800.0) -> bool:
+    """¿Hay un ciclo del Consejo VIVO en este proyecto? Guard anti-duplicados: dos
+    ciclos traslapados duplican TODO el gasto de tokens. Un estado viejo (>30 min sin
+    latido) se considera muerto para no bloquear por un crash."""
+    try:
+        import time
+        cs = _store(sf).get(f"cstat_{project_id}") or {}
+        if cs.get("done"):
+            return False
+        ts = float(cs.get("ts") or 0)
+        return bool(ts) and (time.time() - ts) < max_age_s
+    except Exception:  # noqa: BLE001
+        return False
 
 
 # evento del ResearchLoop → etapa visible (persona verde, de-dónde amarillo,
@@ -380,6 +399,23 @@ def run_council(project_id: str, claim: str, *, sf: Any = None, loop: Any = None
         def checker(c: str) -> dict[str, Any]:
             from ..discovery.novelty_check import NoveltyChecker
             return NoveltyChecker().check(c)
+    # EFICIENCIA — caché de Hipatia: si esta MISMA hipótesis ya tiene lectura y
+    # veredicto de novedad en el ledger, se reutilizan (cero tokens, cero búsquedas).
+    if checker is not None:
+        cand_nv = str((((_store(sf).get(hid) or {}).get("novelty")) or {})
+                      .get("status") or "")
+        prior = [r["payload"] for r in store.list_rows(project_id)
+                 if r["kind"] == "literature" and r.get("parent_id") == hid]
+        if prior and cand_nv:
+            nv_verdict = {"asentada": "already_resolved",
+                          "abierta": "likely_open"}.get(cand_nv, "uncertain")
+            papers_used = prior[:15]
+            record_decision(project_id, "hipatia",
+                            f"reutilicé la lectura previa del ledger ({len(prior)} "
+                            "papers ya registrados para esta misma conjetura) — "
+                            "cero tokens, cero búsquedas repetidas",
+                            parent_id=hid, sf=sf)
+            checker = None
     if checker is not None:
         _live(project_id, {"persona": "hipatia", "from_persona": "hilbert",
                            "next_persona": "popper",
@@ -525,19 +561,11 @@ def run_council(project_id: str, claim: str, *, sf: Any = None, loop: Any = None
     report_md = _bohr_report(claim, final_stmt, disp, final_v, nv_verdict,
                              len(seen) - 1, n_lem, res, made_dossier, crit_verdict,
                              n_anom=n_anom, papers=papers_used)
-    # capa NARRATIVA: Bohr redacta la explicación en lenguaje humano a partir de los
-    # HECHOS del apéndice (nunca inventa); si no hay proveedor, queda el determinista.
+    # capa NARRATIVA: SOLO bajo demanda (botón 🔁 Regenerar → regenerate_report) o
+    # inyectada en tests. EFICIENCIA: el ciclo guarda el informe determinista (gratis);
+    # la redacción LLM se paga únicamente cuando alguien la va a leer.
     narr = ""
     narrator_fn = narrator
-    if narrator_fn is None and loop is None:
-        def narrator_fn(facts: str) -> str:
-            from ..llm.providers import CodexCliProvider
-            prov = CodexCliProvider(timeout_sec=240)
-            if prov is None or not prov.available():
-                return ""
-            return prov.complete(f"{_NARRATOR_SYS}\n\nHECHOS (apéndice del ledger):\n"
-                                 f"{facts[:6000]}",
-                                 temperature=0.4, max_tokens=1700).text.strip()
     if narrator_fn is not None:
         _live(project_id, {"persona": "bohr", "from_persona": "gauss",
                            "next_persona": "gauss",
@@ -651,3 +679,311 @@ def regenerate_report(project_id: str, *, sf: Any = None,
               summary=f"informe regenerado: {disp}")
     return {"ok": True, "report_id": rid, "disposition": disp,
             "n_papers": len(papers), "narrative": bool(narr)}
+
+
+# --- EL FLUJO DE LA CHISPA: Ramanujan idea → matemático elige piezas → Turing --------
+def run_spark_flow(project_id: str, frontier: str, why_stuck: str, *,
+                   provider: Any = None, spark: Any = None, builder: Any = None,
+                   budget_s: int = 3600, n_ideas: int = 5,
+                   sf: Any = None) -> dict[str, Any]:
+    """La actitud "¿y si sí?" hecha flujo. Ante una FRONTERA declarada:
+    1) Ramanujan lee el TOOLBOX y genera chispas (ideas laterales con probabilidad
+       honesta y primer experimento barato);
+    2) se eligen las piezas de la mejor chispa (y las faltantes se instalan/crean);
+    3) Turing programa el experimento, lo corre, repara y reintenta con presupuesto
+       de HORAS. Todo queda en el ledger (kinds 'spark' y 'build') con decisiones de
+    Bohr explicando cada pase. Una chispa JAMÁS es un resultado: lo que salga vuelve
+    al Consejo (Gödel/Aristóteles/Hipatia)."""
+    from ..science.spark import SparkEngine
+    from ..science.turing import TuringBuilder
+    store = _store(sf)
+    if provider is None and (spark is None or builder is None):
+        from ..llm.providers import CodexCliProvider
+        provider = CodexCliProvider()
+    sp = spark or SparkEngine(provider)
+    tb = builder or TuringBuilder(provider)
+    record_decision(project_id, "ramanujan",
+                    f"frontera declarada: {frontier[:120]} — buscar la chispa "
+                    "lateral ('¿y si mejor usamos matrices?')", sf=sf)
+    _live(project_id, {"stage": "spark", "persona": "ramanujan",
+                       "from_persona": "bohr", "next_persona": "turing",
+                       "label": "Ramanujan busca la chispa (¿y si…?)",
+                       "pct": 15, "round": 1, "will_retry": "no",
+                       "statement": frontier[:200]}, sf=sf)
+    try:
+        ideas = sp.ignite(frontier, why_stuck, n_ideas=n_ideas)
+    except Exception as exc:  # noqa: BLE001 - proveedor caído: honesto y fuera
+        _live(project_id, {"done": True, "label": f"chispa abortada: {str(exc)[:80]}",
+                           "pct": 0}, sf=sf)
+        return {"status": "spark_error", "detail": str(exc)[:200]}
+    if not ideas:
+        _live(project_id, {"done": True, "label": "sin chispas — frontera intacta",
+                           "pct": 100}, sf=sf)
+        return {"status": "no_ideas"}
+    for idea in ideas:
+        sid = new_id("spk")
+        store.put(project_id, "spark", sid,
+                  {**idea, "frontier": frontier[:300], "origin": "consejo"},
+                  status="PROPOSED", actor="Ramanujan",
+                  summary=str(idea.get("chispa") or "")[:120])
+    best = ideas[0]
+    piezas = list(best.get("piezas") or []) + list(best.get("piezas_faltantes") or [])
+    record_decision(project_id, "turing",
+                    f"chispa elegida (p={best.get('probabilidad')}): "
+                    f"{str(best.get('chispa'))[:110]} — piezas: {', '.join(piezas)[:80]}",
+                    sf=sf)
+    _live(project_id, {"stage": "build", "persona": "turing",
+                       "from_persona": "ramanujan", "next_persona": "godel",
+                       "label": "Turing construye y corre el experimento",
+                       "pct": 55, "round": 1, "will_retry": "sí",
+                       "statement": str(best.get("chispa") or "")[:200]}, sf=sf)
+
+    def _beat(kind: str, data: dict[str, Any]) -> None:
+        # latido: mantiene fresco el guard y muestra el avance de Turing en vivo
+        lbl = ("Turing consigue pieza: " + str(data.get("pieza"))
+               if kind == "pieza" else
+               f"Turing ronda {kind}: rc={data.get('rc')}")
+        _live(project_id, {"stage": "build", "persona": "turing",
+                           "from_persona": "ramanujan", "next_persona": "godel",
+                           "label": lbl[:120], "pct": 65, "round": 1,
+                           "will_retry": "sí"}, sf=sf)
+
+    res = tb.build_and_run(best, piezas, budget_s=budget_s, on_event=_beat)
+    bid = new_id("bld")
+    last_code = (res.get("rounds") or [{}])[-1].get("code", "")
+    store.put(project_id, "build", bid,
+              {"idea": best.get("chispa"), "status": res.get("status"),
+               "verdict": res.get("verdict"), "evidence": res.get("evidence") or [],
+               "n_rounds": len(res.get("rounds") or []),
+               "elapsed_s": res.get("elapsed_s"), "code": last_code[:4000],
+               "origin": "consejo"},
+              status=("DONE" if res.get("status") == "completed" else "FAILED"),
+              actor="Turing", summary=str(res.get("verdict")
+                                          or res.get("status") or "")[:120])
+    nxt = ("godel" if res.get("status") == "completed" else "revisión humana")
+    record_decision(project_id, nxt,
+                    ("la evidencia de Turing pasa a intento de prueba formal"
+                     if res.get("status") == "completed" else
+                     f"Turing agotó el presupuesto ({res.get('status')}): "
+                     "decidir si se re-presupuesta u otra chispa"), sf=sf)
+    _live(project_id, {"done": True, "pct": 100,
+                       "label": f"Chispa cerrada: {res.get('status')}"
+                                + (f" — {res.get('verdict')}"
+                                   if res.get("verdict") else "")}, sf=sf)
+    return {"status": res.get("status"), "idea": best.get("chispa"),
+            "verdict": res.get("verdict"), "n_ideas": len(ideas),
+            "n_rounds": len(res.get("rounds") or [])}
+
+
+# --- BOHR v2: el director que DECIDE (flujo dinámico, no guion) ---------------------
+def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
+                   orchestrator: Any = None, sf: Any = None,
+                   max_actions: int = 24, wall_budget_s: float = 8 * 3600.0,
+                   turing_cap_s: int = 4 * 3600) -> dict[str, Any]:
+    """Bohr conoce a sus 16 científicos y decide jugada a jugada: repetir, pedir
+    segunda opinión, chispa de Ramanujan, horas a Turing, reformular y reiniciar, o
+    cerrar honesto. Cada jugada real queda en el ledger con su porqué, y la barra EN
+    VIVO muestra a quién le toca. El tiempo no es restricción (presupuesto de pared
+    en horas); la honestidad sí (disposiciones honestas, techo humano)."""
+    from ..science.bohr import BohrOrchestrator, build_knowledge
+    store = _store(sf)
+    hid = record_hypothesis(project_id, claim, persona="hilbert", sf=sf)
+    if provider is None and orchestrator is None:
+        from ..llm.providers import CodexCliProvider
+        provider = CodexCliProvider()
+    state: dict[str, Any] = {"n": 0, "last": "bohr", "probe": {}}
+
+    def _stage(persona: str, label: str) -> None:
+        state["n"] += 1
+        pct = min(95, 8 + int(87 * state["n"] / max(1, max_actions)))
+        _live(project_id, {"stage": persona, "persona": persona,
+                           "from_persona": state["last"], "next_persona": "bohr",
+                           "label": label[:120], "pct": pct, "round": state["n"],
+                           "will_retry": "Bohr decide", "hypothesis_id": hid,
+                           "statement": claim[:160], "seq": state["n"]}, sf=sf)
+        state["last"] = persona
+
+    # --- ejecutores REALES (cada uno registra su trabajo en el ledger) --------------
+    def _ex_hipatia(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        _stage("hipatia", "Hipatia busca en la literatura (¿ya se hizo?)")
+        from ..discovery.novelty_check import NoveltyChecker
+        nv = NoveltyChecker().check(statement) or {}
+        verdict = str(nv.get("verdict") or "uncertain")
+        papers, seen = [], set()
+        for h in (nv.get("resolving_papers") or []) + (nv.get("hits") or [])[:6]:
+            t = str((h or {}).get("title") or "").strip()
+            if not t or t.lower() in seen:
+                continue
+            seen.add(t.lower())
+            paper = {"title": t[:200], "year": h.get("year"), "doi": h.get("doi"),
+                     "source": h.get("source"), "why": h.get("why"),
+                     "origin": "consejo"}
+            papers.append(paper)
+            store.put(project_id, "literature", new_id("lit"), paper, status="FOUND",
+                      parent_id=hid, actor="Hipatia", summary=f"Hipatia: {t[:90]}")
+        store.update_payload(hid, {"novelty": {
+            "status": {"already_resolved": "asentada",
+                       "likely_open": "abierta"}.get(verdict, "sin_evaluar"),
+            "note": str(nv.get("note") or "")[:300]}})
+        return {"summary": f"novedad={verdict}; {len(papers)} lecturas registradas. "
+                           + str(nv.get("note") or "")[:200], "verdict": verdict}
+
+    def _ex_popper(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        _stage("popper", "Popper busca contraejemplos")
+        from ..science.math_probe import MathProbe, _FileScriptCache
+        r = MathProbe(provider=provider,
+                      script_cache=_FileScriptCache()).probe(statement, max_tries=3)
+        state["probe"] = r
+        record_result(project_id, statement, r, persona="popper",
+                      hypothesis_id=hid, sf=sf)
+        return {"summary": f"veredicto={r.get('verdict')}; "
+                           f"{str(r.get('detail'))[:180]}",
+                "verdict": str(r.get("verdict") or "")}
+
+    def _ex_feynman(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        _stage("feynman", "Feynman decide la segunda jugada")
+        from ..science.research_loop import HumanAttitude
+        out = HumanAttitude(provider=provider).observe(statement, state["probe"], [])
+        ref = str(out.get("refined_statement") or "").strip()
+        if ref and ref != statement:
+            record_reformulation(project_id, ref,
+                                 angle=str(out.get("observation") or "")[:120], sf=sf)
+            return {"summary": f"reformuló: {ref[:160]}", "statement": ref,
+                    "verdict": str(out.get("next_action") or "")}
+        return {"summary": f"observación: {str(out.get('observation'))[:180]}; "
+                           f"jugada sugerida: {out.get('next_action')}",
+                "verdict": str(out.get("next_action") or "")}
+
+    def _ex_godel(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        _stage("godel", "Gödel/Euclides intentan demostrar")
+        from ..science.math_probe import MathProbe, _FileScriptCache
+        r = MathProbe(provider=provider,
+                      script_cache=_FileScriptCache()).probe(statement, max_tries=1,
+                                                             formal_first=True)
+        v = str(r.get("verdict") or "")
+        proved = v in ("verified", "formally_supported")
+        record_lemma(project_id, statement, proved=proved,
+                     backend=str(r.get("formal_backend") or "sympy/z3"), sf=sf)
+        return {"summary": f"intento formal: {v}; {str(r.get('detail'))[:160]}",
+                "verdict": v}
+
+    def _ex_ramanujan(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        _stage("ramanujan", "Ramanujan busca la chispa (¿y si…?)")
+        from ..science.spark import SparkEngine
+        frontier = str(decision.get("frontier") or statement)
+        why = str(decision.get("why_stuck") or "métodos directos agotados")
+        ideas = SparkEngine(provider).ignite(frontier, why, n_ideas=5)
+        for idea in ideas:
+            store.put(project_id, "spark", new_id("spk"),
+                      {**idea, "frontier": frontier[:300], "origin": "consejo"},
+                      status="PROPOSED", actor="Ramanujan",
+                      summary=str(idea.get("chispa") or "")[:120])
+        top = "; ".join(f"[p={i.get('probabilidad')}] {str(i.get('chispa'))[:90]}"
+                        for i in ideas[:3])
+        state["ideas"] = ideas
+        return {"summary": f"{len(ideas)} chispas: {top}", "verdict": "ideas"}
+
+    def _ex_turing(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        _stage("turing", "Turing construye y corre el experimento")
+        from ..science.turing import TuringBuilder
+        idea_txt = str(decision.get("idea") or "").strip()
+        ideas = state.get("ideas") or []
+        chispa = (ideas[0] if ideas and not idea_txt else
+                  {"chispa": idea_txt or statement, "plan": idea_txt,
+                   "primer_experimento": idea_txt})
+        piezas = list(decision.get("piezas") or []) or (
+            list(chispa.get("piezas") or [])
+            + list(chispa.get("piezas_faltantes") or []))
+        budget = int(float(decision.get("budget_min") or 0) * 60) or 3600
+        budget = min(budget, turing_cap_s)
+        res = TuringBuilder(provider).build_and_run(
+            chispa, piezas, budget_s=budget,
+            on_event=lambda k, dta: _stage("turing",
+                                           f"Turing {k}: {str(dta)[:80]}"))
+        last_code = (res.get("rounds") or [{}])[-1].get("code", "")
+        store.put(project_id, "build", new_id("bld"),
+                  {"idea": chispa.get("chispa"), "status": res.get("status"),
+                   "verdict": res.get("verdict"),
+                   "evidence": res.get("evidence") or [],
+                   "n_rounds": len(res.get("rounds") or []),
+                   "elapsed_s": res.get("elapsed_s"), "code": last_code[:4000],
+                   "origin": "consejo"},
+                  status=("DONE" if res.get("status") == "completed" else "FAILED"),
+                  actor="Turing",
+                  summary=str(res.get("verdict") or res.get("status") or "")[:120])
+        ev = "; ".join(str(e)[:80] for e in (res.get("evidence") or [])[:3])
+        return {"summary": f"{res.get('status')}: {str(res.get('verdict'))[:140]} "
+                           f"| evidencia: {ev}",
+                "verdict": str(res.get("status") or "")}
+
+    def _ex_aristoteles(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        _stage("aristoteles", "Aristóteles critica (revisor hostil)")
+        from .critic import CriticAgent
+        ctx = {"claim": statement,
+               "verdict": str(state["probe"].get("verdict") or "")}
+        crit = CriticAgent().critique_now(project_id, hid, "hipotesis", ctx,
+                                          use_ai=True) or {}
+        return {"summary": f"crítica: {str(crit.get('verdict') or crit)[:200]}",
+                "verdict": str(crit.get("verdict") or "")}
+
+    def _ex_kepler(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        _stage("kepler", "Kepler cosecha anomalías")
+        from .anomalies import AnomalyEngine
+        an = AnomalyEngine().harvest(project_id) or []
+        return {"summary": f"{len(an)} anomalías cosechadas", "verdict": str(len(an))}
+
+    def _ex_gauss(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        _stage("gauss", "Gauss empaqueta el dossier")
+        store.put(project_id, "dossier", new_id("dos"),
+                  {"claim": statement[:200], "origin": "consejo",
+                   "synthesis": str(decision.get("reason") or "")[:400],
+                   "readiness": "needs_human_review"},
+                  status="DRAFT", parent_id=hid, actor="Gauss",
+                  summary=f"dossier: {statement[:90]}")
+        return {"summary": "dossier borrador empaquetado (techo: revisión humana)",
+                "verdict": "draft"}
+
+    executors = {"hipatia": _ex_hipatia, "popper": _ex_popper,
+                 "feynman": _ex_feynman, "godel": _ex_godel,
+                 "ramanujan": _ex_ramanujan, "turing": _ex_turing,
+                 "aristoteles": _ex_aristoteles, "kepler": _ex_kepler,
+                 "gauss": _ex_gauss}
+
+    def _on_step(action: str, decision: dict[str, Any],
+                 result: dict[str, Any]) -> None:
+        record_decision(project_id, action,
+                        f"{str(decision.get('reason') or '')[:150]} — esperaba: "
+                        f"{str(decision.get('expected') or '')[:80]}",
+                        parent_id=hid, sf=sf)
+
+    orch = orchestrator or BohrOrchestrator(
+        provider, executors, knowledge=build_knowledge(),
+        max_actions=max_actions, wall_budget_s=wall_budget_s, on_step=_on_step)
+    _live(project_id, {"persona": "bohr", "from_persona": "bohr",
+                       "next_persona": "bohr",
+                       "label": "Bohr estudia el tablero y decide la primera jugada",
+                       "pct": 5, "round": 0, "will_retry": "Bohr decide",
+                       "hypothesis_id": hid, "statement": claim[:160],
+                       "seq": 0}, sf=sf)
+    out = orch.run(claim)
+    # informe compacto del ciclo dinámico (bitácora jugada a jugada)
+    lines = ["# Informe de Bohr (director dinámico)\n",
+             f"**Enunciado final:** {out['statement']}\n",
+             f"**Disposición:** {out['disposition']} — "
+             f"{out.get('close_reason', '')}\n",
+             f"**Jugadas:** {out['n_actions']} en {out['elapsed_s']}s\n",
+             "## Bitácora"]
+    for i, h in enumerate(out["history"]):
+        lines.append(f"{i + 1}. **{h['action']}** — {str(h.get('reason'))[:150]}\n"
+                     f"   → {str(h.get('summary'))[:250]}")
+    store.put(project_id, "report", new_id("rep"),
+              {"markdown": "\n".join(lines), "disposition": out["disposition"],
+               "claim": out["statement"][:200], "origin": "consejo-dinamico"},
+              status="FOR_STUDY", parent_id=hid, actor="Bohr",
+              summary=f"ciclo dinámico: {out['disposition']} "
+                      f"({out['n_actions']} jugadas)")
+    _live(project_id, {"done": True, "pct": 100, "hypothesis_id": hid,
+                       "label": f"Ciclo dinámico terminado: {out['disposition']} "
+                                f"({out['n_actions']} jugadas)",
+                       "disposition": out["disposition"]}, sf=sf)
+    return out

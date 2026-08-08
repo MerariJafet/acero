@@ -41,3 +41,11 @@ research/artifacts/*.html
 backups/
 scratch_*
 research/cache/
+
+# ACERO runtime / user data (nunca al repo)
+data/
+research/loop/
+research/selfimprove/
+experiments/
+script.py
+research/calibration.json

@@ -24,8 +24,11 @@ proof. Provider, sandbox runner and the formal backend are injectable for tests.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
+from pathlib import Path
 from typing import Any
 
 _RESULT_RE = re.compile(r"RESULT_JSON:\s*(\{.*\})", re.DOTALL)
@@ -104,12 +107,41 @@ def _robust_counterexample(ce: Any) -> bool:
     return True
 
 
+class _FileScriptCache:
+    """Caché de Tycho: scripts que YA corrieron bien, por hash de conjetura — reusar
+    un script bueno es una ronda entera de codegen GRATIS."""
+
+    def __init__(self, path: str | None = None) -> None:
+        base = Path(os.environ.get("ACERO_CACHE_DIR") or (Path.home() / ".acero"))
+        self._path = Path(path) if path else base / "probe_scripts.json"
+
+    def _load(self) -> dict[str, str]:
+        try:
+            return json.loads(self._path.read_text())
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def get(self, key: str) -> str | None:
+        return self._load().get(key)
+
+    def put(self, key: str, code: str) -> None:
+        try:
+            d = self._load()
+            d[key] = code
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._path.write_text(json.dumps(d))
+        except Exception:  # noqa: BLE001 - el caché jamás rompe el probe
+            pass
+
+
 class MathProbe:
     def __init__(self, *, provider: Any = None, runner: Any = None,
-                 formal: Any = None) -> None:
+                 formal: Any = None, script_cache: Any = None) -> None:
         self._provider = provider
         self._runner = runner
         self._formal = formal
+        # opt-in: producción (ResearchLoop) pasa _FileScriptCache(); tests quedan puros
+        self._cache = script_cache
 
     def _prov(self) -> Any:
         if self._provider is not None:
@@ -157,10 +189,53 @@ class MathProbe:
         code = re.sub(r"^```(?:python)?\s*", "", code)
         return re.sub(r"\s*```$", "", code)
 
+    def _try_formalize(self, claim: str) -> dict[str, Any] | None:
+        """FORMAL-FIRST: una llamada CHICA que intenta reducir el claim a sympy/Z3.
+        Si el motor formal (GRATIS) lo demuestra, nos ahorramos TODO el codegen."""
+        try:
+            prov = self._prov()
+            if prov is None or not getattr(prov, "available", lambda: False)():
+                return None
+            from .research_loop import _FORMALIZE_SYS, FORMALIZE_SCHEMA
+            out = prov.complete_json(
+                f"{_FORMALIZE_SYS}\n\nAFIRMACIÓN: {claim}\n"
+                "BOCETO/REDUCCIÓN: (reducción directa, sin boceto)",
+                FORMALIZE_SCHEMA, temperature=0.1)
+            if not isinstance(out, dict):
+                return None
+            fc = {k: v for k, v in (out.get("formal_claim") or {}).items()
+                  if isinstance(v, str) and v.strip()}
+            if fc.get("kind"):
+                from .formal_verify import verify
+                res = verify(str(fc["kind"]),
+                             **{k: v for k, v in fc.items() if k != "kind"})
+                if res.get("result") in ("proved", "refuted"):
+                    return {**res, "claim": fc, "backend": "sympy"}
+            zc = out.get("z3_claim") or {}
+            if str(zc.get("kind") or "").strip() and str(zc.get("expr") or "").strip():
+                from .proof_assistant import prove
+                zres = prove(str(zc["kind"]), expr=zc.get("expr"),
+                             vars=zc.get("vars"), assume=zc.get("assume"),
+                             sort=zc.get("sort"))
+                if zres.get("result") in ("proved", "refuted"):
+                    return {**zres, "claim": zc, "backend": "z3"}
+        except Exception:  # noqa: BLE001 - formal-first jamás bloquea el camino clásico
+            pass
+        return None
+
     def probe(self, claim: str, *, formal_claim: dict[str, Any] | None = None,
-              max_tries: int = 3) -> dict[str, Any]:
+              max_tries: int = 3, formal_first: bool = True) -> dict[str, Any]:
         """Attack the claim. Returns the overall verdict + computational & formal evidence."""
         formal = self._formal_check(formal_claim)
+        # --- EFICIENCIA: intentar la vía formal GRATIS antes de gastar en codegen ------
+        if formal is None and formal_first:
+            formal = self._try_formalize(claim)
+            if formal and formal.get("result") == "proved":
+                return self._pack("verified", None, formal, [],
+                                  f"demostrado formalmente ({formal.get('backend')}, "
+                                  "formal-first: cero codegen)")
+            # un 'refuted' formal solitario puede ser mala codificación → el codegen
+            # de abajo lo corrobora (la reconciliación vive en _decide)
         # NOTE: we do NOT short-circuit on a formal 'refuted'. A formal_claim can be
         # MISENCODED (e.g. a wrong sympy translation of a true theorem), so a lone
         # formal refutation is reconciled against the computational search in _decide.
@@ -170,16 +245,31 @@ class MathProbe:
         prev_code = ""
         crashed = False
         last_good_code = ""     # the last script that RAN (retry can build on it)
+        cache_key = hashlib.sha1(" ".join(claim.split()).lower().encode()).hexdigest()
+        cached_code = None
+        try:
+            cached_code = self._cache.get(cache_key) if self._cache else None
+        except Exception:  # noqa: BLE001
+            cached_code = None
         for i in range(max_tries):
-            try:
-                code = self._codegen(claim, feedback, prev_code, crashed)
-            except Exception as exc:  # noqa: BLE001
-                attempts.append({"try": i + 1, "error": f"codegen: {str(exc)[:150]}"})
-                break
+            if i == 0 and cached_code:
+                # ronda GRATIS: Tycho ya tiene un script que corrió bien para este claim
+                code = cached_code
+            else:
+                try:
+                    code = self._codegen(claim, feedback, prev_code, crashed)
+                except Exception as exc:  # noqa: BLE001
+                    attempts.append({"try": i + 1, "error": f"codegen: {str(exc)[:150]}"})
+                    break
             stdout, stderr, rc = self._run(code)
             prev_code = code
             parsed = _extract(stdout)
             crashed = (rc != 0) or (parsed is None)
+            if parsed and rc == 0:
+                try:
+                    self._cache.put(cache_key, code)   # script bueno → memoria de Tycho
+                except Exception:  # noqa: BLE001
+                    pass
             attempts.append({"try": i + 1, "rc": rc,
                              "verdict": (parsed or {}).get("verdict"),
                              "n_tested": (parsed or {}).get("n_tested"),

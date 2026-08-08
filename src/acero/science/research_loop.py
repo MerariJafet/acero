@@ -218,8 +218,11 @@ class ResearchLoop:
     def _probe(self, statement: str) -> dict[str, Any]:
         if self._prober is not None:
             return self._prober(statement)
-        from .math_probe import MathProbe
-        r = MathProbe(provider=self._provider).probe(statement, max_tries=2)
+        from .math_probe import MathProbe, _FileScriptCache
+        # EFICIENCIA: formal-first (sympy/Z3 gratis antes del codegen) + caché de
+        # scripts buenos de Tycho (ronda 1 gratis al reintentar el mismo claim)
+        r = MathProbe(provider=self._provider,
+                      script_cache=_FileScriptCache()).probe(statement, max_tries=2)
         comp = r.get("computational") or {}
         return {"verdict": r.get("verdict"), "detail": r.get("detail"),
                 "counterexample": comp.get("counterexample"),

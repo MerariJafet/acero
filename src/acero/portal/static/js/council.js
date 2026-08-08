@@ -16,6 +16,7 @@ const PERSONA_VIEW = {
   godel: ["phase", "resultados"], aristoteles: ["phase", "hipotesis"],
   feynman: ["phase", "hipotesis"], gauss: ["phase", "conclusiones"],
   arquimedes: ["ops"], bohr: ["ops"],
+  ramanujan: ["phase", "hipotesis"], turing: ["phase", "experimentos"],
 };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 let _pollTimer = null;   // refresco EN VIVO del Consejo (un solo timer por página)
@@ -424,6 +425,7 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
       <div class="cv-db"><div class="cv-dsum">${p.summary}</div>
         <button id="cv-persona-dash" style="background:#1b2438;border:1px solid #c8863c;color:#e0a96d;border-radius:10px;padding:11px 14px;font-weight:600;font-size:13px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px">📋 Abrir el tablero de ${esc(p.name)} <span style="color:#93a1bd;font-weight:400">— fichas para dar seguimiento →</span></button>
         ${id === "bohr" ? `<button id="cv-investigate" style="background:#e0a96d;color:#0d121e;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px;cursor:pointer">▶ Investigar esta conjetura (correr el ciclo)</button><div id="cv-inv-msg" style="font-size:12px;color:#93a1bd"></div>` : ""}
+        ${id === "ramanujan" ? `<div style="display:flex;flex-direction:column;gap:8px"><textarea id="cv-spark-txt" rows="3" placeholder="Describe la FRONTERA: ¿qué es lo que 'no se puede' con los métodos actuales y por qué?" style="background:#0d121e;border:1px solid #2a3550;border-radius:10px;color:#e8edf7;padding:10px;font-size:13px;resize:vertical"></textarea><button id="cv-spark" style="background:#e8b23c;color:#0d121e;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px;cursor:pointer">💡 Buscar la chispa (¿y si sí?)</button><div id="cv-spark-msg" style="font-size:12px;color:#93a1bd"></div></div>` : ""}
         <div class="cv-flow"><div><div class="cv-k">recibe de</div><div class="cv-v">${p.awaits}</div></div>
           <div><div class="cv-k">le pasa a</div><div class="cv-v">${p.hands_to}</div></div></div>
         ${held.length ? `<div><div class="cv-st">tiene la pelota</div><div style="font-size:13px;color:#cfd8ea">Trabaja ahora: <b style="color:${col}">${held.join(", ")}</b></div></div>` : ""}
@@ -459,7 +461,21 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
       inv.disabled = !ok;
       if (msg) msg.textContent = ok
         ? (body.message || "Refresca en un minuto para ver hipótesis y veredicto.")
-        : "No se pudo iniciar. ¿El proyecto tiene un tema?";
+        : ((body && (body.detail || body.error)) || "No se pudo iniciar. ¿El proyecto tiene un tema?");
+    };
+    const spk = drawer.querySelector("#cv-spark");
+    if (spk) spk.onclick = async () => {
+      const txt = drawer.querySelector("#cv-spark-txt");
+      const msg = drawer.querySelector("#cv-spark-msg");
+      const frontier = (txt && txt.value || "").trim();
+      if (!frontier) { if (msg) msg.textContent = "Describe primero la frontera (¿qué 'no se puede'?)."; return; }
+      spk.disabled = true; spk.textContent = "Chispeando…";
+      const { ok, body } = await post(`/portal/api/projects/${encodeURIComponent(pid)}/spark`, { frontier });
+      spk.textContent = ok ? "✓ Ramanujan y Turing trabajando" : "💡 Buscar la chispa (¿y si sí?)";
+      spk.disabled = !ok;
+      if (msg) msg.textContent = ok
+        ? (body.message || "Sigue el avance en la barra EN VIVO.")
+        : ((body && (body.detail || body.error)) || "No se pudo lanzar la chispa.");
     };
   }
   function close() { drawer.classList.remove("open"); scrim.classList.remove("open"); }

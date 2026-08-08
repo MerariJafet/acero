@@ -1,38 +1,62 @@
-# ACERO
+<p align="center">
+  <img src="docs/img/acero-hero.svg" alt="ACERO — un consejo de 16 científicos autónomos" width="100%"/>
+</p>
 
-**Adaptive Computational Engine for Research and Epistemic Reasoning**
+# ACERO — el investigador autónomo que no miente
 
-ACERO es un *discovery operating system* local-first y humano-en-el-bucle para
-investigación científica computacional. No es un chatbot con herramientas: es una
-plataforma que convierte
+**Un consejo de 16 científicos-IA** (Hilbert, Hipatia, Popper, Feynman, Gödel,
+Ramanujan, Turing, Aristóteles, Kepler, Gauss…) dirigido por **Bohr**, que investiga
+matemáticas de verdad en tu máquina: lee literatura real (con DOIs), busca
+contraejemplos con código verificado, **prueba lemas mecánicamente** (Z3/sympy),
+inventa ataques laterales cuando el camino directo se agota, programa y repara sus
+propios experimentos durante horas — y **jamás infla un resultado**.
 
-> curiosidad → pregunta → hipótesis → predicciones → modelos → código →
-> experimentos → crítica → evidencia → conocimiento → nuevas preguntas
+> La regla que lo cambia todo: *el texto de un LLM nunca es evidencia.*
+> Evidencia = ejecución verificada o prueba mecánica. Y la validación final
+> siempre es **humana**.
 
-en un registro **auditable, reproducible y falsable**, donde el investigador
-humano es siempre el autor y la autoridad final.
+## 🏆 Resultados que puedes verificar tú mismo
 
-## Estado
+| Resultado | Verificación |
+|---|---|
+| **0 falsos positivos en 50 problemas abiertos famosos** (Riemann, P vs NP, Collatz, Goldbach…) atacados de punta a punta en ~4 h autónomas | [research/reto50/RESUMEN.md](research/reto50/RESUMEN.md) |
+| **Redescubrió solo la cobertura clásica de Erdős–Straus** (identidades de Mordell, duros mod 840 = los 6 cuadrados exactos) con prueba por período modular completo — en 6 segundos | [frontier_toolkit.py](src/acero/science/frontier_toolkit.py) |
+| **Caccetta–Häggkvist k=3 probado mecánicamente para n=3..13** (Z3 `unsat` + reducciones WLOG sanas); y su Hipatia citó Hamidoune 1987 / Hoàng–Reed 1987 para negarse a llamarlo novedad | [ch_bounded.txt](research/reto50/ch_bounded.txt) |
+| **Certificado explícito**: todo primo p ≤ 100,000 en las 6 clases duras de Erdős–Straus admite 4/p = 1/x+1/y+1/z — 273 certificados re-verificados con aritmética exacta, y **bastan 13 valores auxiliares** (set-cover ILP) para decidirlos todos | [certificado JSON](research/reto50/certificado_erdos_straus_mod840.json) |
+| Cuando le pedimos declarar victoria sobre un problema resuelto trivialmente, **se negó**: *"hay verdad formal, pero no contribución nueva — empaquetarla sería deshonesto"* | bitácora en el ledger |
 
-Sprints **1–4 implementados y verificados** (81 pruebas en verde; lint y tipos
-limpios). Sprints 5–12 planificados. Ver `docs/roadmap/12_sprints.md`.
+*Ejemplo comprobable a mano ahora mismo: 4/1009 = 1/3027 + 1/276 + 1/92828.* ✓
 
-| Sprint | Tema | Estado |
-|---|---|---|
-| 1 | Fundación, constitución y control | ✅ |
-| 2 | Expediente científico y modelo de conocimiento | ✅ |
-| 3 | Biblioteca científica y procedencia | ✅ |
-| 4 | Ciclo mínimo de investigación computacional | ✅ |
-| 5 | Motor de hipótesis y torneo de ideas | ✅ |
-| 6 | Diseño experimental y ganancia de información | ✅ |
-| 7 | Motor de ejecución, búsqueda y aprendizaje (Discovery Engine) | ✅ |
-| 8 | Modelo del mundo y grafo científico (World Model Engine) | ✅ |
-| 8.5–8.7 | Cognitive Discovery Engine (conceptos, analogías, primeros principios) | ✅ |
-| 8.8–8.9 | Governing Structure Inference Engine (SINDy, invariantes, gate epistémico) | ✅ |
-| 9 | Human Understanding Engine + Global Epistemic Gate | ✅ |
-| 10 | Scientific Domain Labs + Inline Gate + Hybrid Grader | ✅ |
-| 11 | Scientific Reliability & Adversarial Assurance | ✅ |
-| 12 | Human Scientific Review & Local Publication Preparation | ✅ |
+## 🎩 Bohr v2 — el director que decide, no un guion
+
+<p align="center">
+  <img src="docs/img/acero-flujo.svg" alt="Bohr v2: el director que decide jugada a jugada" width="100%"/>
+</p>
+
+Cada ciclo de investigación es una partida dirigida: Bohr conoce a sus 16
+científicos y su caja de herramientas (el **TOOLBOX**: sympy, Z3, PARI/GP, FLINT,
+gmpy2, **SageMath completo enjaulado en Docker**…), observa cada resultado
+verificado y elige la siguiente jugada — repetir con otro ángulo, exigir la
+crítica hostil de Aristóteles, mandar a **Ramanujan** por una chispa *"¿y si
+mejor usamos matrices?"*, darle a **Turing** horas para programar/instalar/reparar
+lo que haga falta, reformular y volver a empezar, o cerrar honesto. Cada decisión
+queda en la bitácora **con su porqué**.
+
+```text
+Ciclo real (hoy): Hipatia(likely_open) → Turing(certificado 273/273) → Aristóteles×2
+→ Popper("sin contraejemplo NO es prueba") → Gödel → Turing(certificados explícitos)
+→ Hipatia(novedad, otra vez, ANTES de Gauss) → Gauss(dossier) → cierre honesto:
+"needs_human_review — la crítica no fue efectiva, así que no debo inflar el cierre"
+```
+
+## Los 16 del Consejo
+
+| | | | |
+|---|---|---|---|
+| 📐 **Hilbert** conjeturas falsables | 📚 **Hipatia** ¿ya se hizo? (DOIs) | ⚙ **Arquímedes** caja LEGO | 🎨 **Da Vinci** enfoques paralelos |
+| 🔭 **Kepler** anomalías→hipótesis | 📓 **Tycho** memoria de lo que sirvió | 🔨 **Popper** contraejemplos | 📏 **Euclides** prueba simbólica |
+| ⚖ **Gödel** prueba SMT/Z3 | 🦉 **Aristóteles** revisor hostil | 🃏 **Feynman** segunda jugada | ♾ **Euler** barrido masivo |
+| 💡 **Ramanujan** la chispa ¿y si sí? | 🔧 **Turing** programa y experimenta | 🎩 **Bohr** el director | 📜 **Gauss** solo publica lo maduro |
 
 ## Principios no negociables
 
@@ -40,7 +64,15 @@ Ver [`docs/governance/ACERO_CONSTITUTION.md`](docs/governance/ACERO_CONSTITUTION
 En resumen: ninguna conclusión sin evidencia; ninguna evidencia sin procedencia;
 ningún experimento sin predicción previa; ninguna hipótesis aceptada sin intento
 de refutación; los resultados negativos se preservan; local-first sin costos
-ocultos; ACERO **nunca** se atribuye autoría ni declara descubrimientos.
+ocultos; ACERO **nunca** se atribuye autoría ni declara descubrimientos —
+el techo de todo resultado es *"listo para revisión humana"*.
+
+## Estado
+
+12 sprints base ✅ + Consejo dinámico (Bohr v2), flujo de la chispa
+(Ramanujan/Turing), TOOLBOX con maquinaria pesada (PARI/FLINT/gmpy2/Sage-docker),
+paridad clásica Erdős–Straus, CH acotado, y una suite de 1,350+ pruebas.
+Ver `docs/roadmap/12_sprints.md` y [research/TOOLBOX.md](research/TOOLBOX.md).
 
 ## Inicio rápido
 
