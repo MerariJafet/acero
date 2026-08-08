@@ -919,12 +919,24 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
     def _ex_aristoteles(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
         _stage("aristoteles", "Aristóteles critica (revisor hostil)")
         from .critic import CriticAgent
-        ctx = {"claim": statement,
-               "verdict": str(state["probe"].get("verdict") or "")}
+        # el crítico necesita VER el trabajo: contexto como TEXTO con el log real
+        # del ciclo (pasarle un dict lo rompía en silencio → 'sin_revision')
+        log = "\n".join(state.get("log") or []) or "(sin jugadas previas)"
+        ctx = (f"ENUNCIADO BAJO REVISIÓN:\n{statement}\n\n"
+               f"RESULTADOS VERIFICADOS DEL CICLO (en orden):\n{log}\n\n"
+               f"Último ataque computacional: "
+               f"veredicto={state['probe'].get('verdict')}, "
+               f"detalle={str(state['probe'].get('detail'))[:200]}")
         crit = CriticAgent().critique_now(project_id, hid, "hipotesis", ctx,
                                           use_ai=True) or {}
-        return {"summary": f"crítica: {str(crit.get('verdict') or crit)[:200]}",
-                "verdict": str(crit.get("verdict") or "")}
+        v = str(crit.get("verdict") or "")
+        objs = "; ".join(str(o)[:90] for o in (crit.get("objections") or [])[:3])
+        if not v:
+            return {"summary": "crítica NO disponible (revisor caído) — no cuenta "
+                               "como corroboración", "verdict": "sin_revision"}
+        return {"summary": f"crítica[{v}]: {str(crit.get('summary'))[:160]}"
+                           + (f" | objeciones: {objs}" if objs else ""),
+                "verdict": v}
 
     def _ex_kepler(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
         _stage("kepler", "Kepler cosecha anomalías")
@@ -943,11 +955,23 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
         return {"summary": "dossier borrador empaquetado (techo: revisión humana)",
                 "verdict": "draft"}
 
-    executors = {"hipatia": _ex_hipatia, "popper": _ex_popper,
-                 "feynman": _ex_feynman, "godel": _ex_godel,
-                 "ramanujan": _ex_ramanujan, "turing": _ex_turing,
-                 "aristoteles": _ex_aristoteles, "kepler": _ex_kepler,
-                 "gauss": _ex_gauss}
+    executors_raw = {"hipatia": _ex_hipatia, "popper": _ex_popper,
+                     "feynman": _ex_feynman, "godel": _ex_godel,
+                     "ramanujan": _ex_ramanujan, "turing": _ex_turing,
+                     "aristoteles": _ex_aristoteles, "kepler": _ex_kepler,
+                     "gauss": _ex_gauss}
+
+    # cada jugada deja su resumen en el LOG compartido — Aristóteles (y cualquier
+    # revisor) ve el trabajo real del ciclo, no un resumen vacío
+    def _with_log(name: str, fn: Any) -> Any:
+        def inner(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+            res = fn(statement=statement, decision=decision) or {}
+            state.setdefault("log", []).append(
+                f"[{name}] {str(res.get('summary') or '')[:240]}")
+            return res
+        return inner
+
+    executors = {k: _with_log(k, v) for k, v in executors_raw.items()}
 
     def _on_step(action: str, decision: dict[str, Any],
                  result: dict[str, Any]) -> None:

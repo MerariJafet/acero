@@ -74,6 +74,19 @@ intentos imposibles — evidencia fuerte de que ACERO es un investigador *fiable
    patológico ya no puede congelar un ciclo (bug Cuboide). Test forzado: unknown en 3 s.
    Todo lo anterior con tests: tests/unit/test_frontier_toolkit.py (9/9).
 
+## Actualización 2026-08-08 (tarde) — el lema de covering sets
+
+Con Bohr v2 (director dinámico) el Consejo produjo su primer candidato serio a
+contribución: certificados explícitos de Erdős–Straus para las 6 clases duras
+mod 840 y el estudio del CONJUNTO MÍNIMO de auxiliares (ver
+NOVEDAD_COVERING_SETS.md y stress13.py):
+- 10⁵: 273 primos, 0 sin cobertura, cover mínimo 5; 10⁶: 2,370, 0, cover 8;
+  **10⁷: 20,513 primos, 0 sin cobertura, cover 10** (k≤167; k=23 solo ≈67%).
+- Hipatia: `likely_open` para la formulación; revisión par: empaquetado nuevo de
+  maquinaria clásica con pregunta estructural nueva (crecimiento del cover).
+- Fix Aristóteles: el crítico recibía un dict (rompía en silencio →
+  'sin_revision'); ahora recibe el LOG textual completo del ciclo.
+
 ## Veredicto
 ACERO cerró su primer maratón autónomo con **disciplina epistémica intachable**: 50
 problemas, 3 lemas honestamente probados y etiquetados como clásicos, 1 descarte honesto,
