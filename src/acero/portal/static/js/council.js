@@ -115,6 +115,12 @@ function injectStyles() {
   .cv-live-bar{flex:1;min-width:120px;height:7px;background:#1b2438;border-radius:99px;overflow:hidden;border:1px solid #28324a}
   .cv-live-bar span{display:block;height:100%;background:linear-gradient(90deg,#54c08a,#7ba7ff);transition:width .6s}
   .cv-live-stmt{width:100%;font-size:11px;color:#93a1bd;font-style:italic}
+  .cv-report{position:relative;z-index:1;background:#10192b;border:1px solid #28324a;border-radius:14px;
+    padding:0;margin-bottom:16px;overflow:hidden}
+  .cv-report-bar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid #28324a;background:#151d2e}
+  .cv-report-bar b{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--brass)}
+  .cv-report-body{white-space:pre-wrap;font-size:12.5px;line-height:1.55;color:#cfd8ea;
+    max-height:440px;overflow:auto;font-family:ui-monospace,Menlo,monospace;padding:14px 18px}
   .cv-fcols{display:flex;gap:12px;justify-content:center;align-items:flex-start;overflow-x:auto;padding:4px 8px 10px}
   .cv-fcol{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;border-radius:12px;padding:5px 4px;border:1px solid transparent}
   .cv-fh{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--brass);margin-bottom:2px}
@@ -258,6 +264,7 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
       <div class="cv-jsteps">${(jn.milestones || []).map((m) =>
         `<span class="cv-jstep${m.done ? " done" : ""}"><i>${m.done ? "✓" : ""}</i>${esc(m.label)}</span>`).join("")}
       </div>
+      ${jn.frontier ? `<div style="margin-top:9px;font-size:12px;color:#cfd8ea;border-top:1px solid #28324a;padding-top:8px">🧭 <b style="color:${{ detras: "#93a1bd", camino: "#7ba7ff", en: "#e0a96d", tocando: "#54c08a" }[jn.frontier.level] || "#e0a96d"}">Frontera del conocimiento</b> — ${esc(jn.frontier.label)}</div>` : ""}
     </div>`;
 
   // --- barra EN VIVO: qué hace el ciclo AHORA, ronda, ¿dará otra vuelta?, % total ---
@@ -288,8 +295,11 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
         <span class="tagx"><b style="color:#54c08a">100%</b></span>
         ${lv.disposition ? `<span class="cv-chip" style="color:${VC[lv.disposition] || "#93a1bd"}">${esc(lv.disposition)}</span>` : ""}
         <b>${esc(DISPO_TXT[lv.disposition] || lv.label || "terminado")}</b>
-        ${sm ? `<span class="tagx">reformulaciones ${sm.reformulations ?? 0} · lemas probados ${sm.lemmas_proved ?? 0}</span>` : ""}
+        ${sm ? `<span class="tagx">reformulaciones ${sm.reformulations ?? 0} · lemas probados ${sm.lemmas_proved ?? 0}${sm.critic ? " · crítico: " + esc(sm.critic) : ""}${sm.anomalies ? " · 🔥 anomalías: " + sm.anomalies : ""}</span>` : ""}
         ${lv.statement ? `<div class="cv-live-stmt">conclusión sobre: “${esc(lv.statement)}”</div>` : ""}
+        ${d.report ? `<button class="cv-back" id="cv-report-btn" style="border-color:#c8863c;color:#e0a96d">📜 Informe de Bohr</button>` : ""}
+        <button class="cv-back" id="cv-report-regen" title="Bohr reconstruye el informe del ciclo YA corrido con el motor nuevo (narrativa + referencias), sin repetir el ciclo">🔁 Regenerar informe</button>
+        <span id="cv-regen-msg" class="tagx"></span>
         <span class="tagx" style="margin-left:auto">🎩 otra ronda: Bohr → Investigar — esta barra se REINICIA y avanza con el nuevo ciclo</span></div>`);
 
   // --- riel: una COLUMNA por hipótesis con la cadena de quién hizo qué (en orden) ---
@@ -344,6 +354,11 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
         <button class="cv-back" id="cv-back">← Investigaciones</button></div></div>
     ${journeyHtml}
     ${liveHtml}
+    ${d.report ? `<div class="cv-report" id="cv-report" hidden>
+      <div class="cv-report-bar"><b>📜 informe de bohr · bitácora del ciclo</b>
+        <button class="cv-back" id="cv-report-pdf" style="margin-left:auto;border-color:#c8863c;color:#e0a96d">⬇ Descargar PDF</button>
+        <button class="cv-back" id="cv-report-x">✕ Cerrar</button></div>
+      <div class="cv-report-body">${esc(d.report.markdown || "")}</div></div>` : ""}
     <div class="cv-board"><div class="cv-phases">${phasesHtml}</div>
       <div class="cv-rail">${railHtml}</div></div>
     <div class="cv-scrim" id="cv-scrim"></div><aside class="cv-drawer" id="cv-drawer"></aside></div>`;
@@ -360,6 +375,46 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
   const scrim = root.querySelector("#cv-scrim"), drawer = root.querySelector("#cv-drawer");
   const back = root.querySelector("#cv-back"); if (back) back.onclick = () => onBack();
   const ops = root.querySelector("#cv-ops"); if (ops) ops.onclick = () => onOps();
+  // 📜 la bitácora de Bohr: el informe tipo paper del último ciclo
+  const rbtn = root.querySelector("#cv-report-btn");
+  const rpanel = root.querySelector("#cv-report");
+  if (rbtn) rbtn.onclick = () => {
+    if (rpanel) { rpanel.hidden = !rpanel.hidden; if (!rpanel.hidden) rpanel.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+  };
+  const rx = root.querySelector("#cv-report-x");
+  if (rx) rx.onclick = () => { if (rpanel) rpanel.hidden = true; };
+  // 🔁 regenerar el informe del ciclo YA corrido con el motor nuevo (sin repetir ciclo)
+  const rgen = root.querySelector("#cv-report-regen");
+  if (rgen) rgen.onclick = async () => {
+    rgen.disabled = true; rgen.textContent = "⏳ Bohr redactando…";
+    const msg = root.querySelector("#cv-regen-msg");
+    const { ok, body } = await post(`/portal/api/projects/${encodeURIComponent(pid)}/report/regenerate`, {});
+    if (msg) msg.textContent = ok ? (body.message || "generando — refresca en ~1 min") : "no se pudo regenerar";
+    if (!ok) { rgen.disabled = false; rgen.textContent = "🔁 Regenerar informe"; }
+  };
+  // ⬇ PDF: ventana de impresión con formato de paper → "Guardar como PDF"
+  const rpdf = root.querySelector("#cv-report-pdf");
+  if (rpdf) rpdf.onclick = () => {
+    const md = (d.report && d.report.markdown) || "";
+    const html = esc(md)
+      .replace(/^### (.*)$/gm, "<h3>$1</h3>").replace(/^## (.*)$/gm, "<h2>$1</h2>")
+      .replace(/^# (.*)$/gm, "<h1>$1</h1>").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+      .replace(/^&gt; (.*)$/gm, "<blockquote>$1</blockquote>")
+      .replace(/^- (.*)$/gm, "<li>$1</li>").replace(/^---$/gm, "<hr>")
+      .replace(/\n/g, "\n");
+    const w = window.open("", "_blank");
+    if (!w) { alert("El navegador bloqueó la ventana — permite pop-ups para descargar el PDF."); return; }
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Informe de Bohr — ACERO</title>
+      <style>body{font-family:Georgia,'Times New Roman',serif;max-width:760px;margin:36px auto;padding:0 28px;color:#1a1a1a;line-height:1.65;font-size:13.5px}
+      h1{font-size:22px;border-bottom:2px solid #333;padding-bottom:8px}h2{font-size:16px;margin-top:22px}h3{font-size:14px}
+      li{margin:4px 0 4px 18px}blockquote{border-left:3px solid #999;margin:8px 0;padding:4px 14px;color:#444;font-style:italic}
+      hr{border:none;border-top:1px solid #bbb;margin:20px 0}pre{white-space:pre-wrap}
+      .meta{color:#666;font-size:11px;margin-bottom:18px}</style></head>
+      <body><div class="meta">ACERO · Consejo de Investigación · generado ${new Date().toLocaleString()}</div>
+      <pre style="font-family:inherit">${html}</pre>
+      <script>window.onload=()=>setTimeout(()=>window.print(),300)</`+`script></body></html>`);
+    w.document.close(); w.focus();
+  };
   function open(id) {
     const p = byId[id]; if (!p) return; const col = SC[p.status];
     const held = (d.balls || []).filter((b) => b.persona === id).map((b) => b.id);
@@ -372,6 +427,9 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
         <div class="cv-flow"><div><div class="cv-k">recibe de</div><div class="cv-v">${p.awaits}</div></div>
           <div><div class="cv-k">le pasa a</div><div class="cv-v">${p.hands_to}</div></div></div>
         ${held.length ? `<div><div class="cv-st">tiene la pelota</div><div style="font-size:13px;color:#cfd8ea">Trabaja ahora: <b style="color:${col}">${held.join(", ")}</b></div></div>` : ""}
+        ${(p.story && p.story.length) ? `<div><div class="cv-st">🗣 mi trabajo, hipótesis por hipótesis</div>${
+          p.story.map((s) => `<div class="cv-task"><span class="cv-tt" style="font-size:12.5px;line-height:1.45">${esc(s)}</span></div>`).join("")
+        }</div>` : ""}
         ${p.items_label
           ? `<div><div class="cv-st">${esc(p.items_label)} del proyecto${p.items_count ? " (" + p.items_count + ")" : ""}</div>${
               (p.items && p.items.length)
@@ -424,11 +482,13 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
   if (opts && opts.openPersona && byId[opts.openPersona]) open(opts.openPersona);
 
   // --- EN VIVO: refresca solo el Consejo cada 6 s mientras esta vista siga en pantalla
-  // (si el cajón está abierto se salta el ciclo para no cerrártelo en la cara).
+  // (si el cajón O el informe están abiertos se salta el ciclo — no te cierra la lectura).
   if (_pollTimer) clearInterval(_pollTimer);
   _pollTimer = setInterval(async () => {
     if (!document.body.contains(root)) { clearInterval(_pollTimer); _pollTimer = null; return; }
     if (drawer.classList.contains("open")) return;
+    const rp2 = root.querySelector("#cv-report");
+    if (rp2 && !rp2.hidden) return;              // leyendo el informe → no refrescar
     try {
       const r2 = await fetch(`/portal/api/projects/${encodeURIComponent(pid)}/council`,
         { headers: { Accept: "application/json" } });

@@ -335,9 +335,14 @@ def build_portal_router() -> APIRouter:
         items = {kind: [r["payload"] for r in rows if r["kind"] == kind]
                  for kind in set(OWNER_KIND.values())}
         live = next((r["payload"] for r in rows if r["kind"] == "council_status"), None)
-        return council_for(ph.get("kpis") or {},
+        # el último INFORME de Bohr (bitácora tipo paper del ciclo más reciente)
+        reports = sorted((r for r in rows if r["kind"] == "report"),
+                         key=lambda r: str(r["id"]).split("_", 1)[-1])
+        data = council_for(ph.get("kpis") or {},
                            verdicts=ph.get("recent_verdicts") or [], items=items,
                            flows=build_flows(rows), live=live)
+        data["report"] = reports[-1]["payload"] if reports else None
+        return data
 
     @r.post("/api/projects/{project_id}/investigate")
     def project_investigate(project_id: str, body: dict[str, Any], bg: BackgroundTasks,
@@ -416,6 +421,25 @@ def build_portal_router() -> APIRouter:
                     "fallback": False}
         except Exception:  # noqa: BLE001 - mejor el tema crudo que bloquear el flujo
             return fallback
+
+    @r.post("/api/projects/{project_id}/report/regenerate")
+    def report_regenerate(project_id: str, bg: BackgroundTasks,
+                          sess: Session = Depends(_require_session),
+                          x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Bohr reconstruye el informe del ÚLTIMO ciclo desde el ledger con el motor
+        actual (narrativa + referencias) — sin repetir el ciclo. Corre en background."""
+        _require_csrf(sess, x_csrf_token)
+        from .investigator_bridge import regenerate_report
+
+        def _regen() -> None:
+            try:
+                regenerate_report(project_id)
+            except Exception:  # noqa: BLE001 - best-effort en background
+                pass
+        bg.add_task(_regen)
+        return {"status": "generando",
+                "message": "Bohr está redactando el informe nuevo (narrativa + "
+                           "referencias); refresca en ~1 minuto."}
 
     @r.post("/api/copilot/global")
     def global_copilot(body: CopilotBody, sess: Session = Depends(_require_session),

@@ -70,12 +70,14 @@ PERSONAS: list[dict[str, Any]] = [
      "face": {"hair": "long", "beard": "full", "hairc": "#d8cbb4", "accent": "#54c08a"},
      "tasks": [["Diverge K enfoques", "done"], ["Corre en paralelo", "done"],
                ["10/10 correctas", "done"]]},
-    {"id": "kepler", "name": "Kepler", "role": "Sintetiza la hipótesis",
-     "module": "_synthesize", "status": "warn", "hands_to": "Popper", "awaits": "Da Vinci",
-     "summary": "Destila una ley precisa de los enfoques que funcionaron y le da forma formal.",
+    {"id": "kepler", "name": "Kepler", "role": "Sintetiza + cosecha anomalías",
+     "module": "_synthesize + anomalies.py", "status": "warn", "hands_to": "Popper",
+     "awaits": "Da Vinci / Tycho",
+     "summary": "Destila leyes precisas y, como hizo con los datos de Tycho, convierte "
+                "cada discrepancia medida en una hipótesis NUEVA (🔥 anomalías).",
      "face": {"hair": "short", "beard": "mous", "hairc": "#cbb89c", "hat": "ruff"},
-     "tasks": [["Destilar hipótesis", "done"], ["Forma formal fiable", "doing"],
-               ["Codificar sumatorias", "todo"]]},
+     "tasks": [["Destilar hipótesis", "done"], ["Cosechar anomalías", "done"],
+               ["Forma formal fiable", "doing"]]},
     {"id": "tycho", "name": "Tycho", "role": "Registra qué funcionó",
      "module": "explorer_ledger.py", "status": "new", "hands_to": "—", "awaits": "Kepler",
      "summary": "Memoria persistente de los caminos que sirvieron; los reofrece como pistas en el futuro.",
@@ -314,9 +316,115 @@ def _journey(k: dict[str, Any], items: dict[str, list[dict[str, Any]]],
     nxt = next((label for label, done, _ in milestones if not done), None)
     if live and not live.get("done"):
         nxt = f"en curso: {live.get('label') or 'el Consejo trabaja'}"
+
+    # 🧭 FRONTERA: qué tan cerca estamos de conocimiento de frontera / NUEVO — honesto,
+    # derivado de la novedad (Hipatia) y de la disposición del último ciclo.
+    cands = it.get("candidate") or []
+    nv = next((str((c.get("novelty") or {}).get("status") or "")
+               for c in reversed(cands) if (c.get("novelty") or {}).get("status")), "")
+    disp = str((live or {}).get("disposition") or "")
+    if nv == "asentada":
+        frontier = {"level": "detras",
+                    "label": "DETRÁS de la frontera: esto ya se sabe en la literatura — "
+                             "el valor ahora es APRENDERLO y reproducirlo con rigor, "
+                             "no descubrirlo."}
+    elif disp in ("verified", "partial_progress", "formally_supported"):
+        frontier = {"level": "tocando",
+                    "label": "TOCANDO la frontera: hay un pedazo demostrado "
+                             "mecánicamente sobre una pregunta no resuelta directa — si "
+                             "sobrevive a la revisión humana, sería conocimiento NUEVO."}
+    elif nv == "abierta":
+        frontier = {"level": "en",
+                    "label": "EN la frontera: pregunta probablemente ABIERTA; "
+                             "sobrevivir búsquedas no basta — el paso a conocimiento "
+                             "nuevo exige demostración o evidencia decisiva + humanos."}
+    else:
+        frontier = {"level": "camino",
+                    "label": "EN CAMINO a la frontera: aún estamos clasificando si la "
+                             "pregunta es nueva o ya está resuelta (falta la lectura "
+                             "de Hipatia o un ciclo completo)."}
     return {"pct": _clamp(pct),
             "next_step": nxt or "todo listo — falta la revisión humana",
+            "frontier": frontier,
             "milestones": [{"label": lb, "done": bool(d)} for lb, d, _ in milestones]}
+
+
+_NAME_OF = {p["id"]: p["name"] for p in PERSONAS}
+
+
+def _story_line(step: dict[str, Any], nxt: str | None) -> str:
+    """Un párrafo en PRIMERA PERSONA y PEDAGÓGICO: qué hice, CÓMO, POR QUÉ y qué
+    SIGNIFICA — el Consejo también enseña. Determinista: sale del ledger."""
+    k, v, n = step.get("kind"), step.get("verdict") or "", int(step.get("n") or 1)
+    txt = {
+        "candidate":
+            "planteé la conjetura como afirmación FALSABLE. ¿Cómo? Exigiendo "
+            "cuantificadores y condiciones explícitas, para que un solo contraejemplo "
+            "pueda tumbarla. ¿Por qué? Sin falsabilidad no hay ciencia, solo opinión. "
+            "Significa: ya tenemos un blanco preciso al que disparar",
+        "literature":
+            f"leí {n} fuente(s) reales (OpenAlex/arXiv/Crossref) buscando si ya estaba "
+            "resuelta. ¿Cómo? Redactando consultas de experto y cruzando fuentes. "
+            "¿Por qué? Gastar cómputo en algo ya resuelto no es descubrir, es recuperar "
+            "(el error 'Erdősgate'). Significa: sabemos si pisamos terreno nuevo o "
+            "terreno de libro de texto",
+        "experiment":
+            f"la ataqué computacionalmente ({n} corrida(s)"
+            + (f", veredicto: {v}" if v else "") + "). ¿Cómo? Generé programas que "
+            "barren miles de casos buscando UN contraejemplo, con guardas contra "
+            "falsos positivos numéricos. ¿Por qué? Refutar rápido y barato antes de "
+            "intentar demostrar. Significa: "
+            + ("encontré un caso donde FALLA — la versión actual es falsa"
+               if v == "refuted" else
+               "sobrevivió a todo lo que le lancé — pero pasar pruebas NO es demostrar"
+               if v == "holds_empirically" else
+               "el ataque no concluyó: ni la tumbé ni la confirmé"),
+        "negative":
+            "registré el contraejemplo como resultado NEGATIVO permanente. ¿Por qué? "
+            "Los fracasos documentados evitan repetir callejones y delimitan dónde la "
+            "idea NO funciona. Significa: el mapa de lo falso también es conocimiento",
+        "reformulation":
+            "observé que el fallo era un BORDE (un caso degenerado o ruido numérico), "
+            f"no el núcleo de la idea, y reformulé el enunciado"
+            f"{' ×' + str(n) if n > 1 else ''}. ¿Cómo? Excluyendo el borde y afilando "
+            "cuantificadores/regímenes. ¿Por qué? Un investigador de verdad hace la "
+            "SEGUNDA jugada en vez de rendirse. Significa: la conjetura sale más "
+            "fuerte de cada refutación superficial",
+        "lemma":
+            "intenté DEMOSTRARLA con motores formales (sympy/Z3) y dejé un lema o cota"
+            + (f" ({v})" if v else "") + ". ¿Cómo? Reduciendo el argumento a un núcleo "
+            "que la máquina pueda verificar símbolo a símbolo. ¿Por qué? Demostrar > "
+            "comprobar: una prueba cubre infinitos casos de golpe. Significa: "
+            + ("un pedazo del argumento quedó PROBADO mecánicamente"
+               if v == "probado" else
+               "el pedazo quedó propuesto; aún nadie lo probó"),
+        "critique":
+            "la sometí a revisión HOSTIL" + (f": veredicto {v}" if v else "") + ". "
+            "¿Cómo? Buscando la afirmación exacta, alternativas no descartadas y qué "
+            "la falsaría. ¿Por qué? Si nosotros no la rompemos, lo hará el primer "
+            "revisor externo. Significa: conocemos sus puntos débiles ANTES de "
+            "presumirla",
+        "dossier":
+            "empaqueté el dossier con evidencia y límites explícitos. ¿Por qué? Nada "
+            "se publica solo: el techo de ACERO es 'listo para revisión humana'. "
+            "Significa: te toca a ti decidir si esto avanza",
+    }.get(k, step.get("did") or str(k))
+    if nxt:
+        txt += f". Se la pasé a {_NAME_OF.get(nxt, nxt)}"
+    return txt
+
+
+def build_stories(flows: list[dict[str, Any]] | None) -> dict[str, list[str]]:
+    """Por personaje: 'mi trabajo, hipótesis por hipótesis' — H1: hice X; se la pasé a Y."""
+    out: dict[str, list[str]] = {}
+    for f in flows or []:
+        steps = f.get("steps") or []
+        for i, s in enumerate(steps):
+            nxt = steps[i + 1]["persona"] if i + 1 < len(steps) else None
+            nxt = nxt if nxt != s["persona"] else None
+            line = f"{f.get('id')}: {_story_line(s, nxt)}."
+            out.setdefault(s["persona"], []).append(line)
+    return out
 
 
 def council_for(kpis: dict[str, Any] | None,
@@ -359,6 +467,7 @@ def council_for(kpis: dict[str, Any] | None,
         "gauss": (doss + papers) * 24,
     }
 
+    stories = build_stories(flows)
     out = []
     prog_by = {}
     for p in PERSONAS:
@@ -366,7 +475,8 @@ def council_for(kpis: dict[str, Any] | None,
         source = "project" if prog > 0 else "idle"
         prog_by[p["id"]] = prog
         entry = {**p, "phase": _PHASE_OF.get(p["id"], "creativa"),
-                 "progress": prog, "source": source}
+                 "progress": prog, "source": source,
+                 "story": (stories.get(p["id"]) or [])[:10]}
         kind = OWNER_KIND.get(p["id"])
         if kind:
             objs = (items or {}).get(kind) or []

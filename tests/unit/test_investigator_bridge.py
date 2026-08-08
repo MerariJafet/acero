@@ -97,8 +97,20 @@ def test_run_council_records_ambitious_work_per_persona(session_factory):
         "resolving_papers": [],
         "hits": [{"title": "A survey of C-like conjectures", "year": 2021,
                   "doi": "10.1/x", "source": "arxiv"}]}
+    def fake_critic(pid, hid, ctx):
+        # Aristóteles inyectado: persiste su crítica como el real
+        DiscoveryStore(session_factory, lg).put(
+            pid, "critique", "crit_test1",
+            {"target_id": hid, "verdict": "prometedor", "summary": "objeción menor"},
+            status="ISSUED", actor="critic_agent", summary="crítica: prometedor")
+        return {"verdict": "prometedor"}
+
+    fake_anomalies = lambda pid: {"ok": True, "created": [{"tag": "H9"}]}  # noqa: E731
     out = run_council(p.id, "C", sf=session_factory, loop=_FakeLoop(result),
-                      novelty=fake_novelty)
+                      novelty=fake_novelty, critic=fake_critic,
+                      anomalies=fake_anomalies,
+                      narrator=lambda facts: "NARRATIVA DE PRUEBA: qué hicimos y qué "
+                                             "significa, en lenguaje humano.")
     assert out["disposition"] == "partial_progress"          # honesto: NO 'verified'
     store = DiscoveryStore(session_factory, lg)
     assert len(store.list_objects(p.id, kind="candidate")) == 1     # Hilbert
@@ -117,4 +129,21 @@ def test_run_council_records_ambitious_work_per_persona(session_factory):
     decs = store.list_objects(p.id, kind="decision")
     tos = {d.get("to") for d in decs}
     assert "hipatia" in tos and "gauss" in tos                       # asignaciones con porqué
+    assert "aristoteles" in tos and "kepler" in tos                  # crítica + anomalías AUTO
     assert all(d.get("reason") for d in decs)
+    # U6: Aristóteles automático + Kepler anomalías + BITÁCORA tipo paper
+    assert out["critic"] == "prometedor"
+    assert out["anomalies"] == 1
+    assert len(store.list_objects(p.id, kind="critique")) == 1
+    reps = store.list_objects(p.id, kind="report")
+    assert len(reps) == 1 and out["report"] is True
+    md = reps[0]["markdown"]
+    for section in ("Conjetura investigada", "Novedad (Hipatia)", "iteraciones",
+                    "Crítica (Aristóteles)", "Anomalías (Kepler)",
+                    "¿Publicación o estudio?", "Recomendación de Bohr"):
+        assert section in md                                          # informe completo
+    assert "revisión humana" in md                                    # techo epistémico
+    # narrativa en lenguaje humano + resumen en cristiano + datos como apéndice
+    assert "Informe narrativo" in md and "NARRATIVA DE PRUEBA" in md
+    assert "Resumen ejecutivo (en cristiano)" in md
+    assert "APÉNDICE" in md

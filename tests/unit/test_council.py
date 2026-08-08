@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from acero.portal.council import PERSONAS, STAGES, build_flows, council_for
+from acero.portal.council import (
+    PERSONAS, STAGES, build_flows, build_stories, council_for)
 
 
 def test_all_personas_placed_in_a_stage():
@@ -101,6 +102,39 @@ def test_flow_collapses_consecutive_steps_of_same_persona():
     rows.append({"id": "dec_01F", "kind": "decision", "status": "TAKEN",
                  "parent_id": "hyp_01A", "payload": {"to": "popper", "reason": "r"}})
     assert len(build_flows(rows)[0]["steps"]) == 3
+
+
+def test_stories_narrate_each_persona_work_per_hypothesis():
+    """Cada personaje cuenta en PRIMERA PERSONA qué hizo por H y a quién se la pasó."""
+    rows = [
+        {"id": "hyp_01A", "kind": "candidate", "status": "PROPOSED", "parent_id": None,
+         "payload": {"tag": "H1", "claim": "C", "by": "hilbert"}},
+        {"id": "lit_01B", "kind": "literature", "status": "", "parent_id": "hyp_01A",
+         "payload": {"title": "p1"}},
+        {"id": "lit_01C", "kind": "literature", "status": "", "parent_id": "hyp_01A",
+         "payload": {"title": "p2"}},
+        {"id": "exp_01D", "kind": "experiment", "status": "RUN", "parent_id": "hyp_01A",
+         "payload": {"result": {"verdict": "refuted"}}},
+        {"id": "ref_01E", "kind": "reformulation", "status": "PROPOSED",
+         "parent_id": "hyp_01A", "payload": {"statement": "C v2"}},
+    ]
+    flows = build_flows(rows)
+    st = build_stories(flows)
+    assert st["hilbert"][0].startswith("H1: planteé la conjetura")
+    assert "Se la pasé a Hipatia" in st["hilbert"][0]           # el porqué del pase
+    assert "leí 2 fuente(s)" in st["hipatia"][0]                # con números reales
+    assert "veredicto: refuted" in st["popper"][0]
+    assert "reformulé" in st["feynman"][0]
+    # pedagogía: cada párrafo explica CÓMO, POR QUÉ y QUÉ SIGNIFICA
+    for line in (st["hilbert"][0], st["hipatia"][0], st["popper"][0]):
+        assert "¿Por qué?" in line and "Significa" in line
+    # y el viaje trae el medidor de FRONTERA honesto
+    c0 = council_for({})
+    assert c0["journey"]["frontier"]["level"] == "camino"
+    # y viaja dentro de council_for → el cajón del personaje lo muestra
+    c = council_for({}, flows=flows)
+    by = {p["id"]: p for p in c["personas"]}
+    assert by["popper"]["story"] and by["popper"]["story"][0].startswith("H1:")
 
 
 def test_flow_state_closed_vs_open():
