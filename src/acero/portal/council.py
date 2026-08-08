@@ -16,9 +16,6 @@ from __future__ import annotations
 
 from typing import Any
 
-# maturity → baseline progress when there is no direct project signal
-_BASE = {"good": 88, "warn": 60, "new": 55, "weak": 32}
-
 STAGES = [
     {"key": "plantear", "name": "Plantear", "ids": ["hilbert", "euler", "hipatia"]},
     {"key": "explorar", "name": "Explorar / crear",
@@ -173,10 +170,11 @@ def _clamp(x: float) -> int:
 # qué "kind" del ledger es dueño cada personaje → sus fichas reales
 OWNER_KIND = {"hilbert": "candidate", "hipatia": "literature", "popper": "experiment",
               "gauss": "dossier", "aristoteles": "critique",
-              "feynman": "reformulation", "godel": "lemma"}
+              "feynman": "reformulation", "godel": "lemma", "bohr": "decision"}
 KIND_LABEL = {"candidate": "hipótesis", "literature": "literatura",
               "experiment": "experimentos", "dossier": "dossiers", "critique": "objeciones",
-              "reformulation": "reformulaciones", "lemma": "lemas y cotas"}
+              "reformulation": "reformulaciones", "lemma": "lemas y cotas",
+              "decision": "decisiones de orquestación"}
 
 
 def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
@@ -193,6 +191,9 @@ def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
         return {"title": (o.get("statement") or o.get("claim") or "lema")[:140],
                 "verdict": ("probado" if o.get("proved") else (o.get("status") or "propuesto")),
                 "by": o.get("backend") or ""}
+    if kind == "decision":
+        return {"title": (o.get("reason") or "decisión")[:140],
+                "verdict": f"→ {o.get('to') or '?'}", "by": "Bohr"}
     if kind == "candidate":
         return {"title": (o.get("claim") or o.get("statement") or "hipótesis")[:140],
                 "verdict": o.get("status") or "", "by": o.get("by") or ""}
@@ -206,36 +207,163 @@ def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
             "verdict": o.get("status") or "", "by": ""}
 
 
+# qué personaje ejecuta cada tipo de evento del ledger (para el rastreo del flujo)
+KIND_PERSONA = {"candidate": "hilbert", "literature": "hipatia", "experiment": "popper",
+                "reformulation": "feynman", "lemma": "godel", "negative": "popper",
+                "critique": "aristoteles", "dossier": "gauss"}
+KIND_STEP = {"candidate": "planteó", "literature": "buscó literatura",
+             "experiment": "corrió experimento", "reformulation": "reformuló",
+             "lemma": "probó lema/cota", "negative": "halló contraejemplo",
+             "critique": "objetó", "dossier": "empaquetó"}
+_NAME_TO_ID = {p["name"].lower(): p["id"] for p in PERSONAS}
+
+
+def _next_of(pid: str) -> str | None:
+    """A quién le pasará la info `pid` (primer nombre válido de su hands_to)."""
+    persona = next((p for p in PERSONAS if p["id"] == pid), None)
+    for token in str((persona or {}).get("hands_to") or "").split("/"):
+        nid = _NAME_TO_ID.get(token.strip().lower())
+        if nid:
+            return nid
+    return None
+
+
+def build_flows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Per-hypothesis flow columns from the raw ledger rows (ULID ids ⇒ id order is
+    chronological): H1, H2… each with the ordered chain of personas who worked it,
+    who has it NOW, where it CAME from and where it will GO next."""
+    # ojo: el orden temporal vive en el ULID DESPUÉS del prefijo (hyp_/exp_/lit_…);
+    # ordenar por id completo mezclaría por tipo, no por tiempo.
+    rows = sorted(rows or [], key=lambda r: str(r.get("id") or "").split("_", 1)[-1])
+    hyps = [r for r in rows if r.get("kind") == "candidate"]
+    flows = []
+    for i, h in enumerate(hyps):
+        pay = h.get("payload") or {}
+        steps = [{"persona": (pay.get("by") if pay.get("by") in KIND_PERSONA.values()
+                              or pay.get("by") in [p["id"] for p in PERSONAS]
+                              else "hilbert"),
+                  "kind": "candidate", "did": KIND_STEP["candidate"]}]
+        for r in rows:
+            if r.get("parent_id") != h.get("id"):
+                continue
+            k = str(r.get("kind") or "")
+            pid = ((r.get("payload") or {}).get("by")
+                   or KIND_PERSONA.get(k))
+            if not pid or pid not in [p["id"] for p in PERSONAS]:
+                pid = KIND_PERSONA.get(k)
+            if not pid:
+                continue
+            v = ((r.get("payload") or {}).get("result") or {}).get("verdict") or ""
+            steps.append({"persona": pid, "kind": k,
+                          "did": KIND_STEP.get(k, k), "verdict": v})
+        # colapsar pasos CONSECUTIVOS del mismo personaje+acción (p.ej. Hipatia
+        # registró 12 papers → UN paso "buscó literatura ×12", no 12 caritas)
+        collapsed: list[dict[str, Any]] = []
+        for s in steps:
+            prev_s = collapsed[-1] if collapsed else None
+            if (prev_s and prev_s["persona"] == s["persona"]
+                    and prev_s["kind"] == s["kind"]):
+                prev_s["n"] = int(prev_s.get("n", 1)) + 1
+                if s.get("verdict"):
+                    prev_s["verdict"] = s["verdict"]
+            else:
+                collapsed.append({**s, "n": 1})
+        steps = collapsed
+        cur = steps[-1]["persona"]
+        prev = next((s["persona"] for s in reversed(steps[:-1])
+                     if s["persona"] != cur), None)
+        # estado de la columna: 'closed' = terminada, nada pendiente (gris);
+        # 'open' = aún tiene algo que decir → espera una decisión (sombra roja)
+        status = str(h.get("status") or "").upper()
+        last_v = str(steps[-1].get("verdict") or "")
+        closed = (status in ("REJECTED", "CLOSED", "ARCHIVED")
+                  or last_v in ("verified", "refuted"))
+        flows.append({
+            "id": pay.get("tag") or f"H{i + 1}", "hid": h.get("id"),
+            "title": (pay.get("title") or pay.get("claim")
+                      or pay.get("description") or "")[:120],
+            "status": h.get("status") or "",
+            "state": "closed" if closed else "open",
+            "steps": steps, "current": cur, "from": prev, "next": _next_of(cur),
+        })
+    return flows
+
+
+def _journey(k: dict[str, Any], items: dict[str, list[dict[str, Any]]],
+             live: dict[str, Any] | None) -> dict[str, Any]:
+    """El VIAJE de la investigación: hitos reales cumplidos → % general + qué sigue.
+    Honesto: cada hito se marca solo con evidencia en el ledger; el último (validación
+    externa humana) nunca lo marca la máquina."""
+    it = items or {}
+    exps = it.get("experiment") or []
+    lems = it.get("lemma") or []
+    has_verdict = any(((e.get("result") or {}).get("verdict") or "") for e in exps)
+    milestones = [
+        ("Conjetura planteada (Hilbert)", int(k.get("hypotheses") or 0) > 0, 15),
+        ("Novedad/literatura (Hipatia)",
+         int(k.get("papers") or 0) > 0 or bool(it.get("literature")), 10),
+        ("Atacada computacionalmente (Popper)", len(exps) > 0, 15),
+        ("Con veredicto honesto", has_verdict, 15),
+        ("Segunda jugada (Feynman/Gödel)",
+         bool(it.get("reformulation")) or bool(lems), 15),
+        ("Lema/contribución PROBADA", any(bool(x.get("proved")) for x in lems), 15),
+        ("Dossier empaquetado (Gauss)", int(k.get("dossiers") or 0) > 0, 10),
+        ("Validación externa HUMANA", False, 5),   # siempre la marca un humano, no ACERO
+    ]
+    pct = sum(w for _, done, w in milestones if done)
+    nxt = next((label for label, done, _ in milestones if not done), None)
+    if live and not live.get("done"):
+        nxt = f"en curso: {live.get('label') or 'el Consejo trabaja'}"
+    return {"pct": _clamp(pct),
+            "next_step": nxt or "todo listo — falta la revisión humana",
+            "milestones": [{"label": lb, "done": bool(d)} for lb, d, _ in milestones]}
+
+
 def council_for(kpis: dict[str, Any] | None,
                 verdicts: list[dict[str, Any]] | None = None,
-                items: dict[str, list[dict[str, Any]]] | None = None) -> dict[str, Any]:
+                items: dict[str, list[dict[str, Any]]] | None = None,
+                flows: list[dict[str, Any]] | None = None,
+                live: dict[str, Any] | None = None) -> dict[str, Any]:
     """Assemble the council for one project from its real KPIs."""
     k = kpis or {}
     hyp = int(k.get("hypotheses") or 0)
     appr = int(k.get("approved") or 0)
     exp = int(k.get("experiments") or 0)
-    real = int(k.get("real_experiments") or 0)
     doss = int(k.get("dossiers") or 0)
     papers = int(k.get("papers") or 0)
+    it = items or {}
 
-    # personas with a direct project signal → real progress; others → maturity baseline
+    def _n(kind: str) -> int:
+        return len(it.get(kind) or [])
+    lit_n, ref_n, lem_n, crit_n = (_n("literature"), _n("reformulation"),
+                                   _n("lemma"), _n("critique"))
+
+    # PROGRESO = trabajo REAL hecho en ESTE proyecto → 0 si nadie ha participado aún.
+    # La MADUREZ de la capacidad (bueno/mejorable/nuevo/débil) NO es progreso: vive en el
+    # color del estado del personaje, no en el anillo. Así una investigación recién creada
+    # arranca en 0% y el anillo se llena solo cuando cada personaje deja fichas reales.
     project_signal = {
-        "hilbert": min(100, hyp * 12),
-        "euler": min(100, hyp * 9),
-        "davinci": min(100, exp * 13),
-        "kepler": min(100, appr * 16),
-        "popper": min(100, exp * 11 + real * 4),
-        "tycho": min(100, (exp + appr) * 8),
-        "gauss": min(100, (doss + papers) * 24),
+        "hilbert": hyp * 20,
+        "euler": hyp * 12,
+        "hipatia": max(papers, lit_n) * 20,
+        "arquimedes": 0,                       # catálogo: capacidad, no avance por-proyecto
+        "davinci": exp * 16,
+        "kepler": appr * 20,
+        "tycho": (exp + appr) * 10,
+        "popper": exp * 16,
+        "euclides": lem_n * 20,
+        "godel": lem_n * 20,
+        "aristoteles": crit_n * 20,
+        "feynman": ref_n * 20,
+        "bohr": (hyp + exp + appr + doss) * 8,
+        "gauss": (doss + papers) * 24,
     }
 
     out = []
     prog_by = {}
     for p in PERSONAS:
-        if p["id"] in project_signal and (hyp or exp or appr or doss):
-            prog, source = _clamp(project_signal[p["id"]]), "project"
-        else:
-            prog, source = _BASE.get(p["status"], 50), "maturity"
+        prog = _clamp(project_signal.get(p["id"], 0))
+        source = "project" if prog > 0 else "idle"
         prog_by[p["id"]] = prog
         entry = {**p, "phase": _PHASE_OF.get(p["id"], "creativa"),
                  "progress": prog, "source": source}
@@ -253,15 +381,41 @@ def council_for(kpis: dict[str, Any] | None,
         vals = [prog_by[i] for i in ph["ids"]]
         phases.append({**ph, "progress": _clamp(sum(vals) / max(1, len(vals)))})
 
+    # halos: verde = trabaja AHORA, amarillo = de dónde VIENE, naranja = a dónde VA.
+    # Si el ciclo está EN VIVO, manda el estado en vivo; si no, el último paso de cada H.
+    halo_now: set[str] = set()
+    halo_from: set[str] = set()
+    halo_next: set[str] = set()
+    if live and not live.get("done"):
+        halo_now = {str(live.get("persona") or "")} - {""}
+        halo_from = {str(live.get("from_persona") or "")} - {""}
+        halo_next = {str(live.get("next_persona") or "")} - {""}
+    else:
+        for f in flows or []:
+            if f.get("current"):
+                halo_now.add(f["current"])
+            if f.get("from"):
+                halo_from.add(f["from"])
+            if f.get("next"):
+                halo_next.add(f["next"])
+    halo_from -= halo_now
+    halo_next -= halo_now | halo_from
+
     return {
         "stages": STAGES,
         "phases": phases,
         "personas": out,
         "overall": _clamp(sum(prog_by.values()) / max(1, len(prog_by))),
+        "journey": _journey(k, items or {}, live),
         "balls": _flow_balls(hyp, appr, exp, verdicts),
+        "flows": flows or [],
+        "live": live,
+        "halos": {"now": sorted(halo_now), "from": sorted(halo_from),
+                  "next": sorted(halo_next)},
         "verdicts": (verdicts or [])[:6],
         "kpis": {"hypotheses": hyp, "approved": appr, "experiments": exp,
-                 "real_experiments": real, "dossiers": doss, "papers": papers},
+                 "real_experiments": int(k.get("real_experiments") or 0),
+                 "dossiers": doss, "papers": papers},
     }
 
 

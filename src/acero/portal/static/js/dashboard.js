@@ -410,6 +410,17 @@ export async function renderProjectDash(view, pid, cb) {
        </button>
      </div>
 
+     <section class="launch-bar" aria-label="Qué se investiga">
+       <div class="launch-head"><b>🔬 Qué se está investigando</b>
+         <span class="launch-status">${k.hypotheses || 0} hipótesis · ${k.experiments || 0} experimentos</span></div>
+       ${(() => {
+         const hp = phases.find((f) => f.key === "hipotesis") || { items: [] };
+         const rows = (hp.items || []).slice(0, 6).map((i) =>
+           `<div class="tag" style="margin:.18rem 0"><b>${esc(i.tag)}</b>: ${esc((i.title || "").slice(0, 130))} ${pill(i.meta || "", i.meta === "APPROVED" ? "ok" : "warn")}</div>`).join("");
+         return rows || "<p class='tag'>Aún sin hipótesis — plantéala desde el chat (🔬) o con 🎩 Bohr en el Consejo.</p>";
+       })()}
+     </section>
+
      <section class="brain-strip" aria-label="Cerebro de almacenamiento">
        <span class="brain-ic">🧠</span>
        <div class="brain-txt"><b>Cerebro — Obsidian</b>
@@ -429,8 +440,10 @@ export async function renderProjectDash(view, pid, cb) {
          <span class="launch-status" id="launch-status" aria-live="polite"></span></div>
        <div class="launch-primary">
          ${primaryBtn}
-         <p class="tag">Un solo botón: por cada hipótesis aprobada corre investigar →
-           proponer experimentos → ejecutar → sintetizar → rigor. Absorbe los pasos de abajo.</p>
+         <p class="tag">Por cada hipótesis <b>aprobada</b> corre el flujo CLÁSICO con datos:
+           literatura → experimentos → sintetizar → rigor. <b>No es lo mismo que 🎩 Bohr</b>:
+           Bohr corre el ciclo matemático/computacional de la conjetura (probar → reformular →
+           lema); este botón la confronta con papers y datos reales. Se complementan.</p>
        </div>
        <details class="launch-adv">
          <summary>⚙️ Pasos individuales (avanzado) — corre solo una parte del ciclo</summary>
@@ -449,12 +462,6 @@ export async function renderProjectDash(view, pid, cb) {
        <div class="launch-head"><b>🔁 Loop autónomo (Investigador Principal)</b>
          <span class="launch-status" id="pi-loop-status" aria-live="polite"></span></div>
        <div id="pi-loop-body"><p class="tag">cargando…</p></div>
-     </section>
-
-     <section class="launch-bar" id="pub-panel" aria-label="Publicación">
-       <div class="launch-head"><b>📤 ¿Qué me falta para publicar?</b>
-         <span class="launch-status" id="pub-status" aria-live="polite"></span></div>
-       <div id="pub-body"><p class="tag">cargando…</p></div>
      </section>
 
      <section class="launch-bar" id="proact-panel" aria-label="Proactividad">
@@ -528,6 +535,13 @@ export async function renderProjectDash(view, pid, cb) {
      </div>
 
      ${phaseRows}
+
+     <section class="launch-bar" id="pub-panel" aria-label="Publicación">
+       <div class="launch-head"><b>📤 ¿Qué me falta para publicar? — el paso FINAL</b>
+         <span class="launch-status" id="pub-status" aria-live="polite"></span></div>
+       <div id="pub-body"><p class="tag">cargando…</p></div>
+     </section>
+
      <p class="tag">${esc(ph.honesty)}</p>`;
 
   // --- launch handlers: every flow runs from the dashboard ------------------

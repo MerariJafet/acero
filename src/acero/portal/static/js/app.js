@@ -17,6 +17,7 @@ const state = {
   project: null,          // current project id (null = home/global)
   context: { scope: "global", label: "Chat general — todas las investigaciones" },
   lastTopic: "",          // último tema hablado en el chat global (semilla de investigación)
+  chatLog: [],            // últimas líneas de la plática global → Hilbert destila la conjetura
 };
 
 const SUGGESTIONS = {
@@ -140,36 +141,52 @@ function renderSpawnInvest() {
     `<button id="spawn-invest-btn" type="button" class="act${ready ? "" : " ghost"}"${ready ? "" : " disabled"}>`
     + `🔬 Iniciar nueva investigación con este tema</button>`
     + `<small class="tag">${ready
-        ? "Cuando la conjetura esté clara, pulsa aquí y el Consejo (Bohr) la tomará."
-        : "Platica el tema abajo; en cuanto escribas la conjetura, se activa este botón."}</small>`;
+        ? "Al pulsar, Hilbert destila la plática en una conjetura FALSABLE (editable) y Bohr la toma."
+        : "Platica el tema abajo; en cuanto escribas algo, se activa este botón."}</small>`;
   const b = $("#spawn-invest-btn");
   if (b) b.addEventListener("click", spawnInvestConfirm);
 }
 
-function spawnInvestConfirm() {
+async function spawnInvestConfirm() {
   const el = $("#spawn-invest");
   const topic = (state.lastTopic || "").trim();
+  // Un deseo ("quisiera aprender…") NO es una conjetura: Hilbert destila la plática en
+  // una afirmación FALSABLE antes de mandarla a Bohr.
+  el.innerHTML = `<div class="tag">🧪 <b>Hilbert</b> está destilando una <b>conjetura falsable</b>
+    de la plática… (Codex, puede tardar 1–2 min)</div>`;
+  let conj = topic, title = topic.slice(0, 80), why = "";
+  try {
+    const { ok, body } = await post("/portal/api/conjecture",
+      { topic, messages: state.chatLog || [] });
+    if (ok && body && body.conjecture) {
+      conj = body.conjecture; title = body.title || conj.slice(0, 80);
+      why = body.why_falsifiable || "";
+    }
+  } catch (e) { /* si Hilbert no responde, seguimos con el tema crudo editable */ }
   el.innerHTML =
-    `<label class="tag" for="spawn-topic">Conjetura / tema a investigar (edítalo si hace falta)</label>
-     <textarea id="spawn-topic" rows="3" style="width:100%">${esc(topic)}</textarea>
+    `<label class="tag" for="spawn-topic"><b>Conjetura falsable</b> a investigar — edítala libremente</label>
+     <textarea id="spawn-topic" rows="5" style="width:100%;font-size:13px;line-height:1.45">${esc(conj)}</textarea>
+     ${why ? `<small class="tag">🎯 qué la tumbaría: ${esc(why)}</small>` : ""}
      <label class="tag" for="spawn-title">Nombre corto</label>
-     <input id="spawn-title" style="width:100%" value="${esc(topic.slice(0, 60))}">
+     <input id="spawn-title" style="width:100%" value="${esc(title)}">
      <div class="chat-actions" style="margin-top:6px">
        <button id="spawn-go" class="act" type="button">🎩 Crear e invocar a Bohr</button>
+       <button id="spawn-redo" class="act ghost" type="button">🧪 Destilar de nuevo</button>
        <button id="spawn-cancel" class="act ghost" type="button">Cancelar</button>
      </div>
      <span id="spawn-out" class="tag" aria-live="polite"></span>`;
   $("#spawn-cancel").addEventListener("click", renderSpawnInvest);
+  $("#spawn-redo").addEventListener("click", spawnInvestConfirm);
   $("#spawn-go").addEventListener("click", async () => {
     const t = $("#spawn-topic").value.trim();
-    const name = $("#spawn-title").value.trim() || t.slice(0, 60);
+    const name = $("#spawn-title").value.trim() || t.slice(0, 80);
     const out = $("#spawn-out");
-    if (!t) { out.textContent = "Escribe la conjetura o tema."; return; }
+    if (!t) { out.textContent = "Escribe la conjetura."; return; }
     out.textContent = "Creando investigación…";
     const { ok, body } = await post("/portal/api/workspace/project",
       { title: name, domain: "general", topic: t });
     if (!ok) { out.textContent = "Error: " + esc((body && (body.detail || body.error)) || "no se pudo"); return; }
-    state.lastTopic = "";
+    state.lastTopic = ""; state.chatLog = [];
     await loadProjects();
     cb.openProjectInvoke(body.id);      // Consejo con el cajón de Bohr abierto
   });
@@ -199,9 +216,13 @@ async function sendChat(text) {
   box.insertAdjacentHTML("beforeend", `<div class="msg user">${esc(text)}</div>` +
     `<div class="msg assistant loading" id="chat-wait">Pensando… (Codex puede tardar 1–3 min)</div>`);
   box.scrollTop = box.scrollHeight;
-  // En el chat GLOBAL, la última cosa que escribes es la semilla/"frase que detona"
-  // la investigación → activa el botón "Iniciar nueva investigación".
-  if (state.context.scope === "global") { state.lastTopic = text; renderSpawnInvest(); }
+  // En el chat GLOBAL, la plática es la semilla: guardamos las últimas líneas para que
+  // Hilbert las destile en una conjetura FALSABLE al pulsar "Iniciar investigación".
+  if (state.context.scope === "global") {
+    state.lastTopic = text;
+    state.chatLog = [...(state.chatLog || []), "investigador: " + text].slice(-8);
+    renderSpawnInvest();
+  }
   const loc = { scope: state.context.scope, phase: state.context.phase,
                 course_id: state.context.course_id };
   let res;
@@ -218,6 +239,10 @@ async function sendChat(text) {
   if (res.ok && res.body && res.body.reply) {
     wait.classList.remove("loading");
     wait.textContent = res.body.reply;
+    if (state.context.scope === "global") {
+      state.chatLog = [...(state.chatLog || []),
+        "copiloto: " + String(res.body.reply).slice(0, 300)].slice(-8);
+    }
   } else {
     wait.classList.add("err");
     wait.textContent = "Error: " + ((res.body && (res.body.detail || res.body.error)) || "copiloto");

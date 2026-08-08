@@ -18,6 +18,7 @@ const PERSONA_VIEW = {
   arquimedes: ["ops"], bohr: ["ops"],
 };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let _pollTimer = null;   // refresco EN VIVO del Consejo (un solo timer por página)
 
 function injectStyles() {
   if (document.getElementById("council-styles")) return;
@@ -38,8 +39,9 @@ function injectStyles() {
   .cv-tag{color:var(--dim);font-size:13px;max-width:58ch;line-height:1.5;margin-top:4px}
   .cv-back{background:var(--panel);border:1px solid var(--line);color:var(--dim);border-radius:10px;padding:9px 14px;font-size:13px;cursor:pointer}
   .cv-back:hover{color:var(--star);border-color:#c8863c}
-  .cv-board{position:relative;z-index:1;display:grid;grid-template-columns:1fr 128px;gap:18px;align-items:stretch}
+  .cv-board{position:relative;z-index:1;display:grid;grid-template-columns:1fr auto;gap:18px;align-items:stretch}
   @media(max-width:820px){.cv-board{grid-template-columns:1fr}.cv-rail{display:none}}
+  .cv-rail{min-width:128px;max-width:320px}
   .cv-phases{display:flex;flex-direction:column;gap:16px}
   .cv-phase{background:linear-gradient(180deg,var(--panel),#121a29);border:1px solid var(--line);border-radius:20px;
     padding:16px 18px;display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center;position:relative;overflow:hidden}
@@ -86,6 +88,50 @@ function injectStyles() {
   .cv-task{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #28324a}.cv-task:last-child{border-bottom:0}
   .cv-tb{width:8px;height:8px;border-radius:50%;flex:0 0 8px}.cv-tt{flex:1;font-size:13px}.cv-ts{font-family:var(--mono);font-size:10px;color:#93a1bd;text-transform:uppercase}
   .cv-close{margin-left:auto;background:#151d2e;border:1px solid #28324a;color:#93a1bd;width:34px;height:34px;border-radius:9px;cursor:pointer}
+  .cv-halo-now{border-radius:50%;animation:cvPulse 1.5s ease-in-out infinite}
+  .cv-halo-from{border-radius:50%;box-shadow:0 0 16px 5px rgba(230,196,90,.45)}
+  .cv-halo-next{border-radius:50%;box-shadow:0 0 16px 5px rgba(224,142,80,.5)}
+  @keyframes cvPulse{0%,100%{box-shadow:0 0 12px 4px rgba(84,192,138,.4)}50%{box-shadow:0 0 26px 10px rgba(84,192,138,.7)}}
+  .cv-legend{display:flex;gap:14px;align-items:center;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-top:6px}
+  .cv-legend i{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:-1px}
+  .cv-journey{position:relative;z-index:1;background:linear-gradient(180deg,#1b2438,#151d2e);border:1px solid #28324a;border-radius:14px;padding:12px 16px;margin-bottom:12px}
+  .cv-jtop{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .cv-jpct{font-family:var(--serif);font-size:26px;font-weight:700;color:var(--brass);font-variant-numeric:tabular-nums;line-height:1}
+  .cv-jlabel{font-family:var(--mono);font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+  .cv-jbar{flex:1;min-width:180px;height:10px;background:#0f1626;border:1px solid #28324a;border-radius:99px;overflow:hidden}
+  .cv-jbar span{display:block;height:100%;background:linear-gradient(90deg,#7ba7ff,#5ec7a8,#e0a96d);transition:width .6s}
+  .cv-jnext{font-size:13px;color:#eef2fb}.cv-jnext b{color:#e0a96d}
+  .cv-jsteps{display:flex;gap:4px 14px;flex-wrap:wrap;margin-top:9px}
+  .cv-jstep{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--faint)}
+  .cv-jstep.done{color:#9fd6b8}
+  .cv-jstep i{width:12px;height:12px;border-radius:50%;border:1.5px solid #5f6d88;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-style:normal;flex:0 0 12px}
+  .cv-jstep.done i{border-color:#54c08a;background:rgba(84,192,138,.18);color:#54c08a}
+  .cv-live{position:relative;z-index:1;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:linear-gradient(90deg,rgba(84,192,138,.10),rgba(21,29,46,.9));
+    border:1px solid #2b4a3a;border-radius:14px;padding:10px 14px;margin-bottom:16px}
+  .cv-live.done{background:linear-gradient(90deg,rgba(123,167,255,.08),rgba(21,29,46,.9));border-color:#28324a}
+  .cv-live-dot{width:10px;height:10px;border-radius:50%;background:#54c08a;animation:cvPulse 1.2s infinite;flex:0 0 10px}
+  .cv-live-face{width:34px;height:34px;flex:0 0 34px;line-height:0}
+  .cv-live b{font-size:13px}.cv-live .tagx{font-family:var(--mono);font-size:10px;color:var(--dim)}
+  .cv-live-bar{flex:1;min-width:120px;height:7px;background:#1b2438;border-radius:99px;overflow:hidden;border:1px solid #28324a}
+  .cv-live-bar span{display:block;height:100%;background:linear-gradient(90deg,#54c08a,#7ba7ff);transition:width .6s}
+  .cv-live-stmt{width:100%;font-size:11px;color:#93a1bd;font-style:italic}
+  .cv-fcols{display:flex;gap:12px;justify-content:center;align-items:flex-start;overflow-x:auto;padding:4px 8px 10px}
+  .cv-fcol{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;border-radius:12px;padding:5px 4px;border:1px solid transparent}
+  .cv-fh{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--brass);margin-bottom:2px}
+  .cv-fcol.closed{filter:grayscale(1);opacity:.42}
+  .cv-fcol.closed .cv-fh{color:#8a93a8}
+  .cv-fcol.closed .cv-fface{animation:none!important;box-shadow:none!important}
+  .cv-fcol.attention{background:rgba(224,115,111,.06);border-color:rgba(224,115,111,.3)}
+  .cv-fcol.attention .cv-fh{color:#e0736f}
+  .cv-fcol.attention .cv-fface:not(.is-decision){box-shadow:0 0 9px 3px rgba(224,115,111,.4);animation:none}
+  .cv-fcol.attention .cv-fface.is-decision{animation:cvPulse 1.5s infinite}
+  .cv-fstep{display:flex;flex-direction:column;align-items:center;gap:1px}
+  .cv-fface{width:26px;height:26px;line-height:0;border-radius:50%}
+  .cv-fface.is-now{animation:cvPulse 1.5s infinite}
+  .cv-fface.is-next{opacity:.55;box-shadow:0 0 10px 3px rgba(224,142,80,.5)}
+  .cv-fname{font-size:7.5px;color:var(--faint);line-height:1}
+  .cv-fdid{font-size:7px;color:#5f6d88;line-height:1;max-width:60px;text-align:center}
+  .cv-farrow{color:#5f6d88;font-size:10px;line-height:1;margin:1px 0}
   .cv-fiches{display:flex;flex-direction:column;gap:9px;margin-top:8px}
   .cv-fiche{background:#151d2e;border:1px solid #28324a;border-left:3px solid var(--fc,#5f6d88);border-radius:11px;padding:10px 12px}
   .cv-fiche-t{font-size:13px;line-height:1.42;color:#eef2fb}
@@ -173,16 +219,26 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
     return;
   }
   const byId = Object.fromEntries(d.personas.map((p) => [p.id, p]));
+  // nebulosas: verde = trabaja AHORA · amarillo = de dónde viene · naranja = a dónde va
+  const H = d.halos || { now: [], from: [], next: [] };
+  const haloOf = (id) => (H.now || []).includes(id) ? " cv-halo-now"
+    : (H.from || []).includes(id) ? " cv-halo-from"
+    : (H.next || []).includes(id) ? " cv-halo-next" : "";
 
   const phasesHtml = d.phases.map((ph) => {
     const col = PHC[ph.key] || "#e0a96d";
     const meds = ph.ids.map((id) => {
       const p = byId[id]; if (!p) return "";
       const sc = SC[p.status];
-      return `<div class="cv-med" tabindex="0" role="button" data-id="${id}" aria-label="${p.name}">
-        <div class="cv-por"><div class="prg">${ring(p.progress, sc, 68, 4)}</div>${face(p, 60)}
+      const hstate = (H.now || []).includes(id) ? " · 🟢 trabajando AHORA"
+        : (H.from || []).includes(id) ? " · 🟡 acaba de pasar la info"
+        : (H.next || []).includes(id) ? " · 🟠 la recibirá"
+        : (p.progress > 0 ? "" : " · sin actividad aún");
+      return `<div class="cv-med" tabindex="0" role="button" data-id="${id}" aria-label="${p.name}"
+        title="${esc(p.name)} — avance ${p.progress}%${hstate ? esc(hstate) : ""}">
+        <div class="cv-por${haloOf(id)}"><div class="prg">${ring(p.progress, sc, 68, 4)}</div>${face(p, 60)}
           <span class="cv-stt" style="background:${sc}"></span></div>
-        <div class="cv-mnm">${p.name}</div><div class="cv-mrl">${p.role}</div></div>`;
+        <div class="cv-mnm">${p.name}</div><div class="cv-mrl">${p.role} · <b style="color:${p.progress > 0 ? "#54c08a" : "#5f6d88"}">${p.progress}%</b></div></div>`;
     }).join("");
     return `<div class="cv-phase" style="--pc:${col}">
       <div class="cv-donut">${ring(ph.progress, col, 120, 12)}
@@ -190,22 +246,110 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
       <div><div class="cv-ph-name">${ph.name}</div><div class="cv-ph-sub">${ph.sub}</div><div class="cv-meds">${meds}</div></div></div>`;
   }).join("");
 
+  // --- VIAJE: progreso GENERAL de la investigación + qué sigue (hasta arriba) ---
+  const jn = d.journey;
+  const journeyHtml = !jn ? "" :
+    `<div class="cv-journey">
+      <div class="cv-jtop">
+        <div><div class="cv-jlabel">investigación completa · hitos</div><div class="cv-jpct">${jn.pct}%</div></div>
+        <div class="cv-jbar"><span style="width:${jn.pct}%"></span></div>
+        <div class="cv-jnext">➜ Siguiente: <b>${esc(jn.next_step)}</b></div>
+      </div>
+      <div class="cv-jsteps">${(jn.milestones || []).map((m) =>
+        `<span class="cv-jstep${m.done ? " done" : ""}"><i>${m.done ? "✓" : ""}</i>${esc(m.label)}</span>`).join("")}
+      </div>
+    </div>`;
+
+  // --- barra EN VIVO: qué hace el ciclo AHORA, ronda, ¿dará otra vuelta?, % total ---
+  const lv = d.live;
+  const lvP = lv ? byId[lv.persona] : null;
+  const wrC = { "sí": "#54c08a", no: "#e0736f" }[lv && lv.will_retry] || "#e0a96d";
+  // conclusión en palabras humanas por disposición (honesto: sin inflar)
+  const DISPO_TXT = {
+    verified: "demostrada formalmente",
+    refuted: "refutada — hay contraejemplo concreto",
+    partial_progress: "progreso parcial VERIFICADO (condición/lema probado)",
+    formally_supported: "lema núcleo probado; el puente espera revisión humana",
+    needs_human_review: "sobrevivió a la búsqueda; requiere revisión humana",
+    inconclusive: "sin conclusión: ni confirmada ni refutada — ACERO se abstiene",
+    dropped: "descartada",
+  };
+  const sm = (lv && lv.summary) || null;
+  const liveHtml = !lv ? "" : (!lv.done
+    ? `<div class="cv-live"><span class="cv-live-dot"></span>
+        ${lvP ? `<span class="cv-live-face">${face({ ...lvP, id: lvP.id + "lv" }, 34)}</span>` : ""}
+        <b>${esc(lv.label || "trabajando…")}</b>
+        <span class="tagx">ronda ${lv.round || 1}/${lv.max_rounds || 3} · ¿otra vuelta? <b style="color:${wrC}">${esc(lv.will_retry || "…")}</b></span>
+        <div class="cv-live-bar"><span style="width:${lv.pct || 0}%"></span></div>
+        <span class="tagx">${lv.pct || 0}%</span>
+        ${lv.statement ? `<div class="cv-live-stmt">“${esc(lv.statement)}”</div>` : ""}</div>`
+    : `<div class="cv-live done"><span class="tagx">ciclo terminado</span>
+        <div class="cv-live-bar" style="max-width:140px"><span style="width:100%"></span></div>
+        <span class="tagx"><b style="color:#54c08a">100%</b></span>
+        ${lv.disposition ? `<span class="cv-chip" style="color:${VC[lv.disposition] || "#93a1bd"}">${esc(lv.disposition)}</span>` : ""}
+        <b>${esc(DISPO_TXT[lv.disposition] || lv.label || "terminado")}</b>
+        ${sm ? `<span class="tagx">reformulaciones ${sm.reformulations ?? 0} · lemas probados ${sm.lemmas_proved ?? 0}</span>` : ""}
+        ${lv.statement ? `<div class="cv-live-stmt">conclusión sobre: “${esc(lv.statement)}”</div>` : ""}
+        <span class="tagx" style="margin-left:auto">🎩 otra ronda: Bohr → Investigar — esta barra se REINICIA y avanza con el nuevo ciclo</span></div>`);
+
+  // --- riel: una COLUMNA por hipótesis con la cadena de quién hizo qué (en orden) ---
+  const flows = d.flows || [];
+  const railHtml = flows.length
+    ? `<div class="cv-rail-h">flujo · quién hizo qué</div>
+       <div class="cv-fcols">${flows.map((f) => {
+         // estado de la columna: el ciclo EN VIVO la trabaja → normal;
+         // 'closed' → GRIS (terminada, nada pendiente);
+         // abierta sin ciclo → ROJA (espera decisión), salvo la cara que decide.
+         const isWorking = lv && !lv.done && lv.hypothesis_id && f.hid === lv.hypothesis_id;
+         const colCls = f.state === "closed" ? " closed" : (isWorking ? "" : " attention");
+         const chain = f.steps.map((s, si) => {
+           const p = byId[s.persona] || { id: s.persona, name: s.persona, face: {} };
+           const isNow = si === f.steps.length - 1;
+           const cls = isNow ? (colCls === " attention" ? " is-now is-decision" : " is-now") : "";
+           const xn = s.n > 1 ? ` ×${s.n}` : "";
+           return `${si ? '<div class="cv-farrow">↓</div>' : ""}
+             <div class="cv-fstep" title="${esc(p.name)} — ${esc(s.did || "")}${esc(xn)}${s.verdict ? " · " + esc(s.verdict) : ""}">
+               <div class="cv-fface${cls}" data-id="${esc(s.persona)}">${face({ ...p, id: p.id + "f" + f.id + si }, 26)}</div>
+               <span class="cv-fname">${esc(p.name)}${esc(xn)}</span>
+               <span class="cv-fdid">${esc(s.did || "")}${esc(xn)}${s.verdict ? " · " + esc(s.verdict) : ""}</span></div>`;
+         }).join("");
+         const nx = f.next && byId[f.next] && f.state !== "closed"
+           ? `<div class="cv-farrow">↓</div>
+              <div class="cv-fstep" title="siguiente: ${esc(byId[f.next].name)}">
+                <div class="cv-fface is-next" data-id="${esc(f.next)}">${face({ ...byId[f.next], id: f.next + "fn" + f.id }, 26)}</div>
+                <span class="cv-fname" style="color:#e08e50">${esc(byId[f.next].name)}</span></div>`
+           : "";
+         const tip = f.state === "closed" ? "terminada — nada pendiente"
+           : isWorking ? "el Consejo la trabaja AHORA"
+           : `espera decisión — ${(byId[f.current] || {}).name || f.current} tiene la pelota`;
+         return `<div class="cv-fcol${colCls}" title="${esc(f.id)} · ${esc(tip)}${f.title ? " — " + esc(f.title) : ""}">
+           <div class="cv-fh">${esc(f.id)}</div>${chain}${nx}</div>`;
+       }).join("")}</div>`
+    : `<div class="cv-rail-h">flujo · hipótesis</div><div class="cv-track"></div>
+        <div class="cv-zone"><span class="cv-zl">creativa</span><div class="cv-balls" data-b="creativa"></div></div>
+        <div class="cv-zone"><span class="cv-zl">investig.</span><div class="cv-balls" data-b="investig"></div></div>
+        <div class="cv-zone"><span class="cv-zl">crítica</span><div class="cv-balls" data-b="critica"></div></div>`;
+
   view.innerHTML = `<div class="cv"><canvas class="cv-stars"></canvas>
     <div class="cv-top"><div><div class="cv-eyebrow">ACERO · consejo de investigación</div>
       <h2>El <em>Consejo</em></h2>
-      <div class="cv-tag">Tres fases, catorce mentes. Cada hipótesis es una <b>pelota</b> que viaja por el riel: quien la tiene, la trabaja. <span style="color:#c8863c">Un clic = resumen · doble clic = su tablero.</span></div></div>
+      <div class="cv-tag">Tres fases, catorce mentes. <span style="color:#c8863c">Un clic = resumen · doble clic = su tablero.</span></div>
+      <div class="cv-legend"><span><i style="background:#54c08a"></i>trabajando ahora</span>
+        <span><i style="background:#e6c45a"></i>viene de</span>
+        <span><i style="background:#e08e50"></i>pasará a</span>
+        <span><i style="background:#5f6d88"></i>columna gris = H terminada</span>
+        <span><i style="background:#e0736f"></i>roja = espera tu decisión</span></div></div>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="cv-back" id="cv-ops" title="Panel clásico: barras de lanzamiento, loop, publicación, proactividad">⚙ Operaciones</button>
         <button class="cv-back" id="cv-back">← Investigaciones</button></div></div>
+    ${journeyHtml}
+    ${liveHtml}
     <div class="cv-board"><div class="cv-phases">${phasesHtml}</div>
-      <div class="cv-rail"><div class="cv-rail-h">flujo · hipótesis</div><div class="cv-track"></div>
-        <div class="cv-zone"><span class="cv-zl">creativa</span><div class="cv-balls" data-b="creativa"></div></div>
-        <div class="cv-zone"><span class="cv-zl">investig.</span><div class="cv-balls" data-b="investig"></div></div>
-        <div class="cv-zone"><span class="cv-zl">crítica</span><div class="cv-balls" data-b="critica"></div></div></div></div>
+      <div class="cv-rail">${railHtml}</div></div>
     <div class="cv-scrim" id="cv-scrim"></div><aside class="cv-drawer" id="cv-drawer"></aside></div>`;
 
   const root = view.querySelector(".cv");
-  (d.balls || []).forEach((b) => {
+  if (!flows.length) (d.balls || []).forEach((b) => {
     const box = root.querySelector(`.cv-balls[data-b="${b.phase}"]`); if (!box) return;
     const w = byId[b.persona] || { name: "" };
     const e = document.createElement("div"); e.className = "cv-ball"; e.style.background = SC[b.status] || "#93a1bd";
@@ -243,7 +387,7 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
         <div><div class="cv-st">avance en este proyecto</div>
           <div style="display:flex;align-items:center;gap:14px;margin-top:8px">
             <div style="position:relative;width:54px;height:54px">${ring(p.progress, col, 54, 5)}<b style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px">${p.progress}</b></div>
-            <div style="color:#93a1bd;font-size:13px">estado <b style="color:${col}">${SL[p.status]}</b> · <span style="color:#5f6d88">${p.source === "project" ? "señal real" : "madurez"}</span></div></div></div>
+            <div style="color:#93a1bd;font-size:13px">capacidad <b style="color:${col}">${SL[p.status]}</b> · <span style="color:#5f6d88">${p.source === "project" ? "avance real" : "sin actividad aún"}</span></div></div></div>
         <div><div class="cv-st">tareas</div>${(p.tasks || []).map((t) => `<div class="cv-task"><span class="cv-tb" style="background:${TASK[t[1]][0]}"></span><span class="cv-tt">${t[0]}</span><span class="cv-ts">${TASK[t[1]][1]}</span></div>`).join("")}</div></div>`;
     drawer.classList.add("open"); scrim.classList.add("open"); drawer.querySelector("#cv-x").onclick = close;
     const pdash = drawer.querySelector("#cv-persona-dash");
@@ -271,8 +415,26 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
     b.onclick = () => open(b.dataset.id);
     b.ondblclick = () => { close(); openPersonaDash(b.dataset.id); };
   });
+  // caritas del riel de flujo → resumen del personaje
+  root.querySelectorAll(".cv-fface[data-id]").forEach((ff) => {
+    ff.style.cursor = "pointer";
+    ff.onclick = () => open(ff.dataset.id);
+  });
   // Apertura directa de un personaje (p.ej. Bohr tras crear la investigación desde el chat).
   if (opts && opts.openPersona && byId[opts.openPersona]) open(opts.openPersona);
+
+  // --- EN VIVO: refresca solo el Consejo cada 6 s mientras esta vista siga en pantalla
+  // (si el cajón está abierto se salta el ciclo para no cerrártelo en la cara).
+  if (_pollTimer) clearInterval(_pollTimer);
+  _pollTimer = setInterval(async () => {
+    if (!document.body.contains(root)) { clearInterval(_pollTimer); _pollTimer = null; return; }
+    if (drawer.classList.contains("open")) return;
+    try {
+      const r2 = await fetch(`/portal/api/projects/${encodeURIComponent(pid)}/council`,
+        { headers: { Accept: "application/json" } });
+      if (r2.ok) { const nd = await r2.json(); if (nd && nd.phases) renderCouncil(view, pid, cb); }
+    } catch (e) { /* red caída: reintenta al siguiente tick */ }
+  }, 6000);
 
   const cvs = root.querySelector(".cv-stars"), x = cvs.getContext("2d");
   requestAnimationFrame(() => { cvs.width = root.clientWidth; cvs.height = root.clientHeight; for (let i = 0; i < 130; i++) { const a = Math.random() * cvs.width, b = Math.random() * cvs.height * 0.55, r = Math.random() * 1.3; x.globalAlpha = Math.random() * 0.7 + 0.15; x.fillStyle = Math.random() > 0.85 ? "#e0a96d" : "#cfe0ff"; x.beginPath(); x.arc(a, b, r, 0, 6.28); x.fill(); } x.globalAlpha = 1; });

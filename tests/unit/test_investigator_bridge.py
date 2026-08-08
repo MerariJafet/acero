@@ -52,7 +52,25 @@ def test_record_hypothesis_alone(session_factory):
     p = lg.create_project("h", domain="math")
     hid = record_hypothesis(p.id, "una conjetura", persona="hilbert", sf=session_factory)
     assert hid
-    assert len(DiscoveryStore(session_factory, lg).list_objects(p.id, kind="candidate")) == 1
+    hyps = DiscoveryStore(session_factory, lg).list_objects(p.id, kind="candidate")
+    assert len(hyps) == 1
+    # la tarjeta del dashboard lee tag/title — sin esto salía 'H?:' vacía
+    assert hyps[0]["tag"] == "H1"
+    assert hyps[0]["title"] == "una conjetura"
+
+
+def test_record_hypothesis_dedups_same_live_claim(session_factory):
+    """Relanzar el ciclo sobre la MISMA conjetura NO crea H1..Hn idénticas: reutiliza
+    la hipótesis viva y le cuelga el trabajo nuevo."""
+    lg = ResearchLedger(session_factory)
+    p = lg.create_project("dedup", domain="math")
+    a = record_hypothesis(p.id, "misma conjetura de decoherencia", sf=session_factory)
+    b = record_hypothesis(p.id, "  Misma   CONJETURA de decoherencia ", sf=session_factory)
+    assert a == b                                    # misma H, no duplicado
+    c = record_hypothesis(p.id, "otra conjetura distinta", sf=session_factory)
+    assert c != a
+    assert len(DiscoveryStore(session_factory, lg)
+               .list_objects(p.id, kind="candidate")) == 2
 
 
 def test_run_council_records_ambitious_work_per_persona(session_factory):
@@ -73,7 +91,14 @@ def test_run_council_records_ambitious_work_per_persona(session_factory):
                   {"depth": 2, "statement": "C (excluyendo n=1)",
                    "observation": "excluye el borde trivial"}],
     }
-    out = run_council(p.id, "C", sf=session_factory, loop=_FakeLoop(result))
+    fake_novelty = lambda c: {  # noqa: E731 - Hipatia inyectada (multi-fuente simulada)
+        "verdict": "likely_open", "rationale": "no hay resolver directo",
+        "recommendation": "atacar computacionalmente",
+        "resolving_papers": [],
+        "hits": [{"title": "A survey of C-like conjectures", "year": 2021,
+                  "doi": "10.1/x", "source": "arxiv"}]}
+    out = run_council(p.id, "C", sf=session_factory, loop=_FakeLoop(result),
+                      novelty=fake_novelty)
     assert out["disposition"] == "partial_progress"          # honesto: NO 'verified'
     store = DiscoveryStore(session_factory, lg)
     assert len(store.list_objects(p.id, kind="candidate")) == 1     # Hilbert
@@ -82,3 +107,14 @@ def test_run_council_records_ambitious_work_per_persona(session_factory):
     lems = store.list_objects(p.id, kind="lemma")                   # Gödel/Euclides
     assert len(refs) == 1 and refs[0]["statement"].startswith("C (excluyendo")
     assert len(lems) >= 1 and any(l.get("proved") for l in lems)    # contribución probada
+    # U5: el ciclo de Bohr ahora ES el flujo completo — Hipatia y Gauss incluidos
+    lits = store.list_objects(p.id, kind="literature")              # Hipatia
+    assert len(lits) == 1 and lits[0]["title"].startswith("A survey")
+    assert out["novelty"] == "likely_open"
+    assert out["dossier"] is True                                    # Gauss empaquetó
+    assert len(store.list_objects(p.id, kind="dossier")) == 1        # espera revisión humana
+    # Bohr ORQUESTA: sus decisiones (a quién y POR QUÉ) quedan en el ledger
+    decs = store.list_objects(p.id, kind="decision")
+    tos = {d.get("to") for d in decs}
+    assert "hipatia" in tos and "gauss" in tos                       # asignaciones con porqué
+    assert all(d.get("reason") for d in decs)

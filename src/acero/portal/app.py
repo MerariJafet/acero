@@ -324,17 +324,20 @@ def build_portal_router() -> APIRouter:
         from ..discovery.store import DiscoveryStore
         from ..ledger.db import default_session_factory
         from ..ledger.service import ResearchLedger
-        from .council import OWNER_KIND, council_for
+        from .council import OWNER_KIND, build_flows, council_for
         from .phases import build_phases
         ph = build_phases(project_id)
         if ph is None:
             raise HTTPException(404, "project not found")
         sf = default_session_factory()
         st = DiscoveryStore(sf, ResearchLedger(sf))
-        items = {kind: st.list_objects(project_id, kind=kind)
+        rows = st.list_rows(project_id)
+        items = {kind: [r["payload"] for r in rows if r["kind"] == kind]
                  for kind in set(OWNER_KIND.values())}
+        live = next((r["payload"] for r in rows if r["kind"] == "council_status"), None)
         return council_for(ph.get("kpis") or {},
-                           verdicts=ph.get("recent_verdicts") or [], items=items)
+                           verdicts=ph.get("recent_verdicts") or [], items=items,
+                           flows=build_flows(rows), live=live)
 
     @r.post("/api/projects/{project_id}/investigate")
     def project_investigate(project_id: str, body: dict[str, Any], bg: BackgroundTasks,
@@ -369,6 +372,50 @@ def build_portal_router() -> APIRouter:
         return {"hypothesis_id": hid, "claim": claim, "status": "investigando",
                 "message": "El Consejo está atacando la conjetura (ciclo ambicioso: "
                            "reformular → probar → contribución parcial); refresca en un minuto."}
+
+    @r.post("/api/conjecture")
+    def distill_conjecture(body: dict[str, Any], sess: Session = Depends(_require_session),
+                           x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
+        """Hilbert destila la PLÁTICA del chat en UNA conjetura FALSABLE lista para que
+        Bohr la investigue. Un deseo ('quisiera aprender…') NO es una conjetura; esto
+        convierte el tema en una afirmación precisa que un contraejemplo podría tumbar."""
+        _require_csrf(sess, x_csrf_token)
+        topic = str((body or {}).get("topic") or "").strip()
+        msgs = [str(m)[:400] for m in ((body or {}).get("messages") or []) if str(m).strip()]
+        ctx = "\n".join(f"- {m}" for m in msgs[-8:]) or topic
+        if not ctx:
+            raise HTTPException(422, "no hay plática ni tema que destilar")
+        fallback = {"conjecture": topic or (msgs[-1] if msgs else ""),
+                    "title": (topic or "investigación")[:80], "why_falsifiable": "",
+                    "fallback": True}
+        schema = {"type": "object", "properties": {
+            "conjecture": {"type": "string"}, "title": {"type": "string"},
+            "why_falsifiable": {"type": "string"}},
+            "required": ["conjecture", "title", "why_falsifiable"],
+            "additionalProperties": False}
+        sys_p = ("Eres HILBERT en ACERO. Te doy la plática de un investigador. Destílala en "
+                 "UNA conjetura FALSABLE: una afirmación precisa y autocontenida (en español) "
+                 "que un contraejemplo o un experimento computacional podría REFUTAR. "
+                 "PROHIBIDO devolver deseos ('quisiera aprender/saber…'), preguntas abiertas o "
+                 "temas vagos: convierte el interés en una afirmación concreta con cuantificador "
+                 "claro (p.ej. 'para todo sistema X con acoplamiento Y, la tasa Z crece como…'). "
+                 "Da también title (nombre corto ≤60 chars) y why_falsifiable (1 frase: qué "
+                 "observación la tumbaría).")
+        try:
+            from ..llm.providers import CodexCliProvider
+            prov = CodexCliProvider(timeout_sec=240)
+            if prov is None or not prov.available():
+                return fallback
+            out = prov.complete_json(f"{sys_p}\n\nPLÁTICA:\n{ctx}", schema, temperature=0.4)
+            if not isinstance(out, dict) or not str(out.get("conjecture") or "").strip():
+                return fallback
+            return {"conjecture": str(out["conjecture"]).strip(),
+                    "title": str(out.get("title") or "").strip()[:80]
+                    or str(out["conjecture"])[:80],
+                    "why_falsifiable": str(out.get("why_falsifiable") or "").strip(),
+                    "fallback": False}
+        except Exception:  # noqa: BLE001 - mejor el tema crudo que bloquear el flujo
+            return fallback
 
     @r.post("/api/copilot/global")
     def global_copilot(body: CopilotBody, sess: Session = Depends(_require_session),

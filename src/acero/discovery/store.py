@@ -80,6 +80,17 @@ class DiscoveryStore:
             rows = s.execute(stmt).scalars().all()
             return [dict(r.payload) for r in rows]
 
+    def list_rows(self, project_id: str) -> list[dict[str, Any]]:
+        """All rows WITH metadata (id/kind/status/parent_id) — ids are ULIDs, so
+        sorting by id is chronological. Used to reconstruct per-hypothesis flows."""
+        with self._sf() as s:
+            rows = s.execute(
+                select(DiscoveryRow).where(DiscoveryRow.project_id == project_id)
+            ).scalars().all()
+            return [{"id": r.id, "kind": r.kind, "status": r.status,
+                     "parent_id": r.parent_id, "payload": dict(r.payload)}
+                    for r in sorted(rows, key=lambda r: r.id)]
+
     def children(self, parent_id: str) -> list[dict[str, Any]]:
         with self._sf() as s:
             rows = s.execute(

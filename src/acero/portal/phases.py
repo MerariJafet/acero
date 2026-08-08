@@ -237,8 +237,11 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
         "hipotesis": {
             **_status(len(hyps), f"{len(approved)} aprobada(s) de {len(hyps)}",
                       "sin hipótesis aún"),
-            "items": [{"id": h.get("id", ""), "tag": h.get("tag", "H?"),
-                       "title": h.get("title") or h.get("description", ""),
+            "items": [{"id": h.get("id", ""), "tag": h.get("tag") or f"H{i + 1}",
+                       # fallback claim/statement: las hipótesis del Consejo guardan el
+                       # enunciado ahí — sin esto la tarjeta salía como 'H?:' vacía
+                       "title": (h.get("title") or h.get("description")
+                                 or h.get("claim") or h.get("statement", "")),
                        "meta": h.get("status", ""),
                        "kind": h.get("kind", ""),
                        "trigger_question": h.get("trigger_question", ""),
@@ -258,9 +261,11 @@ def build_phases(project_id: str, session_factory: Any | None = None) -> dict[st
                        "has_dossier": h.get("id", "") in dossier_hyps,
                        "reformulated": bool(h.get("reformulated")),
                        "reform_reason": h.get("reform_reason", ""),
-                       "flag": "plantilla" if h.get("synthetic") else ""} for h in hyps],
+                       "flag": "plantilla" if h.get("synthetic") else ""}
+                      for i, h in enumerate(hyps)],
             "rejected": [{"id": h.get("id", ""), "tag": h.get("tag", "H?"),
-                          "title": h.get("title") or h.get("description", ""),
+                          "title": (h.get("title") or h.get("description")
+                                    or h.get("claim") or h.get("statement", "")),
                           "trigger_question": h.get("trigger_question", "")}
                          for h in rejected],
         },

@@ -196,13 +196,23 @@ class HumanAttitude:
 
 class ResearchLoop:
     def __init__(self, *, provider: Any = None, prober: Any = None, attitude: Any = None,
-                 explorer: Any = None, ledger: Any = None, max_depth: int = 3) -> None:
+                 explorer: Any = None, ledger: Any = None, max_depth: int = 3,
+                 on_event: Any = None) -> None:
         self._provider = provider
         self._prober = prober
         self._attitude = attitude
         self._explorer = explorer
         self._ledger = ledger
         self._max_depth = max(1, max_depth)
+        self._on_event = on_event      # observador opcional (estado EN VIVO del portal)
+
+    def _emit(self, event: str, **kw: Any) -> None:
+        if self._on_event is None:
+            return
+        try:
+            self._on_event({"event": event, **kw})
+        except Exception:  # noqa: BLE001 - un observador roto jamás detiene el loop
+            pass
 
     # --- injectable primitives ------------------------------------------------
     def _probe(self, statement: str) -> dict[str, Any]:
@@ -269,9 +279,12 @@ class ResearchLoop:
         lemma: str | None = None
         contributions: list[dict[str, Any]] = []
         for depth in range(depth_cap):
+            self._emit("probing", depth=depth + 1, max=depth_cap, statement=current)
             probe = self._probe(current)
             v = probe.get("verdict")
             final_verdict = v
+            self._emit("deciding", depth=depth + 1, max=depth_cap, statement=current,
+                       verdict=v)
             att = self._observe(current, probe, trail)
             action = att.get("next_action", "escalate_to_human")
             trail.append({
@@ -294,6 +307,7 @@ class ResearchLoop:
                 # reorientation) — not only on a strictly 'trivial' flag.
                 if action == "refine_and_retry" and refined and refined != current:
                     current = refined
+                    self._emit("retry", depth=depth + 2, max=depth_cap, statement=current)
                     continue                      # attack the sharpened core
                 disposition = "refuted"
                 break
@@ -301,6 +315,7 @@ class ResearchLoop:
             refined = (att.get("refined_statement") or "").strip()
             if action == "strengthen_and_retry" and refined and refined != current:
                 current = refined
+                self._emit("retry", depth=depth + 2, max=depth_cap, statement=current)
                 continue
             # AMBICIÓN: en un superviviente de problema ABIERTO (holds_empirically) NO
             # paramos — hacemos la segunda jugada: intentar prueba y, si no cierra, buscar
@@ -308,6 +323,7 @@ class ResearchLoop:
             # motor real (explorer o proveedor); si no, escalamos honestamente.
             can_try = self._explorer is not None or self._can_llm()
             if (action == "attempt_proof" or v == "holds_empirically") and can_try:
+                self._emit("proving", depth=depth + 1, max=depth_cap, statement=current)
                 proof = self._attempt_proof(current, att.get("observation") or "")
                 trail.append(proof)
                 disp = proof.get("disposition")
@@ -325,6 +341,8 @@ class ResearchLoop:
                 sketch = proof.get("sketch", "") or sketch
                 if v == "holds_empirically":
                     # open survivor, no full/bridge proof → seek an honest partial win
+                    self._emit("contribution", depth=depth + 1, max=depth_cap,
+                               statement=current)
                     contrib = self._seek_contribution(current)
                     if contrib:
                         contributions.append(contrib)
