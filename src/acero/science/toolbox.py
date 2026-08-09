@@ -74,6 +74,16 @@ TOOLS: dict[str, dict[str, Any]] = {
             "curvas/abelianas, teoría de Galois — run_sage(codigo) lo ejecuta jaulado",
         ],
     },
+    "sat_escalation": {
+        "check": "own:acero.science.sat_escalation", "install": None,
+        "nivel": "prueba-mecánica",
+        "capacidades": [
+            "ESCALERA para casos finitos: directo → portafolio de semillas →",
+            "cube-and-conquer paralelo (partición completa ⇒ prueba sin suerte);",
+            "usar escalate(encoder) con un encoder Z3 importable; ch_encoder(n,k)"
+            " ya registrado",
+        ],
+    },
     "frontier_toolkit": {
         "check": "own:acero.science.frontier_toolkit", "install": None,
         "nivel": "prueba-simbólica",

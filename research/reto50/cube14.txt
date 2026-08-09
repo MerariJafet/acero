@@ -1,0 +1,1 @@
+CUBE-AND-CONQUER n=14: 4096 cubos, 16 obreros, fase1 60s/cubo

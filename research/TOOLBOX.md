@@ -58,3 +58,11 @@ grupo de clases de ℚ(√−23)=3.
    reintenta — presupuesto en HORAS, no en intentos. Todo al ledger.
 5. El resultado vuelve al Consejo: Gödel intenta promover a prueba, Aristóteles
    critica, Hipatia dictamina novedad. **Una chispa jamás es un resultado.**
+
+## Pieza aprendida 2026-08-09: la Escalera SAT (`sat_escalation.py`)
+
+Nacida del ataque a CH n=14: **directo → portafolio de semillas → cube-and-conquer**.
+El Consejo la ve en su catálogo y puede usarla solo en futuros casos finitos:
+`escalate(encoder)` con cualquier encoder Z3 importable; `ch_encoder(n,k)` incluido.
+Honestidad integrada: `proved` solo con el espacio completo cerrado; contraejemplos
+exigen verificación independiente; lo parcial se declara con % cerrado.

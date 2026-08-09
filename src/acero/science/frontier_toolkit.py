@@ -220,8 +220,8 @@ def erdos_straus_coverage(modulus: int, coeff: int = 4) -> dict[str, Any]:
 
 
 # --- Caccetta–Häggkvist ACOTADO (k=3): prueba mecánica por Z3 caso a caso -----------
-def caccetta_haggkvist_bounded(n_vertices: int, k: int = 3, timeout_ms: int = 300000
-                               ) -> dict[str, Any]:
+def caccetta_haggkvist_bounded(n_vertices: int, k: int = 3, timeout_ms: int = 300000,
+                               seed: int = 0) -> dict[str, Any]:
     """Caso FINITO de Caccetta–Häggkvist: todo digrafo simple (sin lazos ni digones
     como aristas dobles) con n vértices y grado de salida mínimo >= ceil(n/k) contiene
     un ciclo dirigido de longitud <= k. Para k=3, Z3 busca un contraejemplo (sin
@@ -233,6 +233,11 @@ def caccetta_haggkvist_bounded(n_vertices: int, k: int = 3, timeout_ms: int = 30
     e = [[z3.Bool(f"e_{i}_{j}") for j in range(nv)] for i in range(nv)]
     s = z3.Solver()
     s.set("timeout", timeout_ms)
+    if seed:                       # portafolio de semillas: rutas de búsqueda distintas
+        try:
+            s.set("random_seed", seed)
+        except Exception:  # noqa: BLE001
+            pass
     for i in range(nv):
         s.add(z3.Not(e[i][i]))                                   # sin lazos (C1)
         # WLOG outdeg EXACTO d: si hay contraejemplo con outdeg>=d, borrar aristas

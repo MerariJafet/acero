@@ -23,3 +23,12 @@ n=13 outdeg=5: proved (958.4s)
 n=14 outdeg=5: unknown (1500.1s)
 FIN v3
 --- v4: SIN prisa — 12 horas por caso (n=14, n=15) ---
+--- v5: n=14 con VEINTICUATRO horas (orden de Merari) ---
+n=14 outdeg=5: unknown (720.0 min)
+--- v6-s404: n=14 PORTAFOLIO semilla 404, techo 168h (7 dias = 2x estimacion) ---
+--- v6-s202: n=14 PORTAFOLIO semilla 202, techo 168h (7 dias = 2x estimacion) ---
+--- v6-s101: n=14 PORTAFOLIO semilla 101, techo 168h (7 dias = 2x estimacion) ---
+--- v6-s303: n=14 PORTAFOLIO semilla 303, techo 168h (7 dias = 2x estimacion) ---
+--- v7: n=14 MARATONISTA, semilla 777, techo 240h (10 DIAS, orden de Merari) ---
+n=15 outdeg=5: unknown (720.0 min)
+FIN v4

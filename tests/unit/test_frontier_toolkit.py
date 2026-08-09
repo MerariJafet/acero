@@ -71,3 +71,14 @@ def test_formal_verify_sigue_probando_y_refutando() -> None:
                                 rhs="x**2+2*x+1")["result"] == "proved"
     assert formal_verify.verify("identity", lhs="x**2",
                                 rhs="x**3")["result"] == "refuted"
+
+
+def test_escalera_sat_prueba_caso_conocido() -> None:
+    """La ESCALERA (directo→portafolio→cubos) prueba CH n=6 en el primer peldaño
+    y queda registrada en el TOOLBOX para que el Consejo la use sola."""
+    from acero.science.sat_escalation import ch_encoder, escalate
+    from acero.science.toolbox import catalog_text
+    r = escalate(ch_encoder(6), direct_s=60, portfolio_seeds=2, portfolio_s=30,
+                 cube_vars=6, cube_phase1_s=5, cube_phase2_s=10, workers=2)
+    assert r["verdict"] == "proved" and r["rung"] == "directo"
+    assert "sat_escalation" in catalog_text()
