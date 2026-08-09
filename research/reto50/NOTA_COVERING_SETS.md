@@ -14,7 +14,7 @@ polynomial identity can cover them (Schinzel's obstruction). We study the
 classical type-II split x = (p+k)/4 (k ≡ −p mod 4) as a DECISION LIST over a
 small set of auxiliary values k, where solvability for a given k reduces to the
 existence of a divisor t | (px)² with t ≡ −px (mod k). Our computations show:
-(i) every one of the 1,587,420 hard primes up to 10⁹ is decided by some
+(i) every one of the 1,587,581 hard primes up to 10⁹ is decided by some
 k ≤ 255 (in fact k ≤ 167 up to 10⁷, exhaustive matrix); (ii) minimal covering
 sets grow slowly — 5 values suffice up to 10⁵, 8 up to 10⁶, 10 up to 10⁷
 (exact), and stratified samples indicate 7–9 at 10⁸–10⁹; (iii) the single
@@ -47,7 +47,7 @@ todo p ∈ P(N) tiene algún k ∈ K_B. En este trabajo B = 255 (B = 127 en 10�
 | 10⁶ | 2,370 | 0 | 8 (voraz+poda — cota superior) | {3,23,31,47,59,63,71,127} | 65.5% |
 | 10⁷ | 20,513 | 0 | 10 (voraz+poda — cota superior) | {15,19,23,31,39,47,59,71,119,167} | 67.6% |
 | 10⁸ | ≈179,450 | 0 | 7 (muestra 1/50) | {23,31,47,59,71,119,143} | ≈70%* |
-| 10⁹ | 1,587,420 | **0** | 9 (muestra 1/100) | {23,31,39,47,59,71,95,119,167} | ≈72%* |
+| 10⁹ | 1,587,581 | **0** | 9 (muestra 1/100) | {23,31,39,47,59,71,95,119,167} | **71.99% (intrínseca, exacta)** |
 
 \* En 10⁸ el % de k=23 es "decide como PRIMERO en el orden de prueba"
 (125,489 primos) — cota inferior de su cobertura total; el cover es sobre
