@@ -64,6 +64,32 @@ dos implicaría Erdős–Straus para las clases duras — por lo que esperamos q
 sean difíciles; el aporte de esta nota es el OBJETO (el cover mínimo y su
 crecimiento) y el dataset, no un teorema.
 
+## 3b. De la evidencia al TEOREMA — la anatomía de la llave 23 (nuevo)
+
+Reduciendo la condición del divisor módulo 23 (con 4x ≡ p): la llave abre si
+(px)² tiene un divisor ≡ 17p² (mod 23). Los divisores MONOMIALES t = pᵃxᵇ dan
+congruencias exactas resolubles por clase, y de ahí:
+
+**Teorema (mecánico, verificado por período completo).** k=23 decide TODO primo
+duro con p ≡ 19 (mod 23) (divisor t = p) y todo p ≡ 22 (mod 23) (t = x).
+Verificación empírica: 232/232 en N=10⁶.
+
+**Hallazgo estructural (empírico, sin teorema aún).** Las clases p ≡ 7, 10, 11,
+15, 17, 20, 21 (mod 23) están llenas al 100% (cientos de primos, cero
+excepciones) vía divisores compuestos; las clases PARCIALES (~30%) son
+exactamente los residuos cuadráticos mod 23. La dicotomía QR/no-QR emerge de
+los datos — conjetura de trabajo: para p no-QR mod 23, x=(p+23)/4 siempre tiene
+un divisor en las clases objetivo {17p², 17p, 17, 22p, 22, 19} (mod 23).
+(`teorema_llaves.py` reproduce todo.)
+
+## 3c. Comparación directa con la familia tame/wild (nuevo)
+
+En el estrato EXACTO de arXiv:2605.23601 (primos 24m+1, m ≤ 30000 — 7,185
+primos; nuestro conteo coincide con el suyo), su familia de soluciones tame
+deja **9 wild primes**; nuestra familia de llaves tipo II con k ≤ 127 deja
+**0**. La familia de llaves domina estrictamente en cobertura sobre el mismo
+estrato.
+
 ## 4. Relación con trabajo previo (comparación obligatoria)
 
 - Solubilidad bruta: verificada hasta 10¹⁷ (Salez 2014) — NO es aporte nuestro.
