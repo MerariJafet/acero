@@ -74,12 +74,18 @@ congruencias exactas resolubles por clase, y de ahí:
 duro con p ≡ 19 (mod 23) (divisor t = p) y todo p ≡ 22 (mod 23) (t = x).
 Verificación empírica: 232/232 en N=10⁶.
 
-**Hallazgo estructural (empírico, sin teorema aún).** Las clases p ≡ 7, 10, 11,
-15, 17, 20, 21 (mod 23) están llenas al 100% (cientos de primos, cero
-excepciones) vía divisores compuestos; las clases PARCIALES (~30%) son
-exactamente los residuos cuadráticos mod 23. La dicotomía QR/no-QR emerge de
-los datos — conjetura de trabajo: para p no-QR mod 23, x=(p+23)/4 siempre tiene
-un divisor en las clases objetivo {17p², 17p, 17, 22p, 22, 19} (mod 23).
+**Criterio reducido (álgebra verificada exacta, 2370/2370 sin desajustes).**
+k=23 decide p ⟺ x² tiene un divisor e ≡ 17p², 17p o 17 (mod 23). Los tres
+objetivos están CERRADOS bajo el apareamiento de divisores e ↔ x²/e (usando
+x² ≡ 13p²): 17p² ↔ 17, y 17p es auto-dual. Para p no-QR mod 23 el objetivo
+17p es residuo cuadrático, habilitando la ruta d² ≡ 17p (d ≡ ±√(17p)) — el
+mecanismo detrás de la dicotomía.
+
+**Hallazgo estructural (verificado hasta 10⁸: 57,161 primos en las 7 clases,
+CERO excepciones).** Nueve clases no-cuadráticas están llenas:
+{7,10,11,15,17,20,21} (sin teorema, evidencia a 10⁸) más {19,22} (con teorema). Las dos clases no-QR EXCEPCIONALES son p ≡ 5 y
+p ≡ 14 (mod 23) (~85%), y las clases QR son parciales (~30%). El agregado
+no-QR: 96.76% en 10⁶. Pregunta abierta: ¿qué distingue a 5 y 14?
 (`teorema_llaves.py` reproduce todo.)
 
 ## 3c. Comparación directa con la familia tame/wild (nuevo)

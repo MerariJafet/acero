@@ -1,0 +1,7 @@
+  10000 primos (11s)
+  20000 primos (21s)
+  30000 primos (32s)
+  40000 primos (43s)
+  50000 primos (57s)
+RESULTADO: 57161 primos en clases llenas hasta 1e8; contraejemplos: 0 []
+VEREDICTO: LLENAS CONFIRMADAS a 1e8 (65s)
