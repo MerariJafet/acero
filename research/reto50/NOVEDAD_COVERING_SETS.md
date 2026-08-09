@@ -52,6 +52,29 @@ nota/dataset si la novedad sobrevive.
   de "covering systems" para E-S (Webb, Vaughan, Elsholtz) debe revisarse a
   fondo por un humano antes de reclamar la pregunta como inédita.
 
+## Due-diligence web profunda (2026-08-08, segunda pasada)
+
+Hallazgos que MATIZAN el `likely_open` de Hipatia — el área está activa:
+- **arXiv 2404.01508** (*A Complete Congruence System for the Erdős-Straus
+  Conjecture*, 2024): clasifica soluciones en Tipos A/B por congruencias y
+  CONJETURA que todo primo tiene una de esos tipos. Prima hermana de C-ACERO-1.
+  NO estudia conjuntos mínimos de auxiliares ni su crecimiento.
+- **arXiv 2605.23601** (*Congruence Classes Supporting the E-S Conjecture I:
+  Tame Solutions*, 2026, 62 pp.): estudia 24m+1 (nuestra clase base dura) con
+  dicotomía **tame/wild primes** parametrizada por clases de congruencia —
+  espíritu MUY cercano a nuestra "cobertura por auxiliar". NO hace set-cover
+  mínimo, crecimiento por rango, ni certificados masivos (586 primos, m≤2000;
+  nosotros: 20,513 primos a 10⁷ y subiendo a 10⁹).
+- **arXiv 2606.10922** (*A Divisor Parametrization…*, 2026): marco teórico por
+  divisores, sin implementación computacional ni certificación.
+
+**Dictamen ACTUALIZADO (honesto):** el ángulo específico —set-cover MÍNIMO de
+auxiliares tipo II, su crecimiento (5→8→10 por década), la estabilidad de k=23 y
+certificados exactos a escala— sigue sin aparecer publicado, pero la nota DEBE
+citar y compararse con 2605.23601 (¿coinciden nuestros "primos difíciles por
+auxiliar" con sus wild primes?) y 2404.01508. Novedad: de "likely_open" a
+"ángulo específico en área activa — comparación obligatoria antes de reclamar".
+
 ## Qué haría falta para publicar (nota corta / dataset)
 
 1. Extender a 10⁸–10⁹ (misma máquina, horas) y ajustar el crecimiento del cover.

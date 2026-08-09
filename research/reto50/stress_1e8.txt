@@ -1,0 +1,14 @@
+N=100000000 kmax=255 muestra=1/50 workers=8
+primos_duros=179468 (criba 51s)
+  trozos 8/65 (53s)
+  trozos 16/65 (54s)
+  trozos 24/65 (57s)
+  trozos 32/65 (59s)
+  trozos 40/65 (61s)
+  trozos 48/65 (63s)
+  trozos 56/65 (64s)
+  trozos 64/65 (66s)
+EVIDENCIA: sin_cobertura_con_k<=255: 0 []
+EVIDENCIA: primer_k_que_cubre (orden de prueba): k=23:125489, k=47:36554, k=11:10608, k=31:4443, k=71:1557, k=39:485, k=119:182, k=95:76, k=59:30, k=15:16
+EVIDENCIA: muestra=3649 primos; cover_voraz_en_muestra=7 k=[23, 31, 47, 59, 71, 119, 143]
+VEREDICTO: CUBIERTO hasta N=100000000 (67s)
