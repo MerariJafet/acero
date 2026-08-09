@@ -61,6 +61,12 @@ ACTION_MENU: dict[str, dict[str, str]] = {
     "gauss": {
         "hace": "empaqueta dossier publicable (solo lo maduro, con límites explícitos)",
         "cuando": "hay un resultado verificado + novedad dictaminada"},
+    "noether": {
+        "hace": "arbitraje experto de teoría de números: revisa el resultado como"
+                " referee de journal (teorema vs evidencia vs conjetura, novedad,"
+                " chequeos faltantes) — arbitraje INTERNO, no validación externa",
+        "cuando": "hay un resultado maduro que aspira a nota publicable; ANTES de"
+                  " gauss y del experto humano"},
     "reiniciar": {
         "hace": "adopta un ENUNCIADO nuevo (tu 'statement') y vuelve a empezar el ataque",
         "cuando": "el enunciado actual se agotó pero la reformulación abre camino"},

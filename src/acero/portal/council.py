@@ -21,7 +21,7 @@ STAGES = [
     {"key": "explorar", "name": "Explorar / crear",
      "ids": ["arquimedes", "davinci", "kepler", "tycho", "ramanujan", "turing"]},
     {"key": "confrontar", "name": "Confrontar",
-     "ids": ["popper", "euclides", "godel", "aristoteles"]},
+     "ids": ["popper", "euclides", "godel", "aristoteles", "noether"]},
     {"key": "segunda", "name": "Segunda jugada", "ids": ["feynman", "bohr"]},
     {"key": "publicar", "name": "Publicar", "ids": ["gauss"]},
 ]
@@ -34,7 +34,7 @@ PHASES = [
     {"key": "investig", "name": "Fase de Investigación", "sub": "buscar · registrar · dirigir",
      "ids": ["euler", "hipatia", "tycho", "bohr"]},
     {"key": "critica", "name": "Fase Crítica", "sub": "probar · refutar · publicar",
-     "ids": ["popper", "euclides", "godel", "aristoteles", "gauss"]},
+     "ids": ["popper", "euclides", "godel", "aristoteles", "gauss", "noether"]},
 ]
 _PHASE_OF = {pid: ph["key"] for ph in PHASES for pid in ph["ids"]}
 
@@ -148,6 +148,15 @@ PERSONAS: list[dict[str, Any]] = [
      "face": {"hair": "side", "hairc": "#2c231b", "skin": 1},
      "tasks": [["Codegen + sandbox + repair", "done"], ["ensure() de piezas", "done"],
                ["Sage jaulado (docker)", "done"]]},
+    {"id": "noether", "name": "Noether", "role": "Árbitra de teoría de números",
+     "module": "noether.py", "status": "new", "hands_to": "Gauss / humano",
+     "awaits": "Bohr",
+     "summary": "Referee de journal: clasifica sin piedad teorema/evidencia/conjetura, "
+                "ataca la novedad y exige los chequeos que faltan. Su arbitraje es "
+                "INTERNO — la validación final siempre es de un experto humano.",
+     "face": {"hair": "bun", "glasses": 1, "hairc": "#3a2f26", "skin": 2},
+     "tasks": [["Informe de referee", "done"], ["Dictamen de novedad", "done"],
+               ["Puente al experto humano", "doing"]]},
 ]
 
 # distinct engraved-portrait parameters per persona (drive the SVG face in council.js)
@@ -182,6 +191,8 @@ _FACES = {
                   "accent": "#e8b23c"},
     "turing": {"hair": "side", "hairc": "#2c231b", "skin": 1, "browc": "#2c231b",
                "accent": "#4c8fd6"},
+    "noether": {"hair": "bun", "glasses": "round", "hairc": "#2f261e", "skin": 2,
+                "browc": "#2f261e", "accent": "#b07cc6"},
 }
 for _p in PERSONAS:
     _p["face"] = _FACES.get(_p["id"], _p.get("face", {}))
@@ -195,12 +206,13 @@ def _clamp(x: float) -> int:
 OWNER_KIND = {"hilbert": "candidate", "hipatia": "literature", "popper": "experiment",
               "gauss": "dossier", "aristoteles": "critique",
               "feynman": "reformulation", "godel": "lemma", "bohr": "decision",
-              "ramanujan": "spark", "turing": "build"}
+              "ramanujan": "spark", "turing": "build", "noether": "review"}
 KIND_LABEL = {"candidate": "hipótesis", "literature": "literatura",
               "experiment": "experimentos", "dossier": "dossiers", "critique": "objeciones",
               "reformulation": "reformulaciones", "lemma": "lemas y cotas",
               "decision": "decisiones de orquestación",
-              "spark": "chispas (¿y si…?)", "build": "experimentos construidos"}
+              "spark": "chispas (¿y si…?)", "build": "experimentos construidos",
+              "review": "arbitrajes de referee"}
 
 
 def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
@@ -237,6 +249,9 @@ def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
     if kind == "build":
         return {"title": (o.get("verdict") or o.get("idea") or "experimento")[:140],
                 "verdict": o.get("status") or "", "by": "Turing"}
+    if kind == "review":
+        return {"title": (o.get("resumen") or "arbitraje")[:140],
+                "verdict": o.get("veredicto") or "", "by": "Noether"}
     return {"title": (o.get("summary") or o.get("claim") or o.get("title") or "—")[:140],
             "verdict": o.get("status") or "", "by": ""}
 
@@ -245,12 +260,13 @@ def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
 KIND_PERSONA = {"candidate": "hilbert", "literature": "hipatia", "experiment": "popper",
                 "reformulation": "feynman", "lemma": "godel", "negative": "popper",
                 "critique": "aristoteles", "dossier": "gauss",
-                "spark": "ramanujan", "build": "turing"}
+                "spark": "ramanujan", "build": "turing", "review": "noether"}
 KIND_STEP = {"candidate": "planteó", "literature": "buscó literatura",
              "experiment": "corrió experimento", "reformulation": "reformuló",
              "lemma": "probó lema/cota", "negative": "halló contraejemplo",
              "critique": "objetó", "dossier": "empaquetó",
-             "spark": "lanzó una chispa", "build": "construyó y corrió"}
+             "spark": "lanzó una chispa", "build": "construyó y corrió",
+             "review": "arbitró como referee"}
 _NAME_TO_ID = {p["name"].lower(): p["id"] for p in PERSONAS}
 
 

@@ -32,16 +32,20 @@ definimos x = (p+k)/4. Decimos que **k decide a p** si existe t | (p·x)² con
 t ≡ −p·x (mod k); en tal caso y = (px+t)/k, z = px(px+t)/(kt) dan
 4/p = 1/x + 1/y + 1/z con x,y,z ∈ ℤ⁺ (verificación exacta).
 
-Para N, sea P(N) el conjunto de primos duros ≤ N y C(N) el menor S ⊆ ℕ tal que
-todo p ∈ P(N) es decidido por algún k ∈ S.
+Para N y una cota B, sea P(N) el conjunto de primos duros ≤ N,
+K_B = {k ≤ B : k ≡ 3 (mod 4)} el universo de auxiliares, y **C_B(N)** el menor
+S ⊆ K_B tal que todo p ∈ P(N) es decidido por algún k ∈ S. Distinguimos tres
+nociones (arbitraje de Noether): (i) mínimo EXACTO |C_B(N)| (certificado ILP),
+(ii) cover VORAZ+poda (cota superior de (i)), y (iii) cobertura UNIVERSAL: si
+todo p ∈ P(N) tiene algún k ∈ K_B. En este trabajo B = 255 (B = 127 en 10⁵–10⁷).
 
 ## 2. Resultados computacionales (todos con aritmética exacta)
 
-| N | \|P(N)\| | sin cobertura (k≤255) | \|cover\| (voraz+poda) | cover | k=23 solo |
+| N | \|P(N)\| | sin cobertura (universal, k≤B) | cover (método) | cover | k=23 (intrínseca) |
 |---|---|---|---|---|---|
-| 10⁵ | 273 | 0 | 5 | {7,11,23,31,39} | 63.0% |
-| 10⁶ | 2,370 | 0 | 8 | {3,23,31,47,59,63,71,127} | 65.5% |
-| 10⁷ | 20,513 | 0 | 10 | {15,19,23,31,39,47,59,71,119,167} | 67.6% |
+| 10⁵ | 273 | 0 | 13 (ILP exacto, regla de splittings del ciclo)/5 (voraz, regla k) | {7,11,23,31,39} | 63.0% |
+| 10⁶ | 2,370 | 0 | 8 (voraz+poda — cota superior) | {3,23,31,47,59,63,71,127} | 65.5% |
+| 10⁷ | 20,513 | 0 | 10 (voraz+poda — cota superior) | {15,19,23,31,39,47,59,71,119,167} | 67.6% |
 | 10⁸ | ≈179,450 | 0 | 7 (muestra 1/50) | {23,31,47,59,71,119,143} | ≈70%* |
 | 10⁹ | 1,587,420 | **0** | 9 (muestra 1/100) | {23,31,39,47,59,71,95,119,167} | ≈72%* |
 
@@ -58,11 +62,18 @@ en 10⁵ (dos implementaciones del sistema + re-verificación externa): 0 fallos
 **C-ACERO-1 (versión soportada por los datos).** Existe C > 0 tal que todo
 primo duro p es decidido por algún k ≤ C·log p.
 
-**Pregunta del cover.** ¿Es |C(N)| = O(log N)? Los datos (5, 8, 10 por década)
-son consistentes con crecimiento ~logarítmico. Una prueba de cualquiera de las
-dos implicaría Erdős–Straus para las clases duras — por lo que esperamos que
-sean difíciles; el aporte de esta nota es el OBJETO (el cover mínimo y su
-crecimiento) y el dataset, no un teorema.
+**Pregunta del cover.** ¿Es |C_B(N)| = O(log N)? Los datos (5, 8, 10 por
+década — cotas superiores voraces) son consistentes con crecimiento
+~logarítmico.
+
+**Aclaración (arbitraje de Noether).** C-ACERO-1 (cota individual por primo) y
+la pregunta del cover (tamaño del conjunto) son enunciados DISTINTOS: ninguno
+implica al otro sin hipótesis adicionales sobre el universo K_B. La implicación
+hacia Erdős–Straus vale directamente para C-ACERO-1 (cada primo obtiene su
+split explícito); para la versión de cover se requiere una familia uniforme
+válida para todo N — formalización pendiente como proposición. El aporte de
+esta nota es el OBJETO (el cover y su crecimiento) y el dataset, no un teorema
+de la conjetura.
 
 ## 3b. De la evidencia al TEOREMA — la anatomía de la llave 23 (nuevo)
 
@@ -93,8 +104,11 @@ no-QR: 96.76% en 10⁶. Pregunta abierta: ¿qué distingue a 5 y 14?
 En el estrato EXACTO de arXiv:2605.23601 (primos 24m+1, m ≤ 30000 — 7,185
 primos; nuestro conteo coincide con el suyo), su familia de soluciones tame
 deja **9 wild primes**; nuestra familia de llaves tipo II con k ≤ 127 deja
-**0**. La familia de llaves domina estrictamente en cobertura sobre el mismo
-estrato.
+**0**. Matiz (arbitraje de Noether): esto es dominancia DE COBERTURA sobre ese
+estrato con ese universo de llaves — no dominancia conceptual ni minimalidad
+frente a la familia tame/wild; falta identificar sus 9 wild primes concretos y
+publicar el certificado (k, t) de cada uno bajo un universo de comparación
+común (pendiente: su lista no aparece en la Parte I del preprint).
 
 ## 4. Relación con trabajo previo (comparación obligatoria)
 
@@ -126,3 +140,14 @@ estrato.
    menores.
 4. Novedad del ángulo pendiente de confirmación por experto humano (área activa
    2024–2026).
+
+## 7. Artefactos de auditoría (arbitraje de Noether)
+
+- Repositorio: github.com/MerariJafet/acero — commit de referencia `6c94483` (+sucesores).
+- sha256 (16 hex) certificados 10⁵: JSON `5381e52a67d63b18`, CSV `d5b03023c718a872`.
+- Entorno: Python 3.12, sympy 1.14.0, aritmética exacta (fractions.Fraction).
+- Re-escaneo independiente COMPLETO de 10⁹ con conteos por k: en curso
+  (`k23_intrinseco_1e9.txt` para k=23; el barrido total por llave es el
+  siguiente artefacto del pipeline).
+- Verificador independiente mínimo: re-verificación externa por Fraction de los
+  273 certificados (0 fallos) — ver bitácora del proyecto en el ledger.

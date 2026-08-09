@@ -16,7 +16,7 @@ const PERSONA_VIEW = {
   godel: ["phase", "resultados"], aristoteles: ["phase", "hipotesis"],
   feynman: ["phase", "hipotesis"], gauss: ["phase", "conclusiones"],
   arquimedes: ["ops"], bohr: ["ops"],
-  ramanujan: ["phase", "hipotesis"], turing: ["phase", "experimentos"],
+  ramanujan: ["phase", "hipotesis"], turing: ["phase", "experimentos"], noether: ["phase", "conclusiones"],
 };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 let _pollTimer = null;   // refresco EN VIVO del Consejo (un solo timer por página)

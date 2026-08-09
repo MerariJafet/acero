@@ -944,6 +944,25 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
         an = AnomalyEngine().harvest(project_id) or []
         return {"summary": f"{len(an)} anomalías cosechadas", "verdict": str(len(an))}
 
+    def _ex_noether(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        _stage("noether", "Noether arbitra como referee de journal")
+        from ..science.noether import NoetherReviewer, render_report
+        log = "\n".join(state.get("log") or [])
+        manuscript = (f"ENUNCIADO/RESULTADO:\n{statement}\n\n"
+                      f"TRABAJO VERIFICADO DEL CICLO:\n{log}")
+        rep = NoetherReviewer(provider).referee(manuscript)
+        store.put(project_id, "review", new_id("rev"),
+                  {**rep, "origin": "consejo"},
+                  status="ISSUED", parent_id=hid, actor="Noether",
+                  summary=f"referee: {rep.get('veredicto')}")
+        objs = "; ".join(str(o)[:80] for o in (rep.get("objeciones_mayores")
+                                               or [])[:3])
+        del render_report
+        return {"summary": f"referee[{rep.get('veredicto')}]: "
+                           f"{str(rep.get('resumen'))[:140]}"
+                           + (f" | mayores: {objs}" if objs else ""),
+                "verdict": str(rep.get("veredicto") or "")}
+
     def _ex_gauss(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
         _stage("gauss", "Gauss empaqueta el dossier")
         store.put(project_id, "dossier", new_id("dos"),
@@ -959,7 +978,7 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                      "feynman": _ex_feynman, "godel": _ex_godel,
                      "ramanujan": _ex_ramanujan, "turing": _ex_turing,
                      "aristoteles": _ex_aristoteles, "kepler": _ex_kepler,
-                     "gauss": _ex_gauss}
+                     "noether": _ex_noether, "gauss": _ex_gauss}
 
     # cada jugada deja su resumen en el LOG compartido — Aristóteles (y cualquier
     # revisor) ve el trabajo real del ciclo, no un resumen vacío
