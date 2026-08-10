@@ -213,3 +213,46 @@ def test_run_bohr_cycle_conecta_ramanujan_turing_noether_al_dashboard(
         assert by_id[persona_id]["source"] == "project"
     kinds_in_rail = {s["kind"] for s in flows[0]["steps"]}
     assert {"spark", "build", "review"} <= kinds_in_rail
+
+
+def test_run_bohr_cycle_sugiere_la_siguiente_ronda_automaticamente(
+        session_factory) -> None:
+    """Capacidad institucionalizada (pedida por Merari): al cerrar CUALQUIER
+    ciclo dinámico, Bohr identifica hilos sin explorar y la última pista
+    técnica pendiente, y redacta la siguiente investigación lista para
+    lanzar — sin que un humano tenga que leer la bitácora a mano."""
+    from acero.discovery.store import DiscoveryStore
+    from acero.ledger.service import ResearchLedger
+    from acero.portal.investigator_bridge import run_bohr_cycle
+
+    class _Orch:
+        def run(self, claim):
+            return {"disposition": "partial_progress", "close_reason": "mixto",
+                    "statement": claim, "history": [
+                        {"action": "feynman", "reason": "reformular",
+                         "summary": "sugirió intentar demostrar la version acotada"}],
+                    "n_actions": 1, "elapsed_s": 0.1}
+
+    class _FakeProvider:
+        def complete_json(self, prompt, schema, *, temperature=0.0):
+            assert "action" not in schema.get("properties", {})   # es NEXT_ROUND
+            return {"hilos_no_explorados": ["Hipótesis B (ley de crecimiento)"],
+                    "pista_pendiente": "Feynman sugirió attempt_proof",
+                    "siguiente_claim": "Ataca ahora la Hipótesis B con ILP exacto...",
+                    "razon": "quedó casi sin explorar en este ciclo"}
+
+    lg = ResearchLedger(session_factory)
+    p = lg.create_project("Auto-sugerencia", domain="matemáticas")
+    out = run_bohr_cycle(p.id, "Hipótesis A: ...\nHipótesis B: ...",
+                         orchestrator=_Orch(), provider=_FakeProvider(),
+                         sf=session_factory)
+    assert out["next_round"]["pista_pendiente"] == "Feynman sugirió attempt_proof"
+
+    store = DiscoveryStore(session_factory, lg)
+    rows = store.list_rows(p.id)
+    sugs = [r for r in rows if r["kind"] == "suggestion"]
+    assert len(sugs) == 1
+    assert "Hipótesis B" in sugs[0]["payload"]["hilos_no_explorados"][0]
+    rep = next(r for r in rows if r["kind"] == "report")
+    assert "🧭 Recomendación automática" in rep["payload"]["markdown"]
+    assert "Ataca ahora la Hipótesis B" in rep["payload"]["markdown"]

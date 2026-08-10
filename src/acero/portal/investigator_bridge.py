@@ -1009,6 +1009,7 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                        "hypothesis_id": hid, "statement": claim[:160],
                        "seq": 0}, sf=sf)
     out = orch.run(claim)
+    sugg = _suggest_next_round(provider, claim, out)
     # informe compacto del ciclo dinámico (bitácora jugada a jugada)
     lines = ["# Informe de Bohr (director dinámico)\n",
              f"**Enunciado final:** {out['statement']}\n",
@@ -1019,6 +1020,20 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
     for i, h in enumerate(out["history"]):
         lines.append(f"{i + 1}. **{h['action']}** — {str(h.get('reason'))[:150]}\n"
                      f"   → {str(h.get('summary'))[:250]}")
+    if sugg:
+        hilos = ", ".join(sugg.get("hilos_no_explorados") or []) or "—"
+        lines += [
+            "\n## 🧭 Recomendación automática — qué sigue",
+            f"**Hilos sin explorar en serio este ciclo:** {hilos}",
+            f"**Pista técnica pendiente:** {sugg.get('pista_pendiente', '')}",
+            f"**Por qué vale la pena:** {sugg.get('razon', '')}",
+            "\n**Enunciado listo para la siguiente ronda (copiar y lanzar):**",
+            f"> {sugg.get('siguiente_claim', '')}",
+        ]
+        store.put(project_id, "suggestion", new_id("sug"),
+                  {**sugg, "origin": "consejo"}, status="SUGGESTED",
+                  parent_id=hid, actor="Bohr",
+                  summary=str(sugg.get("siguiente_claim") or "")[:150])
     store.put(project_id, "report", new_id("rep"),
               {"markdown": "\n".join(lines), "disposition": out["disposition"],
                "claim": out["statement"][:200], "origin": "consejo-dinamico"},
@@ -1029,4 +1044,64 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                        "label": f"Ciclo dinámico terminado: {out['disposition']} "
                                 f"({out['n_actions']} jugadas)",
                        "disposition": out["disposition"]}, sf=sf)
+    out["next_round"] = sugg
     return out
+
+
+NEXT_ROUND_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "hilos_no_explorados": {
+            "type": "array", "items": {"type": "string"},
+            "description": "hipótesis o ángulos del enunciado ORIGINAL que NO "
+                           "recibieron un ataque serio en este ciclo"},
+        "pista_pendiente": {
+            "type": "string",
+            "description": "la última pista técnica concreta que algún personaje "
+                           "sugirió (p.ej. Feynman con 'attempt_proof' o una "
+                           "reformulación) y que el ciclo NO alcanzó a perseguir"},
+        "siguiente_claim": {
+            "type": "string",
+            "description": "enunciado AUTOCONTENIDO listo para copiar y lanzar "
+                           "como la próxima investigación — con todo el contexto "
+                           "necesario para que el próximo ciclo no tenga que "
+                           "releer este informe"},
+        "razon": {"type": "string",
+                  "description": "por qué esta es la jugada de mayor valor a seguir"},
+    },
+    "required": ["hilos_no_explorados", "pista_pendiente", "siguiente_claim", "razon"],
+    "additionalProperties": False,
+}
+
+
+def _suggest_next_round(provider: Any, claim: str,
+                        out: dict[str, Any]) -> dict[str, Any] | None:
+    """Bohr, al CERRAR cualquier ciclo dinámico, mira qué hilos del enunciado
+    original quedaron sin explorar y qué pista técnica nadie persiguió, y redacta
+    la siguiente investigación lista para lanzar. Capacidad PERMANENTE: corre
+    sola en todo ciclo futuro — nadie tiene que leer la bitácora a mano para
+    saber qué sigue. Falla silenciosa (None) si el proveedor no responde: sugerir
+    la siguiente ronda es una ayuda, nunca un bloqueo del cierre del ciclo."""
+    if provider is None:
+        return None
+    hist_txt = "\n".join(
+        f"{i + 1}. [{h['action']}] {str(h.get('reason'))[:100]} → "
+        f"{str(h.get('summary'))[:220]}"
+        for i, h in enumerate(out.get("history") or []))
+    prompt = (
+        "Eres Bohr cerrando un ciclo de investigación dinámico. El ENUNCIADO "
+        "ORIGINAL puede contener VARIAS hipótesis o ángulos distintos (p.ej. "
+        "'Hipótesis A' y 'Hipótesis B'). Identifica cuáles NO recibieron un "
+        "ataque serio en este ciclo, recupera la última pista técnica concreta "
+        "que algún personaje sugirió sin perseguirla, y redacta el enunciado de "
+        "la SIGUIENTE investigación — autocontenido, listo para lanzar sin "
+        "releer este informe.\n\n"
+        f"ENUNCIADO ORIGINAL:\n{claim[:2500]}\n\n"
+        f"ENUNCIADO FINAL TRAS EL CICLO:\n{str(out.get('statement'))[:1200]}\n\n"
+        f"DISPOSICIÓN: {out.get('disposition')} — "
+        f"{str(out.get('close_reason'))[:300]}\n\n"
+        f"BITÁCORA COMPLETA:\n{hist_txt[:6500]}")
+    try:
+        return provider.complete_json(prompt, NEXT_ROUND_SCHEMA, temperature=0.4)
+    except Exception:  # noqa: BLE001 - sugerencia opcional, nunca bloquea el cierre
+        return None
