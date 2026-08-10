@@ -32,3 +32,5 @@ n=14 outdeg=5: unknown (720.0 min)
 --- v7: n=14 MARATONISTA, semilla 777, techo 240h (10 DIAS, orden de Merari) ---
 n=15 outdeg=5: unknown (720.0 min)
 FIN v4
+v5 n=14 outdeg=5: unknown (24.0h)
+FIN v5

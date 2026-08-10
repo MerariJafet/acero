@@ -778,13 +778,16 @@ def run_spark_flow(project_id: str, frontier: str, why_stuck: str, *,
 # --- BOHR v2: el director que DECIDE (flujo dinámico, no guion) ---------------------
 def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                    orchestrator: Any = None, sf: Any = None,
-                   max_actions: int = 24, wall_budget_s: float = 8 * 3600.0,
-                   turing_cap_s: int = 4 * 3600) -> dict[str, Any]:
+                   max_actions: int = 200, wall_budget_s: float = 7 * 86400.0,
+                   turing_cap_s: int = 24 * 3600) -> dict[str, Any]:
     """Bohr conoce a sus 16 científicos y decide jugada a jugada: repetir, pedir
     segunda opinión, chispa de Ramanujan, horas a Turing, reformular y reiniciar, o
     cerrar honesto. Cada jugada real queda en el ledger con su porqué, y la barra EN
-    VIVO muestra a quién le toca. El tiempo no es restricción (presupuesto de pared
-    en horas); la honestidad sí (disposiciones honestas, techo humano)."""
+    VIVO muestra a quién le toca. El tiempo NO es restricción por diseño (Merari:
+    "no pongas límite de tiempo al programa, deja que avance") — presupuesto de
+    pared por defecto de una SEMANA y hasta 200 jugadas, techos de Turing de un
+    día por experimento; solo la honestidad restringe (disposiciones honestas,
+    techo humano)."""
     from ..science.bohr import BohrOrchestrator, build_knowledge
     store = _store(sf)
     hid = record_hypothesis(project_id, claim, persona="hilbert", sf=sf)
