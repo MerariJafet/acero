@@ -210,10 +210,15 @@ class Lifecycle:
         e = self.store.get(exp_id)
         if not e:
             return {"ok": False, "error": "experiment not found"}
-        adir = Path(e.get("artifacts_dir") or "")
+        # OJO: Path("") es PosixPath(".") — truthy Y existente. Sin este guard, un
+        # experimento SIN artifacts_dir leía ./script.py, ./stdout.txt y ./out/*.png
+        # del directorio donde se lanzó el portal y los mostraba como si fueran el
+        # código del experimento (un PLANNED aparecía con 18KB de código ajeno).
+        raw_dir = str(e.get("artifacts_dir") or "").strip()
+        adir = Path(raw_dir) if raw_dir else None
         code = code_v2 = stdout = ""
         figures: list[str] = []
-        if adir and adir.exists():
+        if adir is not None and adir.is_dir():
             for name, var in (("script.py", "code"), ("script_v2.py", "code_v2"),
                               ("stdout.txt", "stdout")):
                 fp = adir / name

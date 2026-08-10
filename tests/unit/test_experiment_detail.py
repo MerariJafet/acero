@@ -59,3 +59,31 @@ def test_detail_without_artifacts_is_still_ok(session_factory):
     d = Lifecycle(session_factory).experiment_detail(p.id, e["id"])["experiment"]
     assert d["status"] == "PLANNED" and d["plan"].startswith("bajar")
     assert d["code"] == "" and d["figures"] == []
+
+
+def test_sin_artifacts_dir_no_lee_el_cwd(session_factory, tmp_path, monkeypatch):
+    """Path("") es PosixPath(".") — truthy Y existente. Un experimento sin
+    artifacts_dir leía ./script.py, ./stdout.txt y ./out/*.png del directorio donde
+    corría el portal y los servía como si fueran del experimento (en el repo había un
+    script.py de 18KB que se colaba en el dashboard de cualquier PLANNED)."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "script.py").write_text("SECRETO_DEL_CWD = 1", encoding="utf-8")
+    (tmp_path / "stdout.txt").write_text("salida ajena", encoding="utf-8")
+    (tmp_path / "out").mkdir()
+    (tmp_path / "out" / "ajena.png").write_bytes(b"\x89PNG")
+
+    p, h, e, fl = _setup(session_factory)
+    fl.store.update_payload(e["id"], {"status": "PLANNED", "artifacts_dir": ""})
+    d = Lifecycle(session_factory).experiment_detail(p.id, e["id"])["experiment"]
+    assert d["code"] == "" and d["stdout"] == "" and d["figures"] == []
+
+
+def test_artifacts_dir_apuntando_a_un_archivo_no_revienta(session_factory, tmp_path):
+    """Defensa del guard: si artifacts_dir apunta a algo que no es directorio,
+    se ignora en vez de lanzar."""
+    p, h, e, fl = _setup(session_factory)
+    f = tmp_path / "no_soy_dir.txt"
+    f.write_text("x", encoding="utf-8")
+    fl.store.update_payload(e["id"], {"status": "PLANNED", "artifacts_dir": str(f)})
+    d = Lifecycle(session_factory).experiment_detail(p.id, e["id"])["experiment"]
+    assert d["code"] == "" and d["figures"] == []
