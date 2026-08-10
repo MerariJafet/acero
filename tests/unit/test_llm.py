@@ -20,9 +20,21 @@ def test_mock_provider_records_params():
 
 
 def test_paid_provider_refuses_without_policy():
-    prov = get_provider("claude")
+    """El guard de política protege a los proveedores DE PAGO por API. 'claude' dejó
+    de serlo cuando se añadió ClaudeCliProvider (CLI local, cubierto por tu propia
+    suscripción); el único que sigue siendo PaidProvider es 'openai'. El test apuntaba
+    al proveedor equivocado y fallaba por razones cambiantes según hubiera sesión del
+    CLI o no — nunca estaba probando el guard."""
+    prov = get_provider("openai")
     with pytest.raises(PolicyViolation):
         prov.complete("anything")
+
+
+def test_claude_cli_no_es_proveedor_de_pago():
+    """Contraparte: 'claude' resuelve al CLI local, no al de pago. Si alguien lo
+    vuelve a mapear a PaidProvider, este test lo delata."""
+    from acero.llm.providers import ClaudeCliProvider
+    assert isinstance(get_provider("claude"), ClaudeCliProvider)
 
 
 def test_get_provider_defaults_to_mock():
