@@ -130,8 +130,8 @@ class BohrOrchestrator:
     """Bucle decidir→ejecutar→observar con ejecutores inyectables (tests offline)."""
 
     def __init__(self, provider: Any, executors: dict[str, Callable[..., dict]], *,
-                 knowledge: str = "", max_actions: int = 24,
-                 wall_budget_s: float = 8 * 3600.0,
+                 knowledge: str = "", max_actions: int = 200,
+                 wall_budget_s: float = 7 * 86400.0,
                  on_step: Callable[[str, dict, dict], None] | None = None) -> None:
         self._provider = provider
         self._ex = executors

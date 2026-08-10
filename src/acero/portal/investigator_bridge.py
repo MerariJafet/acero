@@ -657,7 +657,7 @@ def regenerate_report(project_id: str, *, sf: Any = None,
     if narrator_fn is None:
         def narrator_fn(facts: str) -> str:
             from ..llm.providers import CodexCliProvider
-            prov = CodexCliProvider(timeout_sec=240)
+            prov = CodexCliProvider()
             if prov is None or not prov.available():
                 return ""
             return prov.complete(f"{_NARRATOR_SYS}\n\nHECHOS (apéndice del ledger):\n"

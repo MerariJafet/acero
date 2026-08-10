@@ -31,7 +31,7 @@ def _sympify(expr: str) -> Any:
     return sympy.sympify(expr)
 
 
-def verify(kind: str, timeout_s: float = 120.0, **kw: Any) -> dict[str, Any]:
+def verify(kind: str, timeout_s: float = 900.0, **kw: Any) -> dict[str, Any]:
     """Dispatch a formal check WITH A HARD TIMEOUT. The actual verification runs in a
     child process; if it exceeds `timeout_s` the child is killed and the result is an
     honest `unknown` (timeout). Rationale: sympy can hang without bound on pathological

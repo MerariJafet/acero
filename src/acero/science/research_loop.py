@@ -166,7 +166,7 @@ class HumanAttitude:
         if self._provider is not None:
             return self._provider
         from ..llm.providers import CodexCliProvider
-        return CodexCliProvider(timeout_sec=180)
+        return CodexCliProvider()
 
     def observe(self, statement: str, probe_result: dict[str, Any],
                 trail: list[dict[str, Any]]) -> dict[str, Any]:
@@ -249,7 +249,7 @@ class ResearchLoop:
         prov = self._provider
         if prov is None:
             from ..llm.providers import CodexCliProvider
-            prov = CodexCliProvider(timeout_sec=150)
+            prov = CodexCliProvider()
         if prov is None or not getattr(prov, "available", lambda: False)():
             return ""
         try:
@@ -418,7 +418,7 @@ class ResearchLoop:
         prov = self._provider
         if prov is None:
             from ..llm.providers import CodexCliProvider
-            prov = CodexCliProvider(timeout_sec=150)
+            prov = CodexCliProvider()
         if prov is None or not getattr(prov, "available", lambda: False)():
             return None
         try:
@@ -442,7 +442,7 @@ class ResearchLoop:
         prov = self._provider
         if prov is None:
             from ..llm.providers import CodexCliProvider
-            prov = CodexCliProvider(timeout_sec=150)
+            prov = CodexCliProvider()
         if prov is None or not getattr(prov, "available", lambda: False)():
             return None
         try:

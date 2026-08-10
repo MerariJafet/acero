@@ -84,7 +84,7 @@ class TuringBuilder:
         self._ensure = ensure_fn or toolbox.ensure
 
     def build_and_run(self, chispa: dict[str, Any], piezas: list[str],
-                      budget_s: int = 3600, round_timeout_s: int = 1200,
+                      budget_s: int = 3600, round_timeout_s: int = 3600,
                       on_event: Callable[[str, dict[str, Any]], None] | None = None,
                       ) -> dict[str, Any]:
         """chispa: idea de Ramanujan (chispa/plan/primer_experimento). piezas: las que

@@ -21,8 +21,8 @@ llm:
 
 sandbox:
   backend: subprocess     # subprocess | docker
-  timeout_sec: 30
-  memory_mb: 1024
+  timeout_sec: 1800       # cómputo exacto real (cribas, set-cover, ILP) necesita
+  memory_mb: 4096         # minutos, no segundos — no limitar a los agentes
   network: disabled
 
 retrieval:

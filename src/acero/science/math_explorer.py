@@ -165,7 +165,7 @@ class MathExplorer:
         if self._provider is not None:
             return self._provider
         from ..llm.providers import CodexCliProvider
-        return CodexCliProvider(timeout_sec=220)
+        return CodexCliProvider()
 
     def _run(self, code: str) -> tuple[str, str, int]:
         if self._runner is not None:
@@ -174,7 +174,7 @@ class MathExplorer:
 
         from ..sandbox.runner import SubprocessRunner
         with tempfile.TemporaryDirectory() as tmp:
-            r = SubprocessRunner().run(code, tmp, timeout_sec=60, memory_mb=2048,
+            r = SubprocessRunner().run(code, tmp, timeout_sec=1800, memory_mb=4096,
                                        cpu_seconds=60, allow_network=False)
             return r.stdout, r.stderr, r.exit_code
 
