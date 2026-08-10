@@ -87,6 +87,29 @@ NOVEDAD_COVERING_SETS.md y stress13.py):
 - Fix Aristóteles: el crítico recibía un dict (rompía en silencio →
   'sin_revision'); ahora recibe el LOG textual completo del ciclo.
 
+## Actualización 2026-08-10 — cierre de la caza de CH n=14 (ataque directo)
+
+Los dos ataques directos con presupuesto grande sobre Caccetta–Häggkvist n=14
+(k=3, outdeg≥5) **cerraron ambos en `unknown`**, honesto, sin veredicto:
+- **v4** (n=15, 12h): `unknown` — igual que n=14, el caso también resiste.
+- **v5** (n=14, 24h de presupuesto, orden de Merari): `unknown` a las 24.0h
+  exactas — Z3 no cerró ni encontró contraejemplo en un día completo.
+
+**Lo que esto significa, sin inflar:** el método directo (una sola búsqueda Z3,
+por larga que sea) tiene un techo real en n=14. No es un fracaso — es la medida
+honesta de dónde está la frontera actual del método. El experimento de
+**cube-and-conquer** (partición del espacio en 4096 cubos) confirmó la misma
+lección desde otro ángulo: con las 12 aristas de ramificación elegidas, solo
+~1.6% de los cubos cerraba en 60s — la partición naive no muerde este problema
+(ver `cube14.txt`); hace falta ramificación estructural, no aristas sueltas.
+
+**Sigue vivo el ataque por portafolio** (la apuesta a que una ruta de búsqueda
+distinta tenga suerte donde la directa no): 4 semillas a 7 días cada una +
+1 semilla maratonista a 10 días, todas corriendo en paralelo sin límite
+artificial de tiempo. Si alguna cierra en `proved`, es un teorema nuevo del
+sistema para n=14; si en `counterexample`, sería un resultado extraordinario
+que exige verificación independiente inmediata antes de creerlo.
+
 ## Veredicto
 ACERO cerró su primer maratón autónomo con **disciplina epistémica intachable**: 50
 problemas, 3 lemas honestamente probados y etiquetados como clásicos, 1 descarte honesto,
