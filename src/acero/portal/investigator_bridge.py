@@ -84,10 +84,19 @@ def _live(project_id: str, payload: dict[str, Any], *, sf: Any = None) -> None:
 
 
 def cycle_running(project_id: str, *, sf: Any = None,
-                  max_age_s: float = 1800.0) -> bool:
+                  max_age_s: float = 6 * 3600.0) -> bool:
     """¿Hay un ciclo del Consejo VIVO en este proyecto? Guard anti-duplicados: dos
-    ciclos traslapados duplican TODO el gasto de tokens. Un estado viejo (>30 min sin
-    latido) se considera muerto para no bloquear por un crash."""
+    ciclos traslapados duplican TODO el gasto de tokens. Un estado viejo (>6h sin
+    latido) se considera muerto para no bloquear por un crash.
+
+    OJO: el latido (_stage) solo se refresca al INICIO de cada jugada, no durante
+    ella — con los techos de tiempo ya removidos (LLM hasta 3600s, sandbox hasta
+    1800s, formal_verify hasta 900s), una sola jugada de Gödel/Turing puede tardar
+    horas sin refrescar el latido. El viejo umbral de 30 min declaraba "muerto" un
+    ciclo que seguía vivo y computando de verdad, dejando la puerta abierta a que
+    un /investigate concurrente lanzara un ciclo duplicado (el mismo desperdicio
+    de tokens que este guard existe para evitar). 6h coincide con el umbral de
+    "estancamiento real" que usa el supervisor de persistencia."""
     try:
         import time
         cs = _store(sf).get(f"cstat_{project_id}") or {}
