@@ -815,6 +815,18 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                            "statement": claim[:160], "seq": state["n"]}, sf=sf)
         state["last"] = persona
 
+    def _beat(persona: str, label: str) -> None:
+        """Igual que _stage pero SIN contar una jugada nueva: solo refresca la
+        etiqueta y el timestamp. Es para los tramos largos donde nadie ejecuta
+        todavía (Bohr pensando) — el latido debe seguir vivo aunque el contador
+        de jugadas y el % no avancen."""
+        pct = min(95, 8 + int(87 * state["n"] / max(1, max_actions)))
+        _live(project_id, {"stage": persona, "persona": persona,
+                           "from_persona": state["last"], "next_persona": "bohr",
+                           "label": label[:120], "pct": pct, "round": state["n"],
+                           "will_retry": "Bohr decide", "hypothesis_id": hid,
+                           "statement": claim[:160], "seq": state["n"]}, sf=sf)
+
     # --- ejecutores REALES (cada uno registra su trabajo en el ledger) --------------
     def _ex_hipatia(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
         _stage("hipatia", "Hipatia busca en la literatura (¿ya se hizo?)")
@@ -1011,9 +1023,18 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                         f"{str(decision.get('expected') or '')[:80]}",
                         parent_id=hid, sf=sf)
 
+    def _on_think(intento: int, n_jugadas: int) -> None:
+        """Latido mientras Bohr PIENSA la siguiente jugada. Sin esto el tablero se
+        congelaba en la etiqueta del último ejecutor durante horas (decidir es una
+        llamada al LLM con techo de 3600s y hasta 3 intentos), y un ciclo sano era
+        indistinguible de uno colgado."""
+        _beat("bohr", "Bohr estudia el tablero y decide la siguiente jugada"
+                      + (f" (reintento {intento})" if intento > 1 else ""))
+
     orch = orchestrator or BohrOrchestrator(
         provider, executors, knowledge=build_knowledge(),
-        max_actions=max_actions, wall_budget_s=wall_budget_s, on_step=_on_step)
+        max_actions=max_actions, wall_budget_s=wall_budget_s, on_step=_on_step,
+        on_think=_on_think)
     _live(project_id, {"persona": "bohr", "from_persona": "bohr",
                        "next_persona": "bohr",
                        "label": "Bohr estudia el tablero y decide la primera jugada",

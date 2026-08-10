@@ -113,6 +113,33 @@ def test_ejecutor_roto_no_mata_el_ciclo() -> None:
     assert "kaputt" in str(out["history"][0]["summary"])
 
 
+def test_on_think_late_antes_de_cada_decision_incluidos_reintentos() -> None:
+    """Decidir es una llamada al LLM que puede tardar HORAS (techo 3600s, 3 intentos).
+    Sin latido en ese tramo el tablero se congela en la etiqueta del ejecutor anterior
+    y un ciclo sano se ve idéntico a uno colgado (pasó en vivo: 7h en 'Gödel/Euclides
+    intentan demostrar' cuando Gödel ya había terminado y Bohr estaba pensando)."""
+    beats: list[tuple[int, int]] = []
+    prov = _ScriptedProvider([_d("marte"),                 # inválida → reintento
+                              _d("popper"),
+                              _d("cerrar", disposition="dropped", reason="fin")])
+    BohrOrchestrator(prov, {"popper": lambda statement, decision: {"summary": "ok"}},
+                     on_think=lambda intento, n: beats.append((intento, n))).run("x")
+    # 1ª decisión: intento 1 (inválida) + intento 2 (popper) → ambos laten
+    assert beats[:2] == [(1, 0), (2, 0)]
+    # 2ª decisión ya con una jugada en el historial
+    assert (1, 1) in beats
+
+
+def test_on_think_roto_no_mata_el_ciclo() -> None:
+    """El latido es cosmético: si falla, el ciclo sigue (nunca al revés)."""
+    def boom(intento, n):
+        raise RuntimeError("tablero caído")
+
+    prov = _ScriptedProvider([_d("cerrar", disposition="dropped", reason="fin")])
+    out = BohrOrchestrator(prov, {}, on_think=boom).run("x")
+    assert out["disposition"] == "dropped"
+
+
 def test_conocimiento_incluye_a_los_16_y_el_toolbox() -> None:
     k = build_knowledge()
     for nombre in ("Ramanujan", "Turing", "Hipatia", "Bohr"):

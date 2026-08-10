@@ -132,13 +132,18 @@ class BohrOrchestrator:
     def __init__(self, provider: Any, executors: dict[str, Callable[..., dict]], *,
                  knowledge: str = "", max_actions: int = 200,
                  wall_budget_s: float = 7 * 86400.0,
-                 on_step: Callable[[str, dict, dict], None] | None = None) -> None:
+                 on_step: Callable[[str, dict, dict], None] | None = None,
+                 on_think: Callable[[int, int], None] | None = None) -> None:
         self._provider = provider
         self._ex = executors
         self._knowledge = knowledge
         self._max = max_actions
         self._wall = wall_budget_s
         self._on_step = on_step
+        # on_think(intento, n_jugadas_previas): se dispara ANTES de cada llamada al
+        # LLM que decide la jugada. Es el único latido durante ese tramo, que puede
+        # durar horas — sin él, "pensando" es indistinguible de "colgado".
+        self._on_think = on_think
 
     # --- contexto que ve Bohr en cada decisión --------------------------------------
     def _context(self, statement: str, history: list[dict[str, Any]],
@@ -161,7 +166,16 @@ class BohrOrchestrator:
     def _decide(self, statement: str, history: list[dict[str, Any]],
                 t0: float) -> dict[str, Any]:
         last_err = ""
-        for _ in range(3):
+        for intento in range(3):
+            # LATIDO: pensar la jugada es una llamada al LLM que puede tardar HORAS
+            # (techo de 3600s, hasta 3 intentos). Sin esta señal el tablero se queda
+            # congelado en la etiqueta del último ejecutor y un ciclo perfectamente
+            # sano parece colgado. No es un límite de tiempo — solo visibilidad.
+            if self._on_think:
+                try:
+                    self._on_think(intento + 1, len(history))
+                except Exception:  # noqa: BLE001 - el latido nunca rompe el ciclo
+                    pass
             try:
                 d = self._provider.complete_json(
                     self._context(statement, history, t0) + last_err,
