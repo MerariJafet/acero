@@ -876,7 +876,7 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
         for idea in ideas:
             store.put(project_id, "spark", new_id("spk"),
                       {**idea, "frontier": frontier[:300], "origin": "consejo"},
-                      status="PROPOSED", actor="Ramanujan",
+                      status="PROPOSED", parent_id=hid, actor="Ramanujan",
                       summary=str(idea.get("chispa") or "")[:120])
         top = "; ".join(f"[p={i.get('probabilidad')}] {str(i.get('chispa'))[:90]}"
                         for i in ideas[:3])
@@ -909,7 +909,7 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                    "elapsed_s": res.get("elapsed_s"), "code": last_code[:4000],
                    "origin": "consejo"},
                   status=("DONE" if res.get("status") == "completed" else "FAILED"),
-                  actor="Turing",
+                  parent_id=hid, actor="Turing",
                   summary=str(res.get("verdict") or res.get("status") or "")[:120])
         ev = "; ".join(str(e)[:80] for e in (res.get("evidence") or [])[:3])
         return {"summary": f"{res.get('status')}: {str(res.get('verdict'))[:140]} "

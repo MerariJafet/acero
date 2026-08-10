@@ -145,3 +145,71 @@ def test_run_bohr_cycle_registra_todo_en_el_ledger(session_factory) -> None:
     reps = store.list_objects(p.id, kind="report")
     assert reps and reps[-1]["origin"] == "consejo-dinamico"
     assert "Bitácora" in reps[-1]["markdown"]
+
+
+def test_run_bohr_cycle_conecta_ramanujan_turing_noether_al_dashboard(
+        session_factory) -> None:
+    """Regresión del bug reportado por Merari (2026-08-10): las chispas/builds/
+    arbitrajes existían en el ledger pero NO se enlazaban a la hipótesis
+    (faltaba parent_id) ni sumaban progreso a su personaje — el dashboard los
+    mostraba en 0%/idle pese a tener fichas reales. Este test falla si vuelve
+    a pasar."""
+    from acero.discovery.store import DiscoveryStore
+    from acero.ledger.service import ResearchLedger
+    from acero.portal.council import build_flows, council_for
+    from acero.portal.investigator_bridge import run_bohr_cycle
+
+    decisions = iter([
+        _d("ramanujan", frontier="frontera de prueba", why_stuck="agotado"),
+        _d("turing"),
+        _d("noether"),
+        _d("cerrar", disposition="needs_human_review", reason="fin de prueba"),
+    ])
+
+    class _FakeProvider:
+        def complete_json(self, prompt, schema, *, temperature=0.0):
+            props = schema.get("properties", {})
+            if "action" in props:
+                return next(decisions)
+            if "ideas" in props:
+                return {"ideas": [{"chispa": "¿y si sí?", "analogia": "a",
+                                   "plan": "p", "piezas": ["sympy"],
+                                   "piezas_faltantes": [], "probabilidad": 0.4,
+                                   "primer_experimento": "e"}]}
+            if "code" in props:
+                return {"razonamiento": "r", "necesita_piezas": [],
+                        "code": "print('VEREDICTO: ok')", "criterio_exito": "v"}
+            if "veredicto" in props:
+                return {"veredicto": "prometedor", "resumen": "va bien",
+                        "fortalezas": [], "objeciones_mayores": [],
+                        "objeciones_menores": [], "literatura_faltante": [],
+                        "chequeos_sugeridos": [], "dictamen_novedad": "n/a"}
+            raise AssertionError(f"esquema inesperado: {list(props)}")
+
+    lg = ResearchLedger(session_factory)
+    p = lg.create_project("Bug del dashboard", domain="matemáticas")
+    out = run_bohr_cycle(p.id, "conjetura de prueba", provider=_FakeProvider(),
+                         sf=session_factory)
+    assert out["disposition"] == "needs_human_review"
+
+    store = DiscoveryStore(session_factory, lg)
+    rows = store.list_rows(p.id)
+    hid = next(r["id"] for r in rows if r["kind"] == "candidate")
+    sparks = [r for r in rows if r["kind"] == "spark"]
+    builds = [r for r in rows if r["kind"] == "build"]
+    reviews = [r for r in rows if r["kind"] == "review"]
+    assert sparks and all(r["parent_id"] == hid for r in sparks)
+    assert builds and all(r["parent_id"] == hid for r in builds)
+    assert reviews and all(r["parent_id"] == hid for r in reviews)
+
+    items = {k: [r["payload"] for r in rows if r["kind"] == k]
+             for k in ("spark", "build", "review")}
+    flows = build_flows(rows)
+    data = council_for({}, items=items, flows=flows)
+    by_id = {pr["id"]: pr for pr in data["personas"]}
+    for persona_id in ("ramanujan", "turing", "noether"):
+        assert by_id[persona_id]["progress"] > 0, (
+            f"{persona_id} sigue en 0% pese a tener fichas reales")
+        assert by_id[persona_id]["source"] == "project"
+    kinds_in_rail = {s["kind"] for s in flows[0]["steps"]}
+    assert {"spark", "build", "review"} <= kinds_in_rail

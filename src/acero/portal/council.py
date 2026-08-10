@@ -472,6 +472,12 @@ def _story_line(step: dict[str, Any], nxt: str | None) -> str:
             "exacta. ¿Por qué? Una idea sin experimento es solo poesía. Significa: "
             "la chispa ya tiene evidencia a favor o en contra — nunca un teorema "
             "hasta que Gödel y Aristóteles la pasen",
+        "review":
+            "arbitré el resultado como referee de un journal: clasifiqué sin "
+            "piedad qué es TEOREMA, qué es evidencia y qué es solo conjetura, y "
+            "ataqué la novedad contra lo que conozco. ¿Por qué? Un resultado que "
+            "nadie intentó tumbar no está listo. Significa: mi arbitraje es "
+            "INTERNO — nunca sustituye la revisión de un experto humano de verdad",
     }.get(k, step.get("did") or str(k))
     if nxt:
         txt += f". Se la pasé a {_NAME_OF.get(nxt, nxt)}"
@@ -509,6 +515,7 @@ def council_for(kpis: dict[str, Any] | None,
         return len(it.get(kind) or [])
     lit_n, ref_n, lem_n, crit_n = (_n("literature"), _n("reformulation"),
                                    _n("lemma"), _n("critique"))
+    spark_n, build_n, review_n = _n("spark"), _n("build"), _n("review")
 
     # PROGRESO = trabajo REAL hecho en ESTE proyecto → 0 si nadie ha participado aún.
     # La MADUREZ de la capacidad (bueno/mejorable/nuevo/débil) NO es progreso: vive en el
@@ -529,6 +536,9 @@ def council_for(kpis: dict[str, Any] | None,
         "feynman": ref_n * 20,
         "bohr": (hyp + exp + appr + doss) * 8,
         "gauss": (doss + papers) * 24,
+        "ramanujan": spark_n * 14,
+        "turing": build_n * 25,
+        "noether": review_n * 34,
     }
 
     stories = build_stories(flows)
