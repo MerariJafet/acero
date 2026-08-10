@@ -27,7 +27,8 @@ def run_evaluation(*, baseline_version: str = "v2.0.0-rc1") -> dict[str, Any]:
         # No baseline ⇒ we cannot claim NO_REGRESSION (nothing was compared). Report it
         # honestly as insufficient rather than overreaching (Codex-audit fix).
         regression = {"per_benchmark": {}, "regressions": [],
-                      "has_regression": False, "no_baseline": True}
+                      "has_regression": False, "no_baseline": True,
+                      "slowdowns": [], "has_slowdown": False}
 
     # capability status is driven by EVIDENCE. A failing benchmark DEGRADES a capability; a
     # passing benchmark keeps its DECLARED status but never auto-PROMOTES it (promoting on a
@@ -56,10 +57,20 @@ def run_evaluation(*, baseline_version: str = "v2.0.0-rc1") -> dict[str, Any]:
         "verdict": ("REGRESSION_DETECTED" if regression.get("has_regression")
                     else "NO_REGRESSION" if has_baseline
                     else "INSUFFICIENT_BASELINE"),
+        # el reloj de pared NO degrada la capacidad, pero jamás se esconde: si algo
+        # tardó mucho más, queda dicho aquí para que un humano juzgue si fue la
+        # máquina (carga) o el código (algoritmo peor).
+        "performance_note": (
+            "benchmarks más lentos que el baseline: "
+            + ", ".join(regression.get("slowdowns") or [])
+            + " — puede ser carga de la máquina (ACERO corre investigaciones de días "
+              "en paralelo), no necesariamente peor código. No bloquea el release."
+            if regression.get("has_slowdown") else ""),
         "note": "self-evaluation reports evidence against ACERO's OWN (not independent) "
                 "benchmarks; NO_REGRESSION means only 'no change vs the locked baseline'. It "
                 "never self-approves and never treats more tests/code as improvement. A human "
-                "decides.",
+                "decides. Un benchmark más LENTO con la misma calidad no es pérdida de "
+                "capacidad: se reporta en performance_note, no como regresión.",
     }
 
 

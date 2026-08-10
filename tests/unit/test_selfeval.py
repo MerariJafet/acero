@@ -16,7 +16,8 @@ from acero.selfeval.models import (
     RegressionStatus,
 )
 from acero.selfeval.proposals import ProposalError, ProposalRegistry
-from acero.selfeval.regression import compare_benchmark, compare_metric, compare_run
+from acero.selfeval.regression import (compare_benchmark, compare_metric,
+                                       compare_performance, compare_run)
 from acero.selfeval.tools import evaluate_tools
 
 # --- capabilities ---------------------------------------------------------
@@ -96,6 +97,41 @@ def test_compare_run_flags_regression():
 def test_compare_benchmark_insufficient_without_baseline():
     r = compare_benchmark(None, {"metrics": {"x": 1.0}})
     assert r["status"] == RegressionStatus.INSUFFICIENT_DATA.value
+
+
+def test_lentitud_no_es_perdida_de_capacidad() -> None:
+    """Tardar más NO es ser peor. Medir reloj de pared mide la MÁQUINA: con ACERO
+    corriendo sus propias investigaciones de días (solvers Z3, Consejo al 80% de CPU)
+    el gate de release se auto-bloqueaba por carga, con la calidad intacta. La
+    ralentización se reporta, pero no degrada la capacidad ni bloquea."""
+    base = {"results": {"b": {"metrics": {"pass_rate": 1.0}, "duration_sec": 2.6}}}
+    cur = {"results": {"b": {"metrics": {"pass_rate": 1.0}, "duration_sec": 8.9}}}
+    r = compare_run(base, cur)
+    assert r["has_regression"] is False and r["regressions"] == []   # no bloquea
+    assert r["has_slowdown"] is True and r["slowdowns"] == ["b"]      # pero se ve
+    assert r["per_benchmark"]["b"]["performance"] == RegressionStatus.REGRESSED.value
+    assert r["per_benchmark"]["b"]["status"] == RegressionStatus.UNCHANGED.value
+
+
+def test_caida_de_calidad_sigue_bloqueando_aunque_sea_mas_rapido() -> None:
+    """El contrapeso del test anterior: perder calidad SÍ es regresión, y que además
+    corra más rápido no la compensa."""
+    base = {"results": {"b": {"metrics": {"pass_rate": 1.0}, "duration_sec": 9.0}}}
+    cur = {"results": {"b": {"metrics": {"pass_rate": 0.5}, "duration_sec": 0.5}}}
+    r = compare_run(base, cur)
+    assert r["has_regression"] is True and r["regressions"] == ["b"]
+
+
+def test_rendimiento_se_juzga_por_razon_no_por_segundos_absolutos() -> None:
+    """Una tolerancia fija de 2s es irrelevante para un benchmark de 0.05s y
+    asfixiante para uno de 30s."""
+    # rápido: 0.05s → 1.0s es 20x más lento pero cabía en la vieja tolerancia de 2s
+    assert compare_performance(0.05, 1.0) == RegressionStatus.REGRESSED
+    # lento: 30s → 33s es solo 1.1x, la vieja tolerancia lo marcaba como regresión
+    assert compare_performance(30.0, 33.0) == RegressionStatus.UNCHANGED
+    assert compare_performance(10.0, 1.0) == RegressionStatus.IMPROVED
+    # ruido de milisegundos: 3x en términos relativos, pero irrelevante en absoluto
+    assert compare_performance(0.01, 0.03) == RegressionStatus.UNCHANGED
 
 
 # --- failure memory -------------------------------------------------------
