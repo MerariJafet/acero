@@ -32,7 +32,7 @@ CKPT = os.path.join(HERE, "cover_growth.ckpt")
 LIMIT = int(float(os.environ.get("COVER_LIMIT", "1e9")))
 KMAX = 240
 HARD_RES = {1, 121, 169, 289, 361, 529}          # p mod 840 (residuos duros)
-MILESTONES = sorted({int(a * 10 ** m) for m in range(5, 10) for a in (1, 2, 5)
+MILESTONES = sorted({int(a * 10 ** m) for m in range(5, 13) for a in (1, 2, 5)
                      if int(a * 10 ** m) <= LIMIT})
 KEYS = [k for k in range(3, KMAX + 1, 2) if math.gcd(k, 840) == 1]
 KIDX = {k: i for i, k in enumerate(KEYS)}
