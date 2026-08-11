@@ -151,3 +151,29 @@ def test_bohr_ve_el_sello_y_la_alerta_en_reinicios(session_factory) -> None:
 
     res = BohrOrchestrator(_Scripted(), {}, on_restart=_guard).run("original")
     assert any("GUARDIÁN" in str(h.get("summary")) for h in res["history"])
+
+
+def test_derivas_graves_repetidas_escalan_a_bloqueo(session_factory) -> None:
+    """Aprendido EN VIVO (Ronda 5): el guardián marcaba cada deriva por separado
+    y Bohr reintentaba una variante de lo mismo cinco veces. El guard anti-bucle
+    de Bohr no ayuda porque exige resúmenes idénticos y cada reformulación cambia
+    de texto. A partir del umbral la alerta declara la dirección BLOQUEADA."""
+    from acero.portal.premise import (GRAVE_BLOCK_THRESHOLD, count_grave,
+                                      drift_warning)
+    grave = {"deriva": True, "severidad": "grave",
+             "que_se_debilito": "sustituyó el criterio", "razon": "más flojo"}
+    # las primeras avisan
+    w1 = drift_warning(grave, n_grave=1)
+    assert "ALERTA" in w1 and "BLOQUEADA" not in w1
+    # al acumularse, BLOQUEAN
+    w3 = drift_warning(grave, n_grave=GRAVE_BLOCK_THRESHOLD)
+    assert "DIRECCIÓN BLOQUEADA" in w3
+    assert "cambia de ENFOQUE" in w3 and "CIERRA" in w3
+    # una deriva LEVE nunca escala, por muchas graves que haya
+    leve = {**grave, "severidad": "leve"}
+    assert "BLOQUEADA" not in drift_warning(leve, n_grave=9)
+    # y sin deriva no hay alerta
+    assert drift_warning({"deriva": False}, n_grave=9) == ""
+
+    pid, prem = _sello(session_factory)
+    assert count_grave(pid, sf=session_factory) == 0

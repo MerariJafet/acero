@@ -809,7 +809,8 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
     día por experimento; solo la honestidad restringe (disposiciones honestas,
     techo humano)."""
     from ..science.bohr import BohrOrchestrator, build_knowledge
-    from .premise import check_drift, drift_warning, get_premise, premise_context
+    from .premise import (check_drift, count_grave, drift_warning, get_premise,
+                          premise_context)
     store = _store(sf)
     hid = record_hypothesis(project_id, claim, persona="hilbert", sf=sf)
     if provider is None and orchestrator is None:
@@ -822,12 +823,16 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
     premise = get_premise(project_id, sf=sf)
 
     def _drift_check(new_statement: str) -> str:
-        """Devuelve la advertencia (o '') y registra la deriva en el ledger."""
+        """Devuelve la advertencia (o '') y registra la deriva en el ledger.
+
+        Escala a BLOQUEO cuando se acumulan derivas graves: marcar cada una por
+        separado no rompe un bucle de reformulaciones que cambian de texto pero
+        empujan a la misma dirección prohibida (observado en vivo en la Ronda 5)."""
         if not premise:
             return ""
         res = check_drift(provider, premise, new_statement,
                           project_id=project_id, parent_id=hid, sf=sf)
-        return drift_warning(res)
+        return drift_warning(res, n_grave=count_grave(project_id, sf=sf))
 
     def _stage(persona: str, label: str) -> None:
         state["n"] += 1

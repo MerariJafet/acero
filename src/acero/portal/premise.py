@@ -155,11 +155,40 @@ def check_drift(provider: Any, premise: dict[str, Any], statement: str,
     return result
 
 
-def drift_warning(result: dict[str, Any]) -> str:
-    """Línea de alerta para inyectar al historial que Bohr lee."""
+def count_grave(project_id: str, sf: Any = None) -> int:
+    """Cuántas derivas GRAVES lleva esta investigación."""
+    try:
+        return sum(1 for d in _store(sf).list_objects(project_id, kind="drift")
+                   if d.get("severidad") == "grave")
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+# A partir de esta cantidad de derivas graves, la dirección se considera
+# BLOQUEADA: no es que una jugada se equivocara, es que el ciclo insiste en
+# empujar hacia donde el sello no deja.
+GRAVE_BLOCK_THRESHOLD = 3
+
+
+def drift_warning(result: dict[str, Any], *, n_grave: int = 0) -> str:
+    """Línea de alerta para inyectar al historial que Bohr lee.
+
+    ESCALADA (aprendida en vivo, Ronda 5): el guardián marcaba cada deriva por
+    separado y Bohr reintentaba una variante de lo mismo — cinco veces seguidas.
+    Marcar sin escalar no rompe un bucle: el guard anti-bucle de Bohr exige
+    resúmenes IDÉNTICOS y estas reformulaciones cambian de texto cada vez. A
+    partir del umbral, la alerta deja de ser advertencia y pasa a declarar la
+    dirección BLOQUEADA."""
     if not result.get("deriva"):
         return ""
-    return (f"⚠️ ALERTA DEL GUARDIÁN DE PREMISA [{result.get('severidad')}]: "
-            f"{result.get('que_se_debilito')} — {result.get('razon')} "
-            "El enunciado NO respeta el sello: corrige la jugada o declara la "
-            "desviación explícitamente.")
+    base = (f"⚠️ ALERTA DEL GUARDIÁN DE PREMISA [{result.get('severidad')}]: "
+            f"{result.get('que_se_debilito')} — {result.get('razon')} ")
+    if result.get("severidad") == "grave" and n_grave >= GRAVE_BLOCK_THRESHOLD:
+        return (base + f"🛑 DIRECCIÓN BLOQUEADA: van {n_grave} derivas GRAVES en "
+                "esta investigación, todas empujando contra el sello. NO vuelvas a "
+                "reformular hacia ahí: cambia de ENFOQUE (otra representación, otro "
+                "sub-problema que sí alimente el porqué) o CIERRA con disposición "
+                "honesta y deja la decisión al humano. Insistir es gastar el "
+                "presupuesto en una dirección que el sello ya rechazó.")
+    return (base + "El enunciado NO respeta el sello: corrige la jugada o declara "
+            "la desviación explícitamente.")
