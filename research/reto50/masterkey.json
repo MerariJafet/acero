@@ -18787,9 +18787,11 @@
   "holdout_n": 152,
   "con_regla_aplicable": 144,
   "aciertos_certificados": 127,
+  "n_fallos": 17,
+  "n_puertas_con_fallo": 17,
   "precision_certificada": 0.8819,
   "cobertura": 0.9474,
-  "fallos": [
+  "fallos_muestra": [
    {
     "p": 103681,
     "regla": "qr_11 == 10",
@@ -18861,7 +18863,8 @@
     "testigo": null
    }
   ],
-  "nota": "precisi\u00f3n sobre casos donde ALGUNA regla aplica; la cobertura dice cu\u00e1ntas puertas quedan sin construcci\u00f3n"
+  "fallos_truncados": 7,
+  "nota": "precisi\u00f3n sobre casos donde ALGUNA regla aplica; la cobertura dice cu\u00e1ntas puertas quedan sin construcci\u00f3n. n_fallos cuenta APLICACIONES fallidas; n_puertas_con_fallo cuenta puertas distintas (hoy cada puerta recibe una sola regla, as\u00ed que coinciden \u2014 si eso cambia, dejar\u00e1n de hacerlo)"
  },
  "control_trivial": {
   "disponible": true,

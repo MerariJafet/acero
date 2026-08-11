@@ -295,14 +295,25 @@ def evaluate_on_holdout(rules: list[dict[str, Any]],
                            "abre": bool(abre),
                            "testigo": (w or {}).get("t")})
     con_regla = [x for x in resultados if x["regla"]]
+    fallos = [x for x in con_regla if x["abre"] is False]
+    # SIN TOPES SILENCIOSOS. La versión anterior guardaba `fallos[:10]` y el log
+    # imprimía len() de la lista YA RECORTADA: con 144 aplicaciones y 127
+    # certificadas se reportaban "10 fallos" cuando eran 17. Merari lo cazó
+    # restando. Ahora el conteo es el conteo y la muestra dice que es muestra.
     return {"holdout_n": len(holdout), "con_regla_aplicable": len(con_regla),
             "aciertos_certificados": cubiertas,
+            "n_fallos": len(fallos),
+            "n_puertas_con_fallo": len({x["p"] for x in fallos}),
             "precision_certificada": (round(cubiertas / len(con_regla), 4)
                                       if con_regla else None),
             "cobertura": round(len(con_regla) / len(holdout), 4) if holdout else 0,
-            "fallos": [x for x in con_regla if x["abre"] is False][:10],
+            "fallos_muestra": fallos[:10],
+            "fallos_truncados": max(0, len(fallos) - 10),
             "nota": "precisión sobre casos donde ALGUNA regla aplica; la "
-                    "cobertura dice cuántas puertas quedan sin construcción"}
+                    "cobertura dice cuántas puertas quedan sin construcción. "
+                    "n_fallos cuenta APLICACIONES fallidas; n_puertas_con_fallo "
+                    "cuenta puertas distintas (hoy cada puerta recibe una sola "
+                    "regla, así que coinciden — si eso cambia, dejarán de hacerlo)"}
 
 
 def main() -> None:
@@ -325,7 +336,9 @@ def main() -> None:
     log(f"reglas sin excepción en train: {len(rules)}")
     ev = evaluate_on_holdout(rules, holdout)
     log(f"HOLDOUT: cobertura {ev['cobertura']:.1%} | precisión certificada "
-        f"{ev['precision_certificada']} | fallos {len(ev['fallos'])}")
+        f"{ev['precision_certificada']} | {ev['aciertos_certificados']}/"
+        f"{ev['con_regla_aplicable']} | fallos {ev['n_fallos']} "
+        f"({ev['n_puertas_con_fallo']} puertas distintas)")
     base = baseline_control(train, holdout)
     if base.get("disponible"):
         mej = base["mejor_llave_fija"]
