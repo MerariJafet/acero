@@ -13,6 +13,7 @@ Honestidad:
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -58,6 +59,40 @@ enfoque es imposible, di por qué en razonamiento y devuelve un experimento
 alternativo más simple que aún ataque la chispa."""
 
 
+def mem_limit_bytes() -> int:
+    """Techo de memoria para un experimento generado.
+
+    `ACERO_TURING_MEM_GB` manda; si no, la mitad de la RAM física. Es una
+    fracción y no un número fijo porque el programa se instala en máquinas muy
+    distintas y un tope absoluto sería inútil o asfixiante según cuál."""
+    env = os.environ.get("ACERO_TURING_MEM_GB", "").strip()
+    if env:
+        try:
+            return int(float(env) * 1024 ** 3)
+        except ValueError:
+            pass
+    try:
+        with open("/proc/meminfo", encoding="ascii") as fh:
+            for linea in fh:
+                if linea.startswith("MemTotal:"):
+                    return int(linea.split()[1]) * 1024 // 2
+    except OSError:
+        pass
+    return 4 * 1024 ** 3          # sin /proc: conservador antes que temerario
+
+
+# Lanzador: fija el límite DENTRO del hijo y luego ejecuta el script como
+# __main__. Se hace así y no con preexec_fn porque el portal es multihilo y
+# fork+preexec puede colgar el hijo; esto es fork-safe y además deja el script
+# del LLM intacto, sin desplazar los números de línea de sus trazas.
+_LANZADOR = (
+    "import resource,runpy,sys;"
+    "lim=int(sys.argv[1]);"
+    "resource.setrlimit(resource.RLIMIT_AS,(lim,lim));"
+    "runpy.run_path(sys.argv[2],run_name='__main__')"
+)
+
+
 def _default_run(code: str, timeout_s: int) -> dict[str, Any]:
     """Corre el script con el python del venv, aislado en un dir temporal.
 
@@ -67,18 +102,40 @@ def _default_run(code: str, timeout_s: int) -> dict[str, Any]:
     auditoría del 10-ago marcó esto como riesgo; Merari lo ACEPTA porque corre en
     su PC de entrenamiento aislada. NO es un descuido: es una elección de diseño
     para este entorno. En un despliegue no aislado habría que enrutar por
-    SubprocessRunner (como MathProbe) — ver docs/ACERO_CONSOLIDATION_DOSSIER.md §11.1."""
+    SubprocessRunner (como MathProbe) — ver docs/ACERO_CONSOLIDATION_DOSSIER.md §11.1.
+
+    TECHO DE MEMORIA (2026-08-11, aprendido en vivo): un experimento generado
+    creció hasta 54 GiB en 35 minutos y dejó la máquina con 1.6 GiB libres y sin
+    swap; hubo que matarlo a mano para no perder el portal y las 5 semillas de
+    Caccetta–Häggkvist. `cover_growth.py` y `kmin_law.py` sí tenían guarda de
+    memoria, pero un script que escribe un LLM no la lleva — y no se le puede
+    pedir por prompt, porque el prompt no es un mecanismo.
+
+    Esto NO contradice la decisión de arriba: sin jaula ≠ sin techo. El límite no
+    le quita a Turing ninguna capacidad de investigar; solo impide que se lleve
+    por delante la máquina que lo hospeda. Y el fallo es ÚTIL: el hijo muere con
+    MemoryError, el mensaje entra al bucle de reparación y el siguiente intento
+    puede escribir una versión que quepa."""
+    limite = mem_limit_bytes()
     with tempfile.TemporaryDirectory(prefix="acero_turing_") as td:
         path = f"{td}/experimento.py"
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(code)
         try:
-            r = subprocess.run([sys.executable, path], cwd=td, capture_output=True,
-                               text=True, timeout=timeout_s)
-            return {"rc": r.returncode, "stdout": r.stdout[-6000:],
-                    "stderr": r.stderr[-2500:]}
+            r = subprocess.run([sys.executable, "-c", _LANZADOR, str(limite), path],
+                               cwd=td, capture_output=True, text=True,
+                               timeout=timeout_s)
+            err = r.stderr[-2500:]
+            if "MemoryError" in r.stderr or "Cannot allocate memory" in r.stderr:
+                err += (f"\n[ACERO] el experimento superó el techo de "
+                        f"{limite / 1024 ** 3:.1f} GiB. Rehazlo con menos memoria: "
+                        "procesa por lotes o en streaming en vez de materializar "
+                        "todo, y no acumules listas del tamaño del barrido.")
+            return {"rc": r.returncode, "stdout": r.stdout[-6000:], "stderr": err,
+                    "mem_limit_bytes": limite}
         except subprocess.TimeoutExpired:
-            return {"rc": -1, "stdout": "", "stderr": f"TIMEOUT {timeout_s}s"}
+            return {"rc": -1, "stdout": "", "stderr": f"TIMEOUT {timeout_s}s",
+                    "mem_limit_bytes": limite}
 
 
 class TuringBuilder:
