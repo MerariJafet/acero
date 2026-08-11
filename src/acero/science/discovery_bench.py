@@ -41,8 +41,12 @@ def _rows(xs: list[float], ys: list[float], xname: str = "x",
 
 def _has(cands: list[dict[str, Any]], *, method: str | None = None,
          needle: str | None = None, ptype: str | None = None,
-         min_support: float = 0.0) -> bool:
+         min_support: float = 0.0, allow_trivial: bool = False) -> bool:
     for c in cands:
+        # un patrón TRIVIAL POR CONSTRUCCIÓN no cuenta como descubrimiento:
+        # correlacionar log(x) con sqrt(x) es aritmética, no hallazgo
+        if not allow_trivial and c.get("trivial_by_construction"):
+            continue
         if method and c.get("method") != method:
             continue
         if ptype and c.get("pattern_type") != ptype:
@@ -166,7 +170,7 @@ def _run_config(rows: list[dict[str, Any]], target: str, config: str
                     and "/" not in k and "*" not in k), None)
         out += P.SequenceDiscoverer().discover(cols, recipes, target, index=idx,
                                                dhash=dhash)
-    return P.consensus(out)
+    return P.consensus(P.mark_trivial(out))
 
 
 CONFIGS = ["solo_estadistica", "simbolico", "mendeleev_completo"]

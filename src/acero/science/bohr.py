@@ -67,6 +67,29 @@ ACTION_MENU: dict[str, dict[str, str]] = {
                 " chequeos faltantes) — arbitraje INTERNO, no validación externa",
         "cuando": "hay un resultado maduro que aspira a nota publicable; ANTES de"
                   " gauss y del experto humano"},
+    "reinterpretar": {
+        "hace": "CAMBIA LA MIRADA, no el problema: propone otra representación"
+                " matemáticamente válida del MISMO objeto (matriz binaria, grafo"
+                " bipartito, restricciones booleanas/SAT, sistema de conjuntos,"
+                " secuencia de excepciones, clases modulares…) y declara qué"
+                " información se preserva y cuál se pierde. Habilita herramientas"
+                " de OTRA rama sobre el mismo problema",
+        "cuando": "el ataque directo se repite sin avanzar, o sospechas que la"
+                  " estructura es invisible en la representación actual. La Ronda 4"
+                  " ejecutó todo bien sobre la mirada equivocada: esta jugada existe"
+                  " para eso. NO cambia la premisa sellada — solo cómo se mira"},
+    "rivales": {
+        "hace": "genera TEORÍAS RIVALES explícitas para un patrón/conjetura"
+                " (mecanismo directo, inverso, causa común, artefacto de"
+                " selección/medición, explicación nula) antes de creerle",
+        "cuando": "hay un patrón o resultado positivo SIN alternativas"
+                  " descartadas — obligatorio antes de madurar hacia gauss"},
+    "discriminar": {
+        "hace": "diseña el experimento que MÁS separa a las rivales vivas:"
+                " calcula qué resultado esperaría cada una y elige el que"
+                " maximiza el desacuerdo (ganancia de información real)",
+        "cuando": "existen ≥2 rivales con predicciones distinguibles; es la"
+                  " jugada más informativa por unidad de cómputo cuando aplica"},
     "mendeleev": {
         "hace": "busca ESTRUCTURA en los datos verificados del proyecto: deriva"
                 " representaciones (log, razones, módulos), detecta correlaciones,"
@@ -117,10 +140,19 @@ DECIDE_SCHEMA: dict[str, Any] = {
         "target": {"type": "string",
                    "description": "solo mendeleev: columna objetivo para buscar una "
                                   "ley y=f(x) ('' = solo correlaciones/invariantes)"},
+        "representacion": {
+            "type": "string",
+            "description": "solo reinterpretar: la representación destino "
+                           "(matriz | grafo | booleano_sat | conjuntos | "
+                           "secuencia | modular | geometrico) ('' si no)"},
+        "info_perdida": {
+            "type": "string",
+            "description": "solo reinterpretar: qué información NO sobrevive a la "
+                           "transformación — declararlo es obligatorio ('' si no)"},
     },
     "required": ["action", "reason", "expected", "statement", "frontier", "why_stuck",
                  "idea", "piezas", "budget_min", "disposition", "dataset_ref",
-                 "target"],
+                 "target", "representacion", "info_perdida"],
     "additionalProperties": False,
 }
 
@@ -153,7 +185,8 @@ class BohrOrchestrator:
                  on_step: Callable[[str, dict, dict], None] | None = None,
                  on_think: Callable[[int, int], None] | None = None,
                  on_restart: Callable[[str], str] | None = None,
-                 policy: Any = "default") -> None:
+                 policy: Any = "default",
+                 state_provider: Callable[[], dict] | None = None) -> None:
         self._provider = provider
         self._ex = executors
         self._knowledge = knowledge
@@ -176,6 +209,9 @@ class BohrOrchestrator:
             self._policy: Any = PolicyEngine()
         else:
             self._policy = policy
+        # state_provider() -> {rivals, n_hypotheses, …}: lo que el PolicyEngine
+        # necesita para CALCULAR información esperada en vez de creerle al LLM
+        self._state_provider = state_provider
 
     # --- contexto que ve Bohr en cada decisión --------------------------------------
     def _context(self, statement: str, history: list[dict[str, Any]],
@@ -227,7 +263,13 @@ class BohrOrchestrator:
             if isinstance(prop, dict) and "candidatas" in prop:
                 cands = [c for c in (prop.get("candidatas") or [])
                          if str(c.get("action") or "") in ACTION_MENU]
-                winner, _scored = self._policy.choose(cands, history)
+                st = None
+                if self._state_provider:
+                    try:
+                        st = self._state_provider()
+                    except Exception:  # noqa: BLE001 - estado roto ⇒ sin mecánico
+                        st = None
+                winner, _scored = self._policy.choose(cands, history, st)
                 if winner is not None:
                     return winner
                 attempts_done = 1          # propuesta sin candidata válida

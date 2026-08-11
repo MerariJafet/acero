@@ -152,6 +152,86 @@ def _pearson(x: list[float], y: list[float]) -> float:
     return float(np.corrcoef(x, y)[0, 1])
 
 
+def permutation_null(x: list[float], y: list[float], stat, *, seed: int,
+                     n_perm: int = 60) -> dict[str, Any]:
+    """TEST DE PERMUTACIÓN — la defensa contra la minería de múltiples hipótesis.
+
+    Si buscas correlaciones entre decenas de features derivadas de ruido puro,
+    ALGUNA saldrá espectacular por azar. La pregunta correcta no es "¿qué tan
+    fuerte es?" sino "¿qué tan seguido sale así de fuerte cuando NO hay relación?".
+
+    Rompemos la relación barajando `y` y recalculamos el estadístico n_perm
+    veces: p empírico = fracción de barajadas que igualan o superan lo observado.
+    Esto es evidencia contra "aparece igual por azar bajo ESTE nulo" — nunca una
+    verdad universal, y así se declara en el candidato.
+
+    Corrección por búsqueda múltiple: el llamador debe pasar cuántas comparaciones
+    hizo (deuda de búsqueda) para exigir un umbral más duro."""
+    import numpy as np
+    n = len(x)
+    if n < 8:
+        return {"p_empirical": None, "n_perm": 0,
+                "why": "muestra insuficiente para permutar (<8)"}
+    rng = np.random.default_rng(seed + 977)
+    observed = abs(float(stat(x, y)))
+    ge = 0
+    for _ in range(n_perm):
+        idx = rng.permutation(n)
+        shuffled = [y[i] for i in idx]
+        if abs(float(stat(x, shuffled))) >= observed:
+            ge += 1
+    p = (ge + 1) / (n_perm + 1)      # estimador de Davison-Hinkley (sin p=0)
+    # `p_raw` SIN redondear: comparar el valor redondeado contra el umbral
+    # producía un falso rechazo justo en el mínimo alcanzable (0.0164 > 0.016393)
+    return {"p_empirical": round(p, 4), "p_raw": p, "n_perm": n_perm,
+            "observed": round(observed, 4),
+            "null_recipe": "permutación de y (rompe la relación, preserva marginales)",
+            "seed": seed + 977}
+
+
+def family_wise_threshold(cols: dict[str, list[float]], *, seed: int,
+                          n_perm: int = 40, quantile: float = 0.95
+                          ) -> dict[str, Any]:
+    """Umbral FAMILY-WISE por permutación (max-estadístico, estilo Westfall-Young).
+
+    El test por-par no basta cuando el candidato reportado es el MÁXIMO de ~1000
+    comparaciones: ese máximo es alto por construcción aunque todo sea ruido. La
+    corrección correcta es simular el proceso COMPLETO de búsqueda: en cada
+    permutación se rompen TODAS las relaciones (cada columna se baraja de forma
+    independiente) y se anota la correlación máxima que la búsqueda habría
+    encontrado. El umbral es el cuantil 95 de esos máximos.
+
+    Interpretación honesta: superar este umbral significa "más fuerte que lo que
+    una búsqueda del mismo tamaño encuentra en datos sin relación", no "es real".
+    """
+    import numpy as np
+    names = sorted(cols)
+    if len(names) < 2:
+        return {"threshold": 0.0, "n_perm": 0, "why": "menos de 2 columnas"}
+    m = np.array([cols[k] for k in names], float)      # (features × filas)
+    n_rows = m.shape[1]
+    if n_rows < 8:
+        return {"threshold": 0.0, "n_perm": 0, "why": "muestra < 8 filas"}
+    rng = np.random.default_rng(seed + 31337)
+    maxima = []
+    for _ in range(n_perm):
+        shuffled = np.array([row[rng.permutation(n_rows)] for row in m])
+        with np.errstate(invalid="ignore", divide="ignore"):
+            c = np.corrcoef(shuffled)
+        np.fill_diagonal(c, 0.0)
+        c = np.nan_to_num(c, nan=0.0, posinf=0.0, neginf=0.0)
+        maxima.append(float(np.max(np.abs(c))))
+    thr = float(np.quantile(maxima, quantile))
+    return {"threshold": round(thr, 4), "n_perm": n_perm,
+            "quantile": quantile, "n_features": len(names),
+            "n_comparisons": len(names) * (len(names) - 1) // 2,
+            "null_recipe": "cada columna barajada independientemente; se registra "
+                           "el MÁXIMO |r| que la búsqueda completa habría hallado",
+            "seed": seed + 31337,
+            "interpretacion": "superar el umbral = más fuerte que lo que una "
+                              "búsqueda del mismo tamaño encuentra en ruido"}
+
+
 def _bootstrap_stability(x: list[float], y: list[float], stat, *, seed: int,
                          n_rounds: int = 5, drop: float = 0.2) -> float:
     """Estabilidad = 1 − dispersión del estadístico al soltar el 20% de las filas.
@@ -183,6 +263,15 @@ class StatisticalDiscoverer:
         prov = {"dataset_hash": dhash, "seed": seed,
                 "n_rows": len(cols[names[0]]) if names else 0,
                 "params": {"min_support": min_support}}
+        # DEUDA DE BÚSQUEDA: cuántos pares se van a mirar. Buscar entre miles de
+        # combinaciones garantiza que alguna salga "espectacular" por azar; el
+        # umbral se corrige por ese número (y queda registrado en la procedencia).
+        n_comparisons = max(1, len(names) * (len(names) - 1) // 2)
+        nulls_run = 0
+        # umbral FAMILY-WISE: simula la búsqueda COMPLETA sobre datos sin relación
+        # y exige superar lo que esa búsqueda encontraría por azar (el máximo).
+        fw = family_wise_threshold(cols, seed=seed)
+        fw_thr = float(fw.get("threshold") or 0.0)
         # invariantes: columna derivada casi constante (razón ≈ k) — oro puro
         for k in names:
             v = cols[k]
@@ -212,6 +301,21 @@ class StatisticalDiscoverer:
                 r = _pearson(cols[a], cols[b])
                 if abs(r) < min_support:
                     continue
+                if fw_thr and abs(r) <= fw_thr:
+                    continue        # no supera lo que la búsqueda halla en ruido
+                null = permutation_null(cols[a], cols[b], _pearson, seed=seed)
+                nulls_run += 1
+                p_emp = null.get("p_raw", null.get("p_empirical"))
+                # Corrección por búsqueda múltiple (Bonferroni sobre las
+                # comparaciones REALMENTE hechas), con PISO DE RESOLUCIÓN: con
+                # n_perm permutaciones el p más pequeño observable es 1/(n_perm+1);
+                # exigir menos que eso rechazaría TODO, señal incluida. Se pide
+                # entonces el mínimo alcanzable — "ni una sola barajada lo igualó" —
+                # y se declara la limitación en la procedencia.
+                alpha = max(0.05 / max(1, n_comparisons),
+                            1.0 / (int(null.get("n_perm") or 60) + 1))
+                if p_emp is not None and p_emp > alpha + 1e-9:
+                    continue          # indistinguible del azar bajo este nulo
                 out.append(make_candidate(
                     method="statistical", variables=[a, b],
                     pattern_type="correlacion",
@@ -224,7 +328,19 @@ class StatisticalDiscoverer:
                     stability=_bootstrap_stability(cols[a], cols[b], _pearson,
                                                    seed=seed),
                     simplicity=0.7,
-                    provenance={**prov,
+                    provenance={**prov, "null_test": null,
+                                "family_wise_null": fw,
+                                "search_debt": {"comparisons": n_comparisons,
+                                                "alpha_corrected": round(alpha, 6),
+                                                "alpha_bonferroni":
+                                                    round(0.05 / max(1, n_comparisons), 8),
+                                                "resolution_floor":
+                                                    round(1.0 / (int(null.get("n_perm") or 60) + 1), 6),
+                                                "limitacion": "el piso de resolución "
+                                                "domina a Bonferroni con esta cantidad "
+                                                "de comparaciones: más permutaciones "
+                                                "darían un umbral más estricto",
+                                                "nulls_run": nulls_run},
                                 "recipes": {a: recipes.get(a, ""),
                                             b: recipes.get(b, "")}}))
         out.sort(key=lambda c: (c["support_score"] * (0.5 + 0.5 *
@@ -369,6 +485,8 @@ class MutualInfoDiscoverer:
             return []
         prov = {"dataset_hash": dhash, "seed": seed, "n_rows": n,
                 "params": {"bins": bins, "min_nmi": min_nmi}}
+        n_comparisons = max(1, len(names) * (len(names) - 1) // 2)
+        fw = family_wise_threshold(cols, seed=seed)
         for i, a in enumerate(names):
             for b in names[i + 1:]:
                 if a in b or b in a:
@@ -382,6 +500,12 @@ class MutualInfoDiscoverer:
                           _bins: int = bins) -> float:
                     return self._nmi(xs, ys, _bins)
 
+                null = permutation_null(cols[a], cols[b], _stat, seed=seed)
+                p_emp = null.get("p_raw", null.get("p_empirical"))
+                alpha = max(0.05 / max(1, n_comparisons),
+                            1.0 / (int(null.get("n_perm") or 60) + 1))
+                if p_emp is not None and p_emp > alpha + 1e-9:
+                    continue          # la MI alta también aparece por azar: fuera
                 out.append(make_candidate(
                     method="information", variables=[a, b],
                     pattern_type="dependencia",
@@ -394,7 +518,10 @@ class MutualInfoDiscoverer:
                     stability=_bootstrap_stability(cols[a], cols[b], _stat,
                                                    seed=seed),
                     simplicity=0.5,
-                    provenance={**prov,
+                    provenance={**prov, "null_test": null,
+                                "family_wise_null": fw,
+                                "search_debt": {"comparisons": n_comparisons,
+                                                "alpha_corrected": round(alpha, 6)},
                                 "recipes": {a: recipes.get(a, ""),
                                             b: recipes.get(b, "")}}))
         out.sort(key=lambda c: c["support_score"], reverse=True)
@@ -512,6 +639,131 @@ class SequenceDiscoverer:
         return out[:top]
 
 
+# --- invariantes (motor real, antes desconectado) -----------------------------------
+class InvariantDiscoverer:
+    """Cantidades que NO cambian — reutiliza `inference/discovery/invariants.py`,
+    que existía sin ningún consumidor. Una combinación conservada suele ser más
+    profunda que cualquier correlación: es la firma de una ley.
+
+    Honestidad: el propio motor clasifica exact/approximate/dataset_specific/
+    artifact; solo se emiten candidatos que NO son artefacto, y el dominio
+    probado va declarado — un invariante fuera de su rango no es un invariante."""
+
+    def discover(self, cols: dict[str, list[float]], recipes: dict[str, str],
+                 *, seed: int = 0, dhash: str = "", top: int = 3
+                 ) -> list[dict[str, Any]]:
+        import numpy as np
+        from ..inference.discovery.invariants import find_invariants
+        names = [k for k in sorted(cols) if "(" not in k]   # columnas base
+        if len(names) < 2:
+            return []
+        n = len(cols[names[0]])
+        if n < 8:
+            return []
+        theta = np.array([[cols[k][i] for k in names] for i in range(n)], float)
+        try:
+            cands = find_invariants(theta, names, top_k=top)
+        except Exception:  # noqa: BLE001
+            return []
+        out: list[dict[str, Any]] = []
+        for c in cands:
+            if c.classification == "artifact":
+                continue                     # el propio motor lo descarta
+            out.append(make_candidate(
+                method="invariant", variables=sorted(c.combination),
+                pattern_type="invariante", representation="combinación lineal",
+                description=f"cantidad conservada: {c.expression} "
+                            f"(variación relativa {c.relative_variation:.4f}, "
+                            f"{c.classification}) — válido SOLO en el dominio "
+                            f"probado ({n} observaciones)",
+                expression=c.expression,
+                support=max(0.0, 1.0 - c.relative_variation),
+                stability=1.0 - min(1.0, c.relative_variation * 2),
+                simplicity=0.85,
+                provenance={"dataset_hash": dhash, "seed": seed, "n_rows": n,
+                            "classification": c.classification,
+                            "combination": c.combination,
+                            "estimator": "inference.discovery.invariants",
+                            "tested_domain": f"{n} filas del dataset"}))
+        return out
+
+
+# --- filtro de trivialidad por construcción -----------------------------------------
+_FUNCS = {"log", "sqrt", "mod", "abs", "exp"}
+
+
+def base_vars(name: str) -> set[str]:
+    """Variables BASE de las que desciende una columna derivada.
+
+    El FeatureLab deja la genealogía en el nombre: log(x)→{x}, x/y→{x,y},
+    |a-b|→{a,b}, x mod 840→{x}. Saber esto es lo que permite distinguir un
+    descubrimiento de pura aritmética."""
+    tmp = name
+    for sep in ("(", ")", "/", "*", "+", "-", "^", "|", ","):
+        tmp = tmp.replace(sep, " ")
+    tmp = tmp.replace(" mod ", " ")
+    out = set()
+    for tok in tmp.split():
+        if tok in _FUNCS or tok.replace(".", "").isdigit():
+            continue
+        out.add(tok)
+    return out
+
+
+def _shares_lineage(a: str, b: str) -> tuple[bool, str]:
+    """¿Dos columnas son parientes por construcción? Lo son si sus variables
+    base son iguales o una contiene a la otra: log(x) y sqrt(x) descienden ambas
+    de x, así que su correlación es aritmética, no hallazgo."""
+    va, vb = base_vars(a), base_vars(b)
+    if not va or not vb:
+        return False, ""
+    if va == vb:
+        return True, (f"'{a}' y '{b}' descienden de las MISMAS variables base "
+                      f"({', '.join(sorted(va))}): su relación es aritmética")
+    if va < vb or vb < va:
+        menor, mayor = (a, b) if va < vb else (b, a)
+        return True, (f"'{menor}' es una de las variables con las que se "
+                      f"construyó '{mayor}' — parentesco por construcción")
+    return False, ""
+
+
+def _is_derived_from(name: str, other: str) -> bool:
+    """Compatibilidad: ¿`name` desciende de `other`?"""
+    return _shares_lineage(name, other)[0]
+
+
+def mark_trivial(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Marca los patrones TRIVIALES POR CONSTRUCCIÓN — el fallo REAL observado.
+
+    En la Ronda 5, Mendeleev reportó r=1.000 entre variables derivadas unas de
+    otras (N·n_hard vs N², |N−greedy| vs |N−elapsed|). Eso no es descubrimiento:
+    es aritmética. Con la genealogía del FeatureLab podemos detectarlo:
+    si B = transformación_determinista(A), una correlación fuerte A↔B es
+    TRIVIAL_BY_CONSTRUCTION.
+
+    NO se borra el registro (se persiste como patrón trivial auditado), pero
+    recibe novedad ~0 y sale del ranking principal — no debe consumir atención
+    del Consejo ni aparecer como 'descubrimiento'."""
+    for c in candidates:
+        vs = c.get("variables") or []
+        trivial = False
+        why = ""
+        if len(vs) == 2:
+            trivial, why = _shares_lineage(vs[0], vs[1])
+        if len(vs) == 1 and c.get("pattern_type") == "invariante":
+            trivial = False              # un invariante de una sola columna sí vale
+        if trivial:
+            c["trivial_by_construction"] = True
+            c["triviality_reason"] = why
+            c["novelty_score"] = 0.0
+            c["status"] = "TRIVIAL"
+            c["description"] = "[TRIVIAL POR CONSTRUCCIÓN] " + str(
+                c.get("description", "")) + f" — {why}"
+        else:
+            c.setdefault("trivial_by_construction", False)
+    return candidates
+
+
 # --- consenso pesado por independencia ----------------------------------------------
 def consensus(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Agrupa candidatos equivalentes (mismas variables) y anota el acuerdo.
@@ -554,6 +806,7 @@ def discover_all(rows: list[dict[str, Any]], *, target: str | None = None,
         return []
     cands = StatisticalDiscoverer().discover(cols, recipes, seed=seed, dhash=dhash)
     cands += MutualInfoDiscoverer().discover(cols, recipes, seed=seed, dhash=dhash)
+    cands += InvariantDiscoverer().discover(cols, recipes, seed=seed, dhash=dhash)
     if target and target in cols:
         cands += SymbolicDiscoverer().discover(cols, recipes, target, seed=seed,
                                                dhash=dhash)
@@ -562,4 +815,10 @@ def discover_all(rows: list[dict[str, Any]], *, target: str | None = None,
                     and "/" not in c and "*" not in c), None)
         cands += SequenceDiscoverer().discover(cols, recipes, target, index=idx,
                                                seed=seed, dhash=dhash)
-    return consensus(cands)[:top]
+    # trivialidad ANTES del consenso: un patrón trivial no debe ganar ranking ni
+    # sumar "vistas independientes" a nada (sigue registrado, pero al final)
+    cands = mark_trivial(cands)
+    merged = consensus(cands)
+    reales = [c for c in merged if not c.get("trivial_by_construction")]
+    triviales = [c for c in merged if c.get("trivial_by_construction")]
+    return (reales + triviales)[:top]

@@ -1071,6 +1071,77 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                             "sin patrones que superen los umbrales — honesto"),
                 "verdict": f"{len(cands)}_patrones"}
 
+    def _ex_reinterpretar(statement: str, decision: dict[str, Any]
+                          ) -> dict[str, Any]:
+        """REPRESENTATION SHIFT — cambia la MIRADA, no el problema.
+
+        La Ronda 4 ejecutó todo bien sobre la representación equivocada. Esta
+        jugada existe para eso: proponer otra representación matemáticamente
+        válida del MISMO objeto, declarando qué información se pierde. NO toca la
+        premisa sellada (el guardián lo verifica igual que en un reinicio)."""
+        rep = str(decision.get("representacion") or "").strip() or "sin declarar"
+        _stage("mendeleev", f"Representación nueva: mirar esto como {rep}")
+        perdida = str(decision.get("info_perdida") or "").strip()
+        from ..science.lego import analogies_for, lego_context
+        store.put(project_id, "representation", new_id("rep"),
+                  {"original": statement[:400], "representacion": rep,
+                   "info_perdida": perdida or "NO DECLARADA (revisar)",
+                   "razon": str(decision.get("reason") or "")[:300],
+                   "habilita": [a["habilita"] for a in analogies_for("claim")][:3],
+                   "origin": "consejo"},
+                  status=("PROPOSED" if perdida else "FLAGGED"),
+                  parent_id=hid, actor="Mendeleev",
+                  summary=f"representación: {rep}")
+        state["lego"] = lego_context(rep if rep in
+                                     ("matrix", "graph", "sequence", "tabular")
+                                     else "claim")
+        warn = "" if perdida else (" | ⚠️ no declaró qué información se pierde "
+                                   "en la transformación")
+        return {"summary": f"nueva representación propuesta: {rep} "
+                           f"(pérdida declarada: {perdida[:120] or 'NINGUNA'})"
+                           f"{warn}",
+                "verdict": "representacion"}
+
+    def _ex_rivales(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        """Genera TEORÍAS RIVALES explícitas antes de creerle a un patrón."""
+        _stage("aristoteles", "Rivales: ¿qué más explicaría esto?")
+        from ..science.rivals import generate_rivals
+        base = str(decision.get("idea") or "").strip() or statement
+        rivals = generate_rivals(provider, base,
+                                 domain=str(decision.get("target") or "") or None)
+        for r in rivals:
+            store.put(project_id, "rival", new_id("riv"),
+                      {**r, "sobre": base[:300], "origin": "consejo"},
+                      status="PROPOSED", parent_id=hid, actor="Aristóteles",
+                      summary=str(r.get("teoria") or "")[:120])
+        state["rivals"] = rivals
+        state["n_hypotheses"] = len(rivals) + 1
+        top = "; ".join(str(r.get("teoria"))[:70] for r in rivals[:3])
+        return {"summary": f"{len(rivals)} rivales en pie: {top}",
+                "verdict": f"{len(rivals)}_rivales"}
+
+    def _ex_discriminar(statement: str, decision: dict[str, Any]
+                        ) -> dict[str, Any]:
+        """Diseña el experimento que MÁS separa a las rivales vivas — con la
+        ganancia de información CALCULADA (no declarada por el LLM)."""
+        _stage("davinci", "Da Vinci diseña el experimento discriminante")
+        from ..science.rivals import design_discriminating
+        rivals = state.get("rivals") or []
+        if len(rivals) < 2:
+            return {"summary": "sin rivales suficientes (≥2) para discriminar — "
+                               "juega 'rivales' primero", "verdict": "sin_rivales"}
+        design = design_discriminating(provider, statement, rivals)
+        store.put(project_id, "experiment", new_id("exp"),
+                  {"claim": statement[:200], "method": "discriminante",
+                   "design": design, "origin": "consejo",
+                   "result": {"verdict": "designed",
+                              "eig_normalizada": design.get("eig")}},
+                  status="PROPOSED", parent_id=hid, actor="Da Vinci",
+                  summary=f"discriminante: {str(design.get('experimento'))[:110]}")
+        return {"summary": f"experimento discriminante (EIG={design.get('eig')}): "
+                           f"{str(design.get('experimento'))[:160]}",
+                "verdict": "discriminante", "statement": ""}
+
     def _ex_gauss(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
         _stage("gauss", "Gauss empaqueta el dossier")
         store.put(project_id, "dossier", new_id("dos"),
@@ -1087,7 +1158,8 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                      "ramanujan": _ex_ramanujan, "turing": _ex_turing,
                      "aristoteles": _ex_aristoteles, "kepler": _ex_kepler,
                      "noether": _ex_noether, "mendeleev": _ex_mendeleev,
-                     "gauss": _ex_gauss}
+                     "reinterpretar": _ex_reinterpretar, "rivales": _ex_rivales,
+                     "discriminar": _ex_discriminar, "gauss": _ex_gauss}
 
     # cada jugada deja su resumen en el LOG compartido — Aristóteles (y cualquier
     # revisor) ve el trabajo real del ciclo, no un resumen vacío
@@ -1129,7 +1201,12 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
     orch = orchestrator or BohrOrchestrator(
         provider, executors, knowledge=knowledge,
         max_actions=max_actions, wall_budget_s=wall_budget_s, on_step=_on_step,
-        on_think=_on_think, on_restart=_drift_check)
+        on_think=_on_think, on_restart=_drift_check,
+        # el estado vivo (rivales, nº de hipótesis) alimenta el cálculo MECÁNICO
+        # de ganancia de información en el PolicyEngine — sin él, 'info' seguiría
+        # siendo solo lo que el LLM declara
+        state_provider=lambda: {"rivals": state.get("rivals") or [],
+                                "n_hypotheses": state.get("n_hypotheses") or 0})
     _live(project_id, {"persona": "bohr", "from_persona": "bohr",
                        "next_persona": "bohr",
                        "label": "Bohr estudia el tablero y decide la primera jugada",
