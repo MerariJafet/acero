@@ -426,6 +426,7 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
         <button id="cv-persona-dash" style="background:#1b2438;border:1px solid #c8863c;color:#e0a96d;border-radius:10px;padding:11px 14px;font-weight:600;font-size:13px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px">📋 Abrir el tablero de ${esc(p.name)} <span style="color:#93a1bd;font-weight:400">— fichas para dar seguimiento →</span></button>
         ${id === "bohr" ? `<button id="cv-investigate" style="background:#e0a96d;color:#0d121e;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px;cursor:pointer">▶ Investigar esta conjetura (correr el ciclo)</button><div id="cv-inv-msg" style="font-size:12px;color:#93a1bd"></div>` : ""}
         ${id === "ramanujan" ? `<div style="display:flex;flex-direction:column;gap:8px"><textarea id="cv-spark-txt" rows="3" placeholder="Describe la FRONTERA: ¿qué es lo que 'no se puede' con los métodos actuales y por qué?" style="background:#0d121e;border:1px solid #2a3550;border-radius:10px;color:#e8edf7;padding:10px;font-size:13px;resize:vertical"></textarea><button id="cv-spark" style="background:#e8b23c;color:#0d121e;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px;cursor:pointer">💡 Buscar la chispa (¿y si sí?)</button><div id="cv-spark-msg" style="font-size:12px;color:#93a1bd"></div></div>` : ""}
+        ${id === "mendeleev" ? `<div style="display:flex;flex-direction:column;gap:6px"><div class="cv-st">🕸 mapa de patrones — EN VIVO</div><canvas id="cv-patgraph" width="380" height="300" style="width:100%;background:#0d121e;border:1px solid #2a3550;border-radius:12px"></canvas><div id="cv-patgraph-msg" style="font-size:11.5px;color:#93a1bd;line-height:1.4"></div><div style="font-size:11px;color:#5f6d88">Patrón ≠ descubrimiento: cada rombo es un CANDIDATO con causalidad NO establecida y rivales H1-H4. El Consejo intenta destruirlo antes de creerle.</div></div>` : ""}
         <div class="cv-flow"><div><div class="cv-k">recibe de</div><div class="cv-v">${p.awaits}</div></div>
           <div><div class="cv-k">le pasa a</div><div class="cv-v">${p.hands_to}</div></div></div>
         ${held.length ? `<div><div class="cv-st">tiene la pelota</div><div style="font-size:13px;color:#cfd8ea">Trabaja ahora: <b style="color:${col}">${held.join(", ")}</b></div></div>` : ""}
@@ -450,6 +451,9 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
             <div style="color:#93a1bd;font-size:13px">capacidad <b style="color:${col}">${SL[p.status]}</b> · <span style="color:#5f6d88">${p.source === "project" ? "avance real" : "sin actividad aún"}</span></div></div></div>
         <div><div class="cv-st">tareas</div>${(p.tasks || []).map((t) => `<div class="cv-task"><span class="cv-tb" style="background:${TASK[t[1]][0]}"></span><span class="cv-tt">${t[0]}</span><span class="cv-ts">${TASK[t[1]][1]}</span></div>`).join("")}</div></div>`;
     drawer.classList.add("open"); scrim.classList.add("open"); drawer.querySelector("#cv-x").onclick = close;
+    stopPatternGraph();
+    const patCv = drawer.querySelector("#cv-patgraph");
+    if (patCv) startPatternGraph(patCv, drawer.querySelector("#cv-patgraph-msg"));
     const pdash = drawer.querySelector("#cv-persona-dash");
     if (pdash) pdash.onclick = () => { close(); openPersonaDash(id); };
     const inv = drawer.querySelector("#cv-investigate");
@@ -478,7 +482,87 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
         : ((body && (body.detail || body.error)) || "No se pudo lanzar la chispa.");
     };
   }
-  function close() { drawer.classList.remove("open"); scrim.classList.remove("open"); }
+  function close() { stopPatternGraph(); drawer.classList.remove("open"); scrim.classList.remove("open"); }
+
+  // ---- 🕸 mapa de patrones de Mendeleev: grafo de fuerzas EN VIVO (canvas puro) ----
+  let _patTimer = null, _patAnim = null;
+  function stopPatternGraph() {
+    if (_patTimer) { clearInterval(_patTimer); _patTimer = null; }
+    if (_patAnim) { cancelAnimationFrame(_patAnim); _patAnim = null; }
+  }
+  function startPatternGraph(canvas, msgEl) {
+    stopPatternGraph();
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width, H = canvas.height;
+    let nodes = [], edges = [], byId2 = {};
+    const sync = (g) => {
+      const seen = new Set();
+      (g.nodes || []).forEach((n) => {
+        seen.add(n.id);
+        if (byId2[n.id]) { Object.assign(byId2[n.id], n); return; }
+        const node = { ...n, x: W / 2 + (Math.random() - 0.5) * 120,
+                       y: H / 2 + (Math.random() - 0.5) * 120, vx: 0, vy: 0 };
+        byId2[n.id] = node; nodes.push(node);
+      });
+      nodes = nodes.filter((n) => seen.has(n.id));
+      byId2 = Object.fromEntries(nodes.map((n) => [n.id, n]));
+      edges = (g.edges || []).filter((e) => byId2[e.source] && byId2[e.target]);
+      if (msgEl) msgEl.textContent = g.n_patterns
+        ? `${g.n_patterns} patrón(es) candidato(s) · rombo = patrón (tamaño = soporte, borde grueso = +vistas independientes) · círculo = variable`
+        : "Aún sin patrones — cuando Mendeleev analice datos, el mapa se dibuja solo aquí.";
+    };
+    const fetchGraph = async () => {
+      try {
+        const r = await fetch(`/portal/api/projects/${encodeURIComponent(pid)}/patterns/graph`, { credentials: "same-origin" });
+        if (r.ok) sync(await r.json());
+      } catch (e) { /* siguiente tick */ }
+    };
+    const step = () => {
+      // fuerzas: repulsión entre todos + resorte por arista + gravedad al centro
+      for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        let dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy + 0.01, d = Math.sqrt(d2);
+        const f = 1200 / d2;
+        dx /= d; dy /= d; a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f;
+      }
+      edges.forEach((e) => {
+        const a = byId2[e.source], b = byId2[e.target];
+        let dx = b.x - a.x, dy = b.y - a.y, d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+        const f = (d - 70) * 0.02 * (0.5 + (e.weight || 0.5));
+        dx /= d; dy /= d; a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f;
+      });
+      nodes.forEach((n) => {
+        n.vx += (W / 2 - n.x) * 0.002; n.vy += (H / 2 - n.y) * 0.002;
+        n.vx *= 0.85; n.vy *= 0.85; n.x += n.vx; n.y += n.vy;
+        n.x = Math.max(14, Math.min(W - 14, n.x)); n.y = Math.max(14, Math.min(H - 14, n.y));
+      });
+      ctx.clearRect(0, 0, W, H);
+      ctx.lineCap = "round";
+      edges.forEach((e) => {
+        const a = byId2[e.source], b = byId2[e.target];
+        ctx.strokeStyle = `rgba(63,174,140,${0.15 + 0.5 * (e.weight || 0.4)})`;
+        ctx.lineWidth = 0.5 + 2.5 * (e.weight || 0.4);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      });
+      nodes.forEach((n) => {
+        if (n.type === "pattern") {
+          const s = 6 + 10 * (n.support || 0.5);
+          ctx.save(); ctx.translate(n.x, n.y); ctx.rotate(Math.PI / 4);
+          ctx.fillStyle = n.ptype === "ley" ? "#e8b23c" : (n.ptype === "invariante" ? "#b07cc6" : "#e0a96d");
+          ctx.fillRect(-s / 2, -s / 2, s, s);
+          ctx.strokeStyle = "#eef2fb"; ctx.lineWidth = (n.views || 1) > 1 ? 2.2 : 0.8;
+          ctx.strokeRect(-s / 2, -s / 2, s, s); ctx.restore();
+        } else {
+          ctx.fillStyle = "#3fae8c"; ctx.beginPath(); ctx.arc(n.x, n.y, 5, 0, 7); ctx.fill();
+        }
+        ctx.fillStyle = "#93a1bd"; ctx.font = "9.5px ui-monospace,monospace";
+        ctx.fillText((n.label || "").slice(0, 26), n.x + 8, n.y + 3);
+      });
+      _patAnim = requestAnimationFrame(step);
+    };
+    fetchGraph(); step();
+    _patTimer = setInterval(fetchGraph, 4000);   // EN VIVO: nuevos patrones aparecen solos
+  }
   scrim.onclick = close; document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
   root.querySelectorAll(".cv-med").forEach((m) => {
     m.onclick = () => open(m.dataset.id);

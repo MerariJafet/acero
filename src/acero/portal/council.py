@@ -19,7 +19,8 @@ from typing import Any
 STAGES = [
     {"key": "plantear", "name": "Plantear", "ids": ["hilbert", "euler", "hipatia"]},
     {"key": "explorar", "name": "Explorar / crear",
-     "ids": ["arquimedes", "davinci", "kepler", "tycho", "ramanujan", "turing"]},
+     "ids": ["arquimedes", "davinci", "kepler", "tycho", "ramanujan", "turing",
+             "mendeleev"]},
     {"key": "confrontar", "name": "Confrontar",
      "ids": ["popper", "euclides", "godel", "aristoteles", "noether"]},
     {"key": "segunda", "name": "Segunda jugada", "ids": ["feynman", "bohr"]},
@@ -32,7 +33,7 @@ PHASES = [
      "ids": ["hilbert", "arquimedes", "davinci", "kepler", "feynman",
              "ramanujan", "turing"]},
     {"key": "investig", "name": "Fase de Investigación", "sub": "buscar · registrar · dirigir",
-     "ids": ["euler", "hipatia", "tycho", "bohr"]},
+     "ids": ["euler", "hipatia", "tycho", "bohr", "mendeleev"]},
     {"key": "critica", "name": "Fase Crítica", "sub": "probar · refutar · publicar",
      "ids": ["popper", "euclides", "godel", "aristoteles", "gauss", "noether"]},
 ]
@@ -157,6 +158,16 @@ PERSONAS: list[dict[str, Any]] = [
      "face": {"hair": "bun", "glasses": 1, "hairc": "#3a2f26", "skin": 2},
      "tasks": [["Informe de referee", "done"], ["Dictamen de novedad", "done"],
                ["Puente al experto humano", "doing"]]},
+    {"id": "mendeleev", "name": "Mendeleev", "role": "Descubre patrones en los datos",
+     "module": "patterns.py", "status": "new", "hands_to": "Hilbert / Popper",
+     "awaits": "Bohr",
+     "summary": "El que vio la tabla escondida: deriva representaciones (log, razones, "
+                "módulos), busca correlaciones, invariantes y leyes simbólicas "
+                "sencillas. Patrón ≠ descubrimiento: todo candidato lleva rivales "
+                "H1-H4, causalidad NO establecida y procedencia reproducible.",
+     "face": {"hair": "wild", "beard": "long", "hairc": "#8a8378", "skin": 2},
+     "tasks": [["Contrato PatternCandidate", "done"], ["FeatureLab + simbólica", "done"],
+               ["Mapa de grafos en vivo", "doing"]]},
 ]
 
 # distinct engraved-portrait parameters per persona (drive the SVG face in council.js)
@@ -193,6 +204,8 @@ _FACES = {
                "accent": "#4c8fd6"},
     "noether": {"hair": "bun", "glasses": "round", "hairc": "#2f261e", "skin": 2,
                 "browc": "#2f261e", "accent": "#b07cc6"},
+    "mendeleev": {"hair": "wild", "beard": "long", "hairc": "#8a8378", "skin": 2,
+                  "browc": "#6e675c", "accent": "#3fae8c"},
 }
 for _p in PERSONAS:
     _p["face"] = _FACES.get(_p["id"], _p.get("face", {}))
@@ -206,13 +219,15 @@ def _clamp(x: float) -> int:
 OWNER_KIND = {"hilbert": "candidate", "hipatia": "literature", "popper": "experiment",
               "gauss": "dossier", "aristoteles": "critique",
               "feynman": "reformulation", "godel": "lemma", "bohr": "decision",
-              "ramanujan": "spark", "turing": "build", "noether": "review"}
+              "ramanujan": "spark", "turing": "build", "noether": "review",
+              "mendeleev": "pattern"}
 KIND_LABEL = {"candidate": "hipótesis", "literature": "literatura",
               "experiment": "experimentos", "dossier": "dossiers", "critique": "objeciones",
               "reformulation": "reformulaciones", "lemma": "lemas y cotas",
               "decision": "decisiones de orquestación",
               "spark": "chispas (¿y si…?)", "build": "experimentos construidos",
-              "review": "arbitrajes de referee"}
+              "review": "arbitrajes de referee",
+              "pattern": "patrones candidatos"}
 
 
 def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
@@ -252,6 +267,14 @@ def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
     if kind == "review":
         return {"title": (o.get("resumen") or "arbitraje")[:140],
                 "verdict": o.get("veredicto") or "", "by": "Noether"}
+    if kind == "pattern":
+        views = o.get("independent_views")
+        return {"title": (o.get("description") or o.get("expression")
+                          or "patrón")[:140],
+                "verdict": (f"soporte {o.get('support_score')} · "
+                            f"{views} vista(s) indep."
+                            if views is not None else "candidato"),
+                "by": "Mendeleev"}
     return {"title": (o.get("summary") or o.get("claim") or o.get("title") or "—")[:140],
             "verdict": o.get("status") or "", "by": ""}
 
@@ -260,13 +283,15 @@ def _card(kind: str, obj: dict[str, Any]) -> dict[str, Any]:
 KIND_PERSONA = {"candidate": "hilbert", "literature": "hipatia", "experiment": "popper",
                 "reformulation": "feynman", "lemma": "godel", "negative": "popper",
                 "critique": "aristoteles", "dossier": "gauss",
-                "spark": "ramanujan", "build": "turing", "review": "noether"}
+                "spark": "ramanujan", "build": "turing", "review": "noether",
+                "pattern": "mendeleev"}
 KIND_STEP = {"candidate": "planteó", "literature": "buscó literatura",
              "experiment": "corrió experimento", "reformulation": "reformuló",
              "lemma": "probó lema/cota", "negative": "halló contraejemplo",
              "critique": "objetó", "dossier": "empaquetó",
              "spark": "lanzó una chispa", "build": "construyó y corrió",
-             "review": "arbitró como referee"}
+             "review": "arbitró como referee",
+             "pattern": "descubrió un patrón candidato"}
 _NAME_TO_ID = {p["name"].lower(): p["id"] for p in PERSONAS}
 
 
@@ -478,6 +503,14 @@ def _story_line(step: dict[str, Any], nxt: str | None) -> str:
             "ataqué la novedad contra lo que conozco. ¿Por qué? Un resultado que "
             "nadie intentó tumbar no está listo. Significa: mi arbitraje es "
             "INTERNO — nunca sustituye la revisión de un experto humano de verdad",
+        "pattern":
+            "busqué ESTRUCTURA en los datos verificados: cambié la representación "
+            "(log, razones, módulos) y ajusté leyes sencillas hasta que algo saltó "
+            "a la vista. ¿Cómo? Correlaciones e invariantes con bootstrap, y una "
+            "gramática corta de ecuaciones — la ley buena explica mucho con poco. "
+            "¿Por qué? Quizá el patrón no vive en las variables crudas. Significa: "
+            "es un CANDIDATO con rivales H1-H4, no un descubrimiento — le toca al "
+            "Consejo intentar destruirlo",
     }.get(k, step.get("did") or str(k))
     if nxt:
         txt += f". Se la pasé a {_NAME_OF.get(nxt, nxt)}"
@@ -516,6 +549,7 @@ def council_for(kpis: dict[str, Any] | None,
     lit_n, ref_n, lem_n, crit_n = (_n("literature"), _n("reformulation"),
                                    _n("lemma"), _n("critique"))
     spark_n, build_n, review_n = _n("spark"), _n("build"), _n("review")
+    pattern_n = _n("pattern")
 
     # PROGRESO = trabajo REAL hecho en ESTE proyecto → 0 si nadie ha participado aún.
     # La MADUREZ de la capacidad (bueno/mejorable/nuevo/débil) NO es progreso: vive en el
@@ -539,6 +573,7 @@ def council_for(kpis: dict[str, Any] | None,
         "ramanujan": spark_n * 14,
         "turing": build_n * 25,
         "noether": review_n * 34,
+        "mendeleev": pattern_n * 12,
     }
 
     stories = build_stories(flows)

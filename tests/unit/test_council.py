@@ -9,14 +9,14 @@ from acero.portal.council import (
 def test_all_personas_placed_in_a_stage():
     placed = {pid for st in STAGES for pid in st["ids"]}
     assert placed == {p["id"] for p in PERSONAS}
-    assert len(PERSONAS) == 17    # +Ramanujan +Turing +Noether
+    assert len(PERSONAS) == 18    # +Ramanujan +Turing +Noether +Mendeleev
 
 
 def test_empty_project_starts_at_zero_progress():
     """A brand-new investigation where NOBODY has worked yet must read 0% — the ring is
     real project work, not the module's capability maturity."""
     c = council_for({})
-    assert len(c["personas"]) == 17
+    assert len(c["personas"]) == 18
     assert all(p["progress"] == 0 for p in c["personas"])       # nada hecho → 0%
     assert all(p["source"] == "idle" for p in c["personas"])
     assert all(ph["progress"] == 0 for ph in c["phases"])       # fases también en 0
