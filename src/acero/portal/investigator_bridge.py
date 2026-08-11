@@ -178,13 +178,18 @@ def record_lemma(project_id: str, statement: str, *, proved: bool = False, backe
     necessary condition on any counterexample, a bound, or a weaker variant. Honest:
     `proved` reflects the mechanical verification, and a proved contribution is partial
     progress, NEVER a solution to an open problem."""
+    from ..science.permissions import check_put
     store = _store(sf)
     lid = new_id("lem")
-    store.put(project_id, "lemma", lid,
-              {"statement": statement, "proved": bool(proved), "backend": backend,
-               "detail": detail, "contribution_kind": kind, "origin": "consejo"},
-              status=("PROVED" if proved else "PROPOSED"), parent_id=parent_id,
-              actor="Gödel", summary=statement[:120])
+    payload, violations = check_put("Gödel", "lemma", {
+        "statement": statement, "proved": bool(proved), "backend": backend,
+        "detail": detail, "contribution_kind": kind, "origin": "consejo"})
+    # permiso a nivel de TIPOS: proved=True sin backend mecánico se DEGRADA aquí
+    # mismo — el texto de un LLM no puede volverse prueba por ningún camino
+    store.put(project_id, "lemma", lid, payload,
+              status=("PROVED" if payload.get("proved") else
+                      ("FLAGGED" if violations else "PROPOSED")),
+              parent_id=parent_id, actor="Gödel", summary=statement[:120])
     return lid
 
 
@@ -1093,10 +1098,16 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
 
     def _on_step(action: str, decision: dict[str, Any],
                  result: dict[str, Any]) -> None:
-        record_decision(project_id, action,
-                        f"{str(decision.get('reason') or '')[:150]} — esperaba: "
-                        f"{str(decision.get('expected') or '')[:80]}",
-                        parent_id=hid, sf=sf)
+        reason = (f"{str(decision.get('reason') or '')[:150]} — esperaba: "
+                  f"{str(decision.get('expected') or '')[:80]}")
+        pol = decision.get("_policy") or {}
+        if pol:
+            # el desglose del PolicyEngine queda AUDITABLE en la decisión: por qué
+            # ganó esta jugada sobre sus alternativas (utilidad, no vibes)
+            eleg = pol.get("elegida") or {}
+            reason += (f" | policy: U={eleg.get('utility')} entre "
+                       f"{len(pol.get('todas') or [])} candidatas")
+        record_decision(project_id, action, reason, parent_id=hid, sf=sf)
 
     def _on_think(intento: int, n_jugadas: int) -> None:
         """Latido mientras Bohr PIENSA la siguiente jugada. Sin esto el tablero se
@@ -1122,13 +1133,23 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                        "seq": 0}, sf=sf)
     out = orch.run(claim)
     sugg = _suggest_next_round(provider, claim, out)
+    # credence: incertidumbre explícita calculada del LEDGER (mecánica, auditable)
+    # — distingue "sin evidencia" de "evidencia en contra" de "favorable débil"
+    from ..science.credence import credence_for, render_line
+    try:
+        cred = credence_for(store.list_rows(project_id))
+    except Exception:  # noqa: BLE001 - el resumen jamás rompe el cierre
+        cred = None
+    out["credence"] = cred
     # informe compacto del ciclo dinámico (bitácora jugada a jugada)
     lines = ["# Informe de Bohr (director dinámico)\n",
              f"**Enunciado final:** {out['statement']}\n",
              f"**Disposición:** {out['disposition']} — "
              f"{out.get('close_reason', '')}\n",
-             f"**Jugadas:** {out['n_actions']} en {out['elapsed_s']}s\n",
-             "## Bitácora"]
+             f"**Jugadas:** {out['n_actions']} en {out['elapsed_s']}s\n"]
+    if cred:
+        lines.append(f"**Incertidumbre:** {render_line(cred)}\n")
+    lines.append("## Bitácora")
     for i, h in enumerate(out["history"]):
         lines.append(f"{i + 1}. **{h['action']}** — {str(h.get('reason'))[:150]}\n"
                      f"   → {str(h.get('summary'))[:250]}")

@@ -102,3 +102,38 @@ def require_gpu_or_explain() -> tuple[bool, str]:
         return True, f"GPU lista: {st['device']} ({st['vram_total_mb']} MB)"
     return False, (f"GPU NO disponible aún — {st['next_step']}. Trabajo en pausa "
                    "hasta confirmación humana (protocolo de aviso previo).")
+
+
+# --- política de GPU: autonomía DENTRO de una caja aprobada una vez -----------------
+# Revisión externa aceptada: confirmar cada trabajo a mano contradice la autonomía.
+# El humano aprueba ESTA política una vez (activando el driver); dentro de ella
+# ACERO trabaja solo; salir de la caja vuelve a requerir aprobación humana.
+GPU_POLICY: dict[str, Any] = {
+    "approved_by_human": False,       # ← Merari la aprueba al activar el driver
+    "max_vram_frac": VRAM_FRAC_MAX,   # regla del 90% de VRAM
+    "max_vram_mb": 6144,              # techo por trabajo (deja aire al escritorio)
+    "max_duration_s": 3 * 3600,
+    "max_concurrent_jobs": 1,
+    "internet": False,                # los trabajos GPU corren sin red, como todo
+    "approved_libraries": ["torch", "torch_geometric", "faiss",
+                           "sentence_transformers"],
+}
+
+
+def policy_allows(job: dict[str, Any]) -> tuple[bool, str]:
+    """¿Este trabajo cabe en la caja aprobada? (lista, razón). Fuera de la caja
+    ⇒ (False, motivo) y el llamador debe pedir aprobación humana explícita."""
+    if not GPU_POLICY["approved_by_human"]:
+        return False, ("la política GPU aún no está aprobada por Merari — "
+                       "activar driver (reinicio) y aprobar una vez")
+    lib = str(job.get("library") or "")
+    if lib not in GPU_POLICY["approved_libraries"]:
+        return False, f"librería '{lib}' fuera de la política aprobada"
+    if float(job.get("vram_mb") or 0) > GPU_POLICY["max_vram_mb"]:
+        return False, (f"pide {job.get('vram_mb')}MB > techo "
+                       f"{GPU_POLICY['max_vram_mb']}MB")
+    if float(job.get("duration_s") or 0) > GPU_POLICY["max_duration_s"]:
+        return False, "duración estimada excede la política"
+    if job.get("internet"):
+        return False, "los trabajos GPU corren sin red por política"
+    return True, "dentro de la política aprobada"

@@ -350,6 +350,168 @@ class SymbolicDiscoverer:
             return None
 
 
+# --- descubridor de teoría de la información ----------------------------------------
+class MutualInfoDiscoverer:
+    """Dependencias que Pearson NO ve. La correlación lineal es ciega a relaciones
+    en V, en U, periódicas o por regímenes; la información mutua las detecta todas.
+    MI normalizada por histograma 2D (numpy puro): 0 = independientes, 1 = una
+    determina a la otra. Un candidato aquí dice "hay DEPENDENCIA no lineal" — qué
+    forma tiene es trabajo del simbólico o del Consejo, no de este módulo."""
+
+    def discover(self, cols: dict[str, list[float]], recipes: dict[str, str],
+                 *, seed: int = 0, dhash: str = "", top: int = 5,
+                 min_nmi: float = 0.55, bins: int = 8) -> list[dict[str, Any]]:
+        import numpy as np
+        names = sorted(cols)
+        out: list[dict[str, Any]] = []
+        n = len(cols[names[0]]) if names else 0
+        if n < 10:            # con menos filas la MI por histograma es ruido
+            return []
+        prov = {"dataset_hash": dhash, "seed": seed, "n_rows": n,
+                "params": {"bins": bins, "min_nmi": min_nmi}}
+        for i, a in enumerate(names):
+            for b in names[i + 1:]:
+                if a in b or b in a:
+                    continue
+                nmi = self._nmi(cols[a], cols[b], bins)
+                # solo interesa lo que Pearson NO explica ya (aporte marginal)
+                if nmi < min_nmi or abs(_pearson(cols[a], cols[b])) > 0.85:
+                    continue
+
+                def _stat(xs: list[float], ys: list[float],
+                          _bins: int = bins) -> float:
+                    return self._nmi(xs, ys, _bins)
+
+                out.append(make_candidate(
+                    method="information", variables=[a, b],
+                    pattern_type="dependencia",
+                    representation="información",
+                    description=f"dependencia NO lineal {a} ↔ {b} "
+                                f"(MI normalizada={nmi:.3f}, invisible para "
+                                "correlación) — forma desconocida",
+                    expression=f"NMI({a},{b})={nmi:.3f}",
+                    support=nmi,
+                    stability=_bootstrap_stability(cols[a], cols[b], _stat,
+                                                   seed=seed),
+                    simplicity=0.5,
+                    provenance={**prov,
+                                "recipes": {a: recipes.get(a, ""),
+                                            b: recipes.get(b, "")}}))
+        out.sort(key=lambda c: c["support_score"], reverse=True)
+        return out[:top]
+
+    @staticmethod
+    def _nmi(x: list[float], y: list[float], bins: int) -> float:
+        import numpy as np
+        try:
+            h, _, _ = np.histogram2d(x, y, bins=bins)
+        except Exception:  # noqa: BLE001
+            return 0.0
+        pxy = h / max(h.sum(), 1.0)
+        px, py = pxy.sum(1), pxy.sum(0)
+        nz = pxy > 0
+        mi = float((pxy[nz] * np.log(pxy[nz] /
+                    (np.outer(px, py)[nz] + 1e-12))).sum())
+        hx = -float((px[px > 0] * np.log(px[px > 0])).sum())
+        hy = -float((py[py > 0] * np.log(py[py > 0])).sum())
+        denom = min(hx, hy)
+        return max(0.0, min(1.0, mi / denom)) if denom > 0 else 0.0
+
+
+# --- descubridor de secuencias ------------------------------------------------------
+class SequenceDiscoverer:
+    """Para datos que SON una secuencia (p.ej. cover(N) por hitos): busca la regla
+    generadora, no solo la curva. Tres detectores exactos y baratos:
+      * recurrencia lineal  a(n) = c1·a(n-1) + c2·a(n-2)  (Fibonacci-style),
+      * polinomio por diferencias finitas (k-ésima diferencia constante),
+      * periodicidad modular (residuos que se repiten con período corto).
+    Una regla generadora comprime más que un ajuste — y la compresión extrema es
+    la forma de una ley."""
+
+    def discover(self, cols: dict[str, list[float]], recipes: dict[str, str],
+                 target: str, *, index: str | None = None, seed: int = 0,
+                 dhash: str = "", top: int = 3) -> list[dict[str, Any]]:
+        import numpy as np
+        if target not in cols:
+            return []
+        # ordenar por la columna índice si existe (p.ej. N); si no, orden de fila
+        y = cols[target]
+        if index and index in cols:
+            order = np.argsort(cols[index])
+            y = [y[i] for i in order]
+        n = len(y)
+        if n < 6:
+            return []
+        prov = {"dataset_hash": dhash, "seed": seed, "n_rows": n,
+                "params": {"index": index or "(orden de fila)"}}
+        out: list[dict[str, Any]] = []
+        # 1) polinomio: k-ésima diferencia constante (exacto, sin ajuste)
+        diffs = np.asarray(y, float)
+        for k in range(1, min(4, n - 2)):
+            diffs = np.diff(diffs)
+            if len(diffs) >= 3 and np.allclose(diffs, diffs[0], rtol=1e-9,
+                                               atol=1e-9):
+                out.append(make_candidate(
+                    method="sequence", variables=[target],
+                    pattern_type="regla",
+                    representation="secuencia",
+                    description=f"{target} es polinómica de grado {k} "
+                                f"(la {k}ª diferencia es constante = "
+                                f"{diffs[0]:.6g}) — regla exacta, no ajuste",
+                    expression=f"Δ^{k} {target} = {diffs[0]:.6g}",
+                    support=1.0, stability=1.0, simplicity=0.9,
+                    provenance={**prov, "rule": f"poly_deg_{k}"}))
+                break
+        # 2) recurrencia lineal de orden 2 (mínimos cuadrados + verificación exacta)
+        if n >= 6:
+            A = np.vstack([y[1:-1], y[:-2]]).T
+            b = np.asarray(y[2:], float)
+            try:
+                (c1, c2), *_ = np.linalg.lstsq(A, b, rcond=None)
+                pred = c1 * np.asarray(y[1:-1]) + c2 * np.asarray(y[:-2])
+                rel = np.abs(pred - b) / (np.abs(b) + 1e-12)
+                if np.all(rel < 1e-6):
+                    out.append(make_candidate(
+                        method="sequence", variables=[target],
+                        pattern_type="regla", representation="secuencia",
+                        description=f"{target} sigue la recurrencia "
+                                    f"a(n) = {c1:.6g}·a(n-1) + {c2:.6g}·a(n-2) "
+                                    "(verificada en todos los términos)",
+                        expression=f"a(n)={c1:.6g}·a(n-1)+{c2:.6g}·a(n-2)",
+                        support=1.0, stability=1.0, simplicity=0.85,
+                        provenance={**prov, "rule": "linrec_2",
+                                    "coefficients": {"c1": float(c1),
+                                                     "c2": float(c2)}}))
+            except Exception:  # noqa: BLE001
+                pass
+        # 3) periodicidad modular (solo enteros)
+        if all(float(v).is_integer() for v in y):
+            iv = [int(v) for v in y]
+            for m in (2, 3, 4, 5, 6, 7, 8, 12):
+                res = [v % m for v in iv]
+                for period in range(1, min(6, n // 2)):
+                    if all(res[i] == res[i % period] for i in range(n)):
+                        if period == 1 and len(set(res)) == 1:
+                            desc = (f"{target} ≡ {res[0]} (mod {m}) en toda la "
+                                    "secuencia")
+                        else:
+                            desc = (f"{target} mod {m} es periódica con período "
+                                    f"{period}: {res[:period]}")
+                        out.append(make_candidate(
+                            method="sequence", variables=[target],
+                            pattern_type="regla", representation="secuencia",
+                            description=desc,
+                            expression=f"{target} mod {m}: periodo {period}",
+                            support=1.0, stability=1.0, simplicity=0.8,
+                            provenance={**prov, "rule": "modular",
+                                        "mod": m, "period": period}))
+                        break
+                else:
+                    continue
+                break
+        return out[:top]
+
+
 # --- consenso pesado por independencia ----------------------------------------------
 def consensus(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Agrupa candidatos equivalentes (mismas variables) y anota el acuerdo.
@@ -391,7 +553,13 @@ def discover_all(rows: list[dict[str, Any]], *, target: str | None = None,
     if not cols:
         return []
     cands = StatisticalDiscoverer().discover(cols, recipes, seed=seed, dhash=dhash)
+    cands += MutualInfoDiscoverer().discover(cols, recipes, seed=seed, dhash=dhash)
     if target and target in cols:
         cands += SymbolicDiscoverer().discover(cols, recipes, target, seed=seed,
                                                dhash=dhash)
+        # índice natural para secuencias: la variable base más monótona ≠ target
+        idx = next((c for c in sorted(cols) if c != target and "(" not in c
+                    and "/" not in c and "*" not in c), None)
+        cands += SequenceDiscoverer().discover(cols, recipes, target, index=idx,
+                                               seed=seed, dhash=dhash)
     return consensus(cands)[:top]

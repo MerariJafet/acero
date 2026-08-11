@@ -152,7 +152,8 @@ class BohrOrchestrator:
                  wall_budget_s: float = 7 * 86400.0,
                  on_step: Callable[[str, dict, dict], None] | None = None,
                  on_think: Callable[[int, int], None] | None = None,
-                 on_restart: Callable[[str], str] | None = None) -> None:
+                 on_restart: Callable[[str], str] | None = None,
+                 policy: Any = "default") -> None:
         self._provider = provider
         self._ex = executors
         self._knowledge = knowledge
@@ -168,6 +169,13 @@ class BohrOrchestrator:
         # las definiciones se degradaron en silencio entre las rondas 2 y 3 de
         # Erdős–Straus. La advertencia se anexa al historial para que Bohr la VEA.
         self._on_restart = on_restart
+        # policy: "default" = PolicyEngine estándar (Bohr híbrido v3); None =
+        # decisión única clásica (tests/legado); o un engine inyectado.
+        if policy == "default":
+            from .policy import PolicyEngine
+            self._policy: Any = PolicyEngine()
+        else:
+            self._policy = policy
 
     # --- contexto que ve Bohr en cada decisión --------------------------------------
     def _context(self, statement: str, history: list[dict[str, Any]],
@@ -189,8 +197,50 @@ class BohrOrchestrator:
 
     def _decide(self, statement: str, history: list[dict[str, Any]],
                 t0: float) -> dict[str, Any]:
+        # --- BOHR HÍBRIDO (v3): el LLM PROPONE candidatas, la máquina ELIGE ---------
+        # Crítica externa aceptada: un LLM como estratega con poder absoluto es el
+        # mayor riesgo del sistema. Bohr propone 2-4 jugadas alternativas con sus
+        # estimaciones; el PolicyEngine las puntúa con señales que el LLM no
+        # controla (costos por tabla, riesgo, repetición MEDIDA en el historial) y
+        # el desglose queda en la decisión. Si la propuesta múltiple falla, cae al
+        # camino clásico de decisión única — nunca se queda sin jugada por esto.
         last_err = ""
-        for intento in range(3):
+        attempts_done = 0
+        if self._policy is not None:
+            if self._on_think:
+                try:
+                    self._on_think(1, len(history))
+                except Exception:  # noqa: BLE001
+                    pass
+            try:
+                from .policy import PROPOSE_SCHEMA
+                prop = self._provider.complete_json(
+                    self._context(statement, history, t0)
+                    + "\n\nPropón de 2 a 4 jugadas CANDIDATAS que compitan de "
+                      "verdad (estrategias distintas), con tus estimaciones "
+                      "honestas 0-1. Un motor de política elegirá — tu trabajo "
+                      "es dar alternativas reales, no una favorita disfrazada.",
+                    PROPOSE_SCHEMA, temperature=0.5)
+            except Exception as exc:  # noqa: BLE001
+                return {"action": "cerrar", "reason": f"proveedor caído: {exc}",
+                        "disposition": "needs_human_review"}
+            if isinstance(prop, dict) and "candidatas" in prop:
+                cands = [c for c in (prop.get("candidatas") or [])
+                         if str(c.get("action") or "") in ACTION_MENU]
+                winner, _scored = self._policy.choose(cands, history)
+                if winner is not None:
+                    return winner
+                attempts_done = 1          # propuesta sin candidata válida
+            elif isinstance(prop, dict):
+                # proveedor de decisión única (tests/legado): su respuesta cuenta
+                # como el PRIMER intento — válida se respeta, inválida se corrige
+                act = str(prop.get("action") or "")
+                if act in ACTION_MENU:
+                    return prop
+                last_err = (f"\n\nERROR: '{act}' no está en el menú. Elige una "
+                            f"jugada válida de: {', '.join(ACTION_MENU)}.")
+                attempts_done = 1
+        for intento in range(attempts_done, 3):
             # LATIDO: pensar la jugada es una llamada al LLM que puede tardar HORAS
             # (techo de 3600s, hasta 3 intentos). Sin esta señal el tablero se queda
             # congelado en la etiqueta del último ejecutor y un ciclo perfectamente

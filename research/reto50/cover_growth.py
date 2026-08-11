@@ -43,7 +43,11 @@ KIDX = {k: i for i, k in enumerate(KEYS)}
 # competencia) cuando la memoria del sistema pasa del 90%.
 WORKERS = int(os.environ.get("COVER_WORKERS")
               or max(2, min(10, (os.cpu_count() or 8) // 3)))
-MEM_FRAC_MAX = float(os.environ.get("COVER_MEM_FRAC", "0.90"))
+# DOS niveles (revisión externa aceptada: 90% a secas es agresivo para una
+# workstation que además corre el SO y ACERO): SOFT pausa el despacho de trabajo
+# nuevo; HARD además espera a que el sistema baje de verdad antes de continuar.
+MEM_SOFT = float(os.environ.get("COVER_MEM_SOFT", "0.80"))
+MEM_HARD = float(os.environ.get("COVER_MEM_HARD", "0.88"))
 
 
 def _mem_used_frac() -> float:
@@ -59,12 +63,18 @@ def _mem_used_frac() -> float:
 
 
 def _wait_headroom() -> None:
-    """Si el SISTEMA (no solo este proceso) pasa del 90% de RAM, este trabajo se
-    FORMA EN LA FILA: pausa y reintenta. Preferimos tardar más a tirar la PC."""
-    while (frac := _mem_used_frac()) > MEM_FRAC_MAX:
-        log(f"PAUSA por memoria: sistema al {frac:.0%} (>{MEM_FRAC_MAX:.0%}) — "
-            "en fila, reintento en 60s")
-        time.sleep(60)
+    """Fila en dos niveles: SOFT (80%) pausa el despacho nuevo con reintentos
+    cortos; HARD (88%) espera hasta que el sistema baje del nivel SOFT — drenaje
+    real, no picoteo al borde del abismo. Preferimos tardar más a tirar la PC."""
+    frac = _mem_used_frac()
+    if frac <= MEM_SOFT:
+        return
+    hard = frac > MEM_HARD
+    objetivo = MEM_SOFT if hard else MEM_HARD
+    log(f"PAUSA por memoria ({'HARD' if hard else 'SOFT'}): sistema al "
+        f"{frac:.0%} — en fila hasta bajar de {objetivo:.0%}")
+    while _mem_used_frac() > objetivo:
+        time.sleep(60 if hard else 20)
 
 
 def log(msg: str) -> None:

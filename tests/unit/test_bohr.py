@@ -196,7 +196,9 @@ def test_run_bohr_cycle_conecta_ramanujan_turing_noether_al_dashboard(
     class _FakeProvider:
         def complete_json(self, prompt, schema, *, temperature=0.0):
             props = schema.get("properties", {})
-            if "action" in props:
+            if "action" in props or "candidatas" in props:
+                # el Bohr híbrido pide candidatas; un proveedor de decisión única
+                # responde con UNA decisión y el orquestador la respeta (legado)
                 return next(decisions)
             if "ideas" in props:
                 return {"ideas": [{"chispa": "¿y si sí?", "analogia": "a",
