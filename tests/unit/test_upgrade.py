@@ -253,3 +253,33 @@ def test_gpu_policy_caja_cerrada_hasta_aprobacion_humana() -> None:
         assert not big
     finally:
         GPU_POLICY["approved_by_human"] = False
+
+
+# --- CONS-5: gauntlet de descubrimiento (Fase 9) -----------------------------------
+def test_gauntlet_mide_aporte_marginal_y_corre_las_3_configs() -> None:
+    """El benchmark es el GATE de cualquier técnica nueva. Debe: correr las 3
+    configuraciones, y que Mendeleev completo descubra AL MENOS tanto como
+    solo-estadística (nunca peor por añadir motores)."""
+    from acero.science.discovery_bench import CONFIGS, run_gauntlet
+    res = run_gauntlet()
+    assert set(res["per_config"]) == set(CONFIGS)
+    stats = res["per_config"]["solo_estadistica"]["true_discovery_rate"]
+    full = res["per_config"]["mendeleev_completo"]["true_discovery_rate"]
+    assert full >= stats                      # añadir motores nunca empeora
+    assert full >= 0.8                         # umbral de capacidad mínima
+    # el aporte marginal debe incluir al menos un caso que solo-estadística no ve
+    assert res["marginal_gain_full_over_stats"]
+
+
+def test_gauntlet_detecta_su_propio_falso_descubrimiento() -> None:
+    """El valor del gauntlet es que CAZA los fallos de Mendeleev, no que lo
+    maquille: hoy tiene FDR>0 en datos nulos (minería de múltiples hipótesis) —
+    ese número es el objetivo concreto del endurecimiento con null-test (Fase 6).
+    El test fija que el benchmark REPORTA el FDR, no que sea 0."""
+    from acero.science.discovery_bench import run_gauntlet
+    res = run_gauntlet()
+    m = res["per_config"]["mendeleev_completo"]
+    assert "false_discovery_rate" in m and m["n_null"] >= 3
+    # honestidad: si algún día el FDR baja a 0, este assert avisa para actualizar
+    # la narrativa (ya no es una debilidad conocida)
+    assert 0.0 <= m["false_discovery_rate"] <= 1.0

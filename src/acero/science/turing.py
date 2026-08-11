@@ -59,7 +59,15 @@ alternativo más simple que aún ataque la chispa."""
 
 
 def _default_run(code: str, timeout_s: int) -> dict[str, Any]:
-    """Corre el script con el python del venv, aislado en un dir temporal."""
+    """Corre el script con el python del venv, aislado en un dir temporal.
+
+    DECISIÓN HUMANA EXPLÍCITA (Merari, 2026-08-10): Turing corre a PROPÓSITO con
+    subprocess crudo — SIN sandbox y CON red y entorno completos — para tener todo
+    el poder de investigar (instalar piezas, descargar, computar sin jaula). La
+    auditoría del 10-ago marcó esto como riesgo; Merari lo ACEPTA porque corre en
+    su PC de entrenamiento aislada. NO es un descuido: es una elección de diseño
+    para este entorno. En un despliegue no aislado habría que enrutar por
+    SubprocessRunner (como MathProbe) — ver docs/ACERO_CONSOLIDATION_DOSSIER.md §11.1."""
     with tempfile.TemporaryDirectory(prefix="acero_turing_") as td:
         path = f"{td}/experimento.py"
         with open(path, "w", encoding="utf-8") as fh:
