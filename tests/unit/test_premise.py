@@ -177,3 +177,55 @@ def test_derivas_graves_repetidas_escalan_a_bloqueo(session_factory) -> None:
 
     pid, prem = _sello(session_factory)
     assert count_grave(pid, sf=session_factory) == 0
+
+
+def test_resellar_limpia_el_bloqueo_pero_no_borra_la_historia(session_factory) -> None:
+    """Aprendido EN VIVO (2026-08-11): el MEDIO sellado era la ley de crecimiento
+    de cover(N), y nuestro propio cómputo mató ese objeto — en 1e11 apareció una
+    puerta huérfana y el cover con llavero acotado dejó de existir. El guardián
+    siguió exigiendo conectar cada jugada con un crecimiento inexistente y marcó
+    grave hasta jugadas SANAS. Se acumularon quince.
+
+    Si al resellar esas quince siguieran contando, el reselle no destrabaría nada
+    y la decisión humana sería decorativa. "Dirección bloqueada" es relativo AL
+    SELLO: cambiar el sello reinicia el contador, no la historia."""
+    from acero.portal.premise import count_grave, get_premise, seal_premise
+    pid, prem = _sello(session_factory)
+    prov = _Prov({"deriva": True, "severidad": "grave",
+                  "que_se_debilito": "sustituyó el criterio", "razon": "más flojo"})
+    for _ in range(4):
+        check_drift(prov, prem, "enunciado que deriva", project_id=pid,
+                    sf=session_factory)
+    assert count_grave(pid, sf=session_factory) == 4          # bloquea, con razón
+
+    seal_premise(pid, sf=session_factory, porque="mismo porqué",
+                 medio="la COLA: S(K) y las puertas que fuerzan llaves nuevas",
+                 definiciones=prem["definiciones"])
+    assert get_premise(pid, sf=session_factory)["version"] == 2
+    assert count_grave(pid, sf=session_factory) == 0          # pizarra limpia
+
+    # la historia NO se borra: sigue auditable en el ledger
+    from acero.discovery.store import DiscoveryStore
+    from acero.ledger.service import ResearchLedger
+    st = DiscoveryStore(session_factory, ResearchLedger(session_factory))
+    viejas = st.list_objects(pid, kind="drift")
+    assert len(viejas) == 4 and all(d["premise_version"] == 1 for d in viejas)
+
+    # y una deriva NUEVA contra v2 sí cuenta
+    prem2 = get_premise(pid, sf=session_factory)
+    check_drift(prov, prem2, "otra que deriva", project_id=pid, sf=session_factory)
+    assert count_grave(pid, sf=session_factory) == 1
+
+
+def test_deriva_sin_version_cuenta_igual(session_factory) -> None:
+    """Un drift viejo sin `premise_version` (anterior al campo) se cuenta:
+    ante un dato ausente preferimos bloquear de más a dejar pasar."""
+    from acero.discovery.store import DiscoveryStore
+    from acero.ledger.service import ResearchLedger
+    from acero.portal.premise import count_grave
+    pid, _ = _sello(session_factory)
+    st = DiscoveryStore(session_factory, ResearchLedger(session_factory))
+    st.put(pid, "drift", "drift_legacy",
+           {"severidad": "grave", "que_se_debilito": "x", "razon": "y"},
+           status="FLAGGED", actor="Hilbert", summary="deriva sin versión")
+    assert count_grave(pid, sf=session_factory) == 1

@@ -62,6 +62,26 @@ def test_wpath_crea_el_padre_de_un_fichero(tmp_path, monkeypatch) -> None:
     assert d.is_dir()
 
 
+def _sin_procesos() -> list[str]:
+    """Estos tests prueban el PLANIFICADOR, no qué corre en la máquina.
+
+    Sin esto fallaban en cuanto se lanzaba un cover_growth de verdad: el plan
+    detectaba el proceso real —correctamente— y se declaraba bloqueado. Un test
+    unitario que depende del estado del sistema no prueba lo que dice probar; el
+    bloqueo por proceso vivo tiene su propio test, con la señal inyectada."""
+    return []
+
+
+def test_un_computo_largo_vivo_bloquea_la_migracion(tmp_path, monkeypatch) -> None:
+    """La otra mitad: cuando SÍ hay un cómputo corriendo, se niega."""
+    monkeypatch.setenv("ACERO_HOME", str(tmp_path / "ws"))
+    repo = _repo_falso(tmp_path)
+    pl = plan(repo, vivos_fn=lambda: ["cover_growth.py (pid 4242)"])
+    assert not pl.seguro and "4242" in pl.bloqueos[0]
+    with pytest.raises(RuntimeError, match="bloqueada"):
+        apply(pl)
+
+
 def _repo_falso(tmp_path):
     repo = tmp_path / "repo"
     (repo / "acero_data").mkdir(parents=True)
@@ -76,7 +96,7 @@ def test_migracion_mueve_datos_y_deja_los_activos_del_programa(tmp_path,
                                                                monkeypatch) -> None:
     monkeypatch.setenv("ACERO_HOME", str(tmp_path / "ws"))
     repo = _repo_falso(tmp_path)
-    pl = plan(repo)
+    pl = plan(repo, vivos_fn=_sin_procesos)
     assert pl.seguro and pl.bytes_a_mover == 150
     apply(pl)
     ws = workspace()
@@ -94,7 +114,7 @@ def test_no_migra_con_la_base_abierta(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("ACERO_HOME", str(tmp_path / "ws"))
     repo = _repo_falso(tmp_path)
     (repo / "acero_data" / "acero.sqlite-wal").write_bytes(b"")
-    pl = plan(repo)
+    pl = plan(repo, vivos_fn=_sin_procesos)
     assert not pl.seguro and "wal" in pl.bloqueos[0].lower()
     with pytest.raises(RuntimeError, match="bloqueada"):
         apply(pl)
@@ -110,7 +130,7 @@ def test_destino_existente_se_declara_en_conflicto_y_no_machaca(tmp_path,
     previo = workspace() / "investigaciones" / "erdos-straus"
     previo.mkdir(parents=True)
     (previo / "masterkey.json").write_bytes(b"VALIOSO")
-    pl = plan(repo)
+    pl = plan(repo, vivos_fn=_sin_procesos)
     apply(pl)
     assert (previo / "masterkey.json").read_bytes() == b"VALIOSO"
     assert (repo / "research" / "reto50").exists()      # el origen sigue ahí
@@ -122,7 +142,7 @@ def test_plan_no_toca_disco(tmp_path, monkeypatch) -> None:
     """Con 35 GB en juego, mirar antes de mover no es opcional."""
     monkeypatch.setenv("ACERO_HOME", str(tmp_path / "ws"))
     repo = _repo_falso(tmp_path)
-    pl = plan(repo)
+    pl = plan(repo, vivos_fn=_sin_procesos)
     assert (repo / "acero_data" / "acero.sqlite").exists()
     assert not (tmp_path / "ws").exists()
     assert "acero_data" in pl.resumen() and "TOTAL a mover" in pl.resumen()

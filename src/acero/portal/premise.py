@@ -155,11 +155,41 @@ def check_drift(provider: Any, premise: dict[str, Any], statement: str,
     return result
 
 
-def count_grave(project_id: str, sf: Any = None) -> int:
-    """Cuántas derivas GRAVES lleva esta investigación."""
+def count_grave(project_id: str, sf: Any = None,
+                premise_version: int | None = None) -> int:
+    """Cuántas derivas GRAVES lleva esta investigación CONTRA EL SELLO VIGENTE.
+
+    El filtro por versión no es cosmético. "Dirección bloqueada" significa *el
+    ciclo insiste en empujar contra este sello*, y eso deja de tener sentido en
+    cuanto un humano cambia el sello: las derivas viejas se juzgaron contra una
+    premisa que ya no rige.
+
+    Aprendido en vivo (Erdős–Straus, 2026-08-11): el MEDIO sellado era "la ley de
+    crecimiento de cover(N)", y nuestro propio cómputo mató ese objeto — en 1e11
+    apareció una puerta huérfana y el cover con llavero acotado dejó de existir.
+    A partir de ahí el guardián exigía conectar cada jugada con un crecimiento
+    que ya no había, y marcaba grave hasta a las jugadas SANAS: la última pedía
+    exactamente una llave dinámica con mecanismo y criterio fuerte intacto.
+    Quince graves acumuladas. Si al resellar siguieran contando, el reselle no
+    destrabaría nada y el humano habría decidido en vano.
+
+    Sin versión explícita se usa la del sello vigente. Si un drift no la trae
+    (los de antes de este campo), se cuenta: preferimos bloquear de más a dejar
+    pasar una deriva por un dato ausente."""
     try:
-        return sum(1 for d in _store(sf).list_objects(project_id, kind="drift")
-                   if d.get("severidad") == "grave")
+        objetos = _store(sf).list_objects(project_id, kind="drift")
+        vigente = premise_version
+        if vigente is None:
+            prem = get_premise(project_id, sf=sf)
+            vigente = int(prem.get("version") or 0) if prem else 0
+        n = 0
+        for d in objetos:
+            if d.get("severidad") != "grave":
+                continue
+            v = d.get("premise_version")
+            if v is None or int(v) == vigente:
+                n += 1
+        return n
     except Exception:  # noqa: BLE001
         return 0
 

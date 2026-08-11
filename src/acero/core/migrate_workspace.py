@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import dataclass, field
+from typing import Callable
 from pathlib import Path
 
 from .workspace import ensure_workspace, workspace
@@ -139,14 +140,21 @@ def _colisiones(origen: Path, destino: Path) -> list[str]:
     return sorted(h.name for h in origen.iterdir() if (destino / h.name).exists())
 
 
-def plan(repo: Path, destino: Path | None = None) -> Plan:
-    """Calcula el traslado SIN tocar disco."""
+def plan(repo: Path, destino: Path | None = None,
+         vivos_fn: Callable[[], list[str]] | None = None) -> Plan:
+    """Calcula el traslado SIN tocar disco.
+
+    `vivos_fn` se inyecta para poder probar el planificador sin depender de qué
+    esté corriendo en la máquina. No es adorno: los tests de migración fallaron
+    en cuanto se lanzó un cover_growth de verdad, porque miraban los procesos
+    del sistema. Un test unitario que depende del estado de la máquina no prueba
+    lo que dice probar."""
     raiz = destino or workspace()
     pl = Plan()
     if _portal_vivo(repo):
         pl.bloqueos.append("el portal tiene la base abierta (existe acero.sqlite-wal): "
                            "párala antes de migrar o el estado queda partido")
-    pl.bloqueos.extend(_procesos_vivos())
+    pl.bloqueos.extend((vivos_fn or _procesos_vivos)())
     for rel_origen, rel_destino in MAPA.items():
         origen = repo / rel_origen
         dest = raiz / rel_destino

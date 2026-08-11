@@ -23,21 +23,26 @@ def test_no_matchea_el_propio_shell_ni_sus_ancestros() -> None:
 
 
 def test_detecta_un_proceso_que_de_verdad_corre_el_script(tmp_path) -> None:
-    script = tmp_path / "cover_growth.py"
+    """El nombre lleva el PID del test a propósito: usar 'cover_growth.py' hacía
+    que el test fallara en cuanto el cover REAL estaba corriendo — encontraba
+    once procesos legítimos además del suyo. El detector acertaba; el test era el
+    que confundía 'lo que yo lancé' con 'lo que hay en la máquina'."""
+    nombre = f"cover_growth_test_{os.getpid()}.py"
+    script = tmp_path / nombre
     script.write_text("import time\ntime.sleep(30)\n", encoding="utf-8")
     proc = subprocess.Popen([sys.executable, str(script)])
     try:
         for _ in range(50):                      # esperar a que /proc lo publique
-            hits = find_script("cover_growth.py")
+            hits = find_script(nombre)
             if hits:
                 break
             time.sleep(0.1)
         assert [h["pid"] for h in hits] == [proc.pid]
-        assert is_running("cover_growth.py") is True
+        assert is_running(nombre) is True
     finally:
         proc.kill()
         proc.wait()
-    assert find_script("cover_growth.py") == []
+    assert find_script(nombre) == []
 
 
 def test_mencionar_el_script_dentro_de_un_argumento_NO_cuenta(tmp_path) -> None:
@@ -61,12 +66,13 @@ def test_ruta_completa_o_nombre_pelado_cuentan_igual(tmp_path) -> None:
     """Da lo mismo lanzarlo como `python x/y/foo.py` que desde su directorio."""
     d = tmp_path / "reto50"
     d.mkdir()
-    script = d / "kmin_law.py"
+    nombre = f"kmin_law_test_{os.getpid()}.py"   # único: ver el test anterior
+    script = d / nombre
     script.write_text("import time\ntime.sleep(30)\n", encoding="utf-8")
-    proc = subprocess.Popen([sys.executable, "kmin_law.py"], cwd=str(d))
+    proc = subprocess.Popen([sys.executable, nombre], cwd=str(d))
     try:
         for _ in range(50):
-            hits = find_script("kmin_law.py")
+            hits = find_script(nombre)
             if hits:
                 break
             time.sleep(0.1)
