@@ -59,9 +59,74 @@ def _model(m: Any) -> dict[str, str]:
         return {}
 
 
-def prove(kind: str, **kw: Any) -> dict[str, Any]:
-    """Decide a claim with Z3. `expr` is the statement; `vars` the free symbols; `assume`
-    an optional list of hypotheses; `sort` in {int, real, bool}. Never raises."""
+def _default_timeout_s() -> float:
+    """Techo de pared del solve. Generoso a propósito: DÍAS, no minutos — Gödel debe
+    poder pensar en serio (Merari: "no pongas límite de tiempo al programa"). Lo que
+    NO puede es hacerlo invisible y dentro del proceso del ciclo."""
+    import os
+    try:
+        return float(os.environ.get("ACERO_Z3_TIMEOUT_S") or 3 * 86400.0)
+    except ValueError:
+        return 3 * 86400.0
+
+
+def prove(kind: str, *, timeout_s: float | None = None,
+          on_beat: Any = None, beat_every_s: float = 60.0,
+          **kw: Any) -> dict[str, Any]:
+    """Decide a claim with Z3 EN UN PROCESO HIJO, con latido.
+
+    Por qué hijo y no aquí: `Solver.check()` es una llamada C++ bloqueante que no se
+    puede interrumpir desde Python ni emite señal alguna. Corriéndola in-process, un
+    solo solve secuestra el ciclo entero del Consejo sin dejar rastro — se observó en
+    vivo un check() de 13.24 HORAS de CPU (2.4 GB) que dejó a la Ronda 4 congelada en
+    la jugada 51, indistinguible de un cuelgue salvo hurgando en /proc.
+
+    El portafolio de Caccetta–Häggkvist ya hacía lo correcto (z3 en procesos aparte con
+    techo explícito de 7 y 10 días); esto le da a Gödel la misma disciplina.
+
+    `on_beat(elapsed_s)` se llama cada `beat_every_s` mientras el hijo trabaja: el
+    tablero puede mostrar que sigue vivo sin esperar al veredicto. Agotar el techo es
+    un `unknown` HONESTO, nunca se promueve a proved/refuted."""
+    timeout = _default_timeout_s() if timeout_s is None else float(timeout_s)
+    if not available():
+        return _out("unknown", kind, "Z3 no está instalado (backend Gödel no disponible)")
+    import multiprocessing as mp
+    import time as _time
+    try:
+        ctx = mp.get_context("fork")
+        q: Any = ctx.Queue(1)
+        p = ctx.Process(target=_prove_child, args=(q, kind, kw), daemon=True)
+        t0 = _time.time()
+        p.start()
+        while True:
+            p.join(max(1.0, min(beat_every_s, timeout)))
+            if not p.is_alive():
+                break
+            elapsed = _time.time() - t0
+            if elapsed >= timeout:
+                p.kill()
+                p.join(5)
+                return _out("unknown", kind,
+                            f"timeout: el solve excedió {timeout / 3600:.1f} h "
+                            "(sin veredicto — NO se promueve a proved/refuted)")
+            if on_beat:
+                try:
+                    on_beat(elapsed)
+                except Exception:  # noqa: BLE001 - el latido jamás rompe el solve
+                    pass
+        return q.get(timeout=5)
+    except Exception:  # noqa: BLE001 - sin proceso hijo, mejor resolver que no resolver
+        return _prove_direct(kind, **kw)
+
+
+def _prove_child(q: Any, kind: str, kw: dict[str, Any]) -> None:
+    q.put(_prove_direct(kind, **kw))
+
+
+def _prove_direct(kind: str, **kw: Any) -> dict[str, Any]:
+    """El solve real, sin techo (corre dentro del hijo). `expr` is the statement;
+    `vars` the free symbols; `assume` an optional list of hypotheses; `sort` in
+    {int, real, bool}. Never raises."""
     if not available():
         return _out("unknown", kind, "Z3 no está instalado (backend Gödel no disponible)")
     import z3

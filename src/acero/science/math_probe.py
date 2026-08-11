@@ -136,12 +136,17 @@ class _FileScriptCache:
 
 class MathProbe:
     def __init__(self, *, provider: Any = None, runner: Any = None,
-                 formal: Any = None, script_cache: Any = None) -> None:
+                 formal: Any = None, script_cache: Any = None,
+                 on_beat: Any = None) -> None:
         self._provider = provider
         self._runner = runner
         self._formal = formal
         # opt-in: producción (ResearchLoop) pasa _FileScriptCache(); tests quedan puros
         self._cache = script_cache
+        # on_beat(elapsed_s): latido durante el solve de Z3, que puede durar horas sin
+        # emitir señal propia. Quien orquesta (el Consejo) lo usa para que el tablero
+        # muestre que Gödel sigue trabajando en vez de parecer colgado.
+        self._on_beat = on_beat
 
     def _prov(self) -> Any:
         if self._provider is not None:
@@ -214,7 +219,8 @@ class MathProbe:
             zc = out.get("z3_claim") or {}
             if str(zc.get("kind") or "").strip() and str(zc.get("expr") or "").strip():
                 from .proof_assistant import prove
-                zres = prove(str(zc["kind"]), expr=zc.get("expr"),
+                zres = prove(str(zc["kind"]), on_beat=self._on_beat,
+                             expr=zc.get("expr"),
                              vars=zc.get("vars"), assume=zc.get("assume"),
                              sort=zc.get("sort"))
                 if zres.get("result") in ("proved", "refuted"):
