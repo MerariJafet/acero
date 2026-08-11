@@ -18,6 +18,7 @@ from typing import Any
 
 from ..core.clock import now_iso
 from ..core.config import repo_root
+from ..core.workspace import data_path
 from ..core.ids import new_id
 
 ECON_TURN_SCHEMA = {
@@ -94,7 +95,7 @@ _CRIT_SYS = (
 
 def econ_root() -> Path:
     env = os.environ.get("ACERO_ECON_ROOT", "").strip()
-    return Path(env) if env else repo_root() / "acero_data" / "economics"
+    return Path(env) if env else data_path("datos/economics", legacy=repo_root() / "acero_data" / "economics")
 
 
 def _sdir(sid: str) -> Path:

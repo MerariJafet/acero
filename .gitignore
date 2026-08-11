@@ -52,3 +52,17 @@ research/calibration.json
 
 # checkpoints de cómputo largo (cover_growth.ckpt pesa ~460 MB: es estado reanudable, no fuente)
 research/reto50/*.ckpt
+
+# ── El programa se publica; lo que el programa produce, no. ────────────────
+# Los datos y resultados viven en el espacio de trabajo (~/ACERO, o ACERO_HOME).
+# `acero workspace migrar` saca lo que quedó aquí de instalaciones anteriores.
+acero_data/
+research/artifacts/
+research/cache/
+research/datasets/
+research/loop/
+research/projects/
+research/registry/
+research/reto50/
+research/selfimprove/
+docs/nightly/

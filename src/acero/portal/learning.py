@@ -21,6 +21,7 @@ from typing import Any
 
 from ..core.clock import now_iso
 from ..core.config import repo_root
+from ..core.workspace import data_path
 from ..core.ids import new_id
 
 LEARN_TURN_SCHEMA = {
@@ -97,7 +98,7 @@ _SYS = (
 
 def learning_root() -> Path:
     env = os.environ.get("ACERO_LEARNING_ROOT", "").strip()
-    return Path(env) if env else repo_root() / "acero_data" / "learning"
+    return Path(env) if env else data_path("datos/learning", legacy=repo_root() / "acero_data" / "learning")
 
 
 def _sdir(sid: str) -> Path:

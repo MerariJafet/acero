@@ -36,7 +36,9 @@ _COOKIE = "acero_session"
 
 def _session_store_path():
     from ..core.config import repo_root
-    return repo_root() / "acero_data" / "portal_sessions.json"
+    from ..core.workspace import data_path
+    return data_path("datos/portal_sessions.json",
+                     legacy=repo_root() / "acero_data" / "portal_sessions.json")
 
 
 # process-level auth singletons (local single-process portal). Sessions persist to
@@ -1641,6 +1643,11 @@ def _count(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
 
 def mount_portal(app: FastAPI) -> None:
     """Mount the portal router + static files, with a strict CSP header."""
+    # Conector del espacio de trabajo: quien instala el programa no debería
+    # tener que saber dónde van sus datos. El árbol (~/ACERO o ACERO_HOME) se
+    # crea aquí, al arrancar, y con él el LEEME que explica cada carpeta.
+    from ..core.workspace import ensure_workspace
+    ensure_workspace()
     app.include_router(build_portal_router())
     if _STATIC.exists():
         app.mount("/portal/static", StaticFiles(directory=str(_STATIC)), name="portal-static")

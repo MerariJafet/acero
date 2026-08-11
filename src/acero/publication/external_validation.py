@@ -30,6 +30,7 @@ from typing import Any
 
 from ..core.clock import now_iso
 from ..core.config import repo_root
+from ..core.workspace import data_path
 from ..core.ids import new_id
 
 VERDICTS = ("reproduced", "partial", "failed")
@@ -77,7 +78,7 @@ class ExternalAttestation:
 
 def validation_root() -> Path:
     env = os.environ.get("ACERO_VALIDATION_ROOT", "").strip()
-    return Path(env) if env else repo_root() / "acero_data" / "validation"
+    return Path(env) if env else data_path("datos/validation", legacy=repo_root() / "acero_data" / "validation")
 
 
 def _file(project_id: str) -> Path:

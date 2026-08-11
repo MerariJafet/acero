@@ -1,9 +1,0 @@
-[06:51:42] k_min: 60 puertas/década, décadas [100000, 1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000], KMAX=2000
-[06:51:42] década 1e5: n=60 k_min medio=16.5 máx=59 min=11
-[06:51:42] década 1e6: n=60 k_min medio=14.7 máx=31 min=11
-[06:51:42] década 1e7: n=60 k_min medio=14.0 máx=31 min=11
-[06:51:42] década 1e8: n=60 k_min medio=14.6 máx=59 min=11
-[06:51:42] década 1e9: n=60 k_min medio=13.9 máx=31 min=11
-[06:51:42] década 1e10: n=60 k_min medio=12.9 máx=31 min=11
-[06:51:42] década 1e11: n=60 k_min medio=13.3 máx=23 min=11
-[06:51:42] FIN kmin_law: 420 pares (p, k_min) en 0.0 min

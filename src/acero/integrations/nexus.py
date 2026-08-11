@@ -24,6 +24,7 @@ from typing import Any
 
 from ..core.clock import now_iso
 from ..core.config import repo_root
+from ..core.workspace import data_path
 
 DEFAULT_URL = os.environ.get("ACERO_NEXUS_URL", "http://localhost:8000").rstrip("/")
 HTTP_TIMEOUT = float(os.environ.get("ACERO_NEXUS_TIMEOUT", "6"))
@@ -31,7 +32,7 @@ HTTP_TIMEOUT = float(os.environ.get("ACERO_NEXUS_TIMEOUT", "6"))
 
 def snapshot_path() -> Path:
     env = os.environ.get("ACERO_ECON_ROOT", "").strip()
-    root = Path(env) if env else repo_root() / "acero_data" / "economics"
+    root = Path(env) if env else data_path("datos/economics", legacy=repo_root() / "acero_data" / "economics")
     return root / "nexus_snapshot.json"
 
 

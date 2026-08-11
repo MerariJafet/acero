@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core.config import repo_root
+from ..core.workspace import data_path
 
 # --- password hashing ------------------------------------------------------
 
@@ -57,7 +58,7 @@ def _users_path() -> Path:
     override = os.environ.get("ACERO_PORTAL_USERS")
     if override:
         return Path(override)
-    return repo_root() / "acero_data" / "portal_users.json"
+    return data_path("datos/portal_users.json", legacy=repo_root() / "acero_data" / "portal_users.json")
 
 
 class UserStore:

@@ -1,9 +1,0 @@
-mod24 frontera: [1] (1s)
-DUROS mod840: [1, 121, 169, 289, 361, 529]
-clasico   : [1, 121, 169, 289, 361, 529]
-IGUALAMOS?: True | tiempo total: 6 s
-familia 25 mod 840: {'residue': 25, 'modulus': 840, 'x': 'n', 'y': 'n/3 + 5/3', 'z': 'n*(n + 5)/15', 'verified': True}
-  n=25: x=25 y=10 z=50 identidad=True
-  n=865: x=865 y=290 z=50170 identidad=True
-  n=1705: x=1705 y=570 z=194370 identidad=True
-  n=42025: x=42025 y=14010 z=117754050 identidad=True

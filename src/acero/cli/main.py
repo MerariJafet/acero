@@ -79,6 +79,11 @@ app.add_typer(db_app, name="db")
 app.add_typer(evaluation_app, name="evaluation")
 app.add_typer(collab_app, name="collab")
 app.add_typer(backup_app, name="backup")
+# El espacio de trabajo (investigaciones/datos/resultados) vive FUERA del
+# programa; este comando lo crea, lo inspecciona y migra instalaciones viejas.
+from .workspace_cmd import workspace_app  # noqa: E402
+
+app.add_typer(workspace_app, name="workspace")
 app.add_typer(release_app, name="release")
 app.add_typer(science_app, name="science")
 
@@ -2325,6 +2330,14 @@ def science_demo() -> None:
     typer.echo(f"estado ACERO: {rep.acero_state.name}")
     typer.echo(f"sobreafirmaciones: {rep.overclaims}")
     typer.echo(f"avanza: {rep.advance_permitted}  | razones: {rep.reasons}")
+
+
+@app.callback()
+def _arranque() -> None:
+    """Conector del espacio de trabajo: se prepara solo, antes de cualquier
+    comando. Instalar y correr basta — el usuario no configura rutas."""
+    from ..core.workspace import ensure_workspace
+    ensure_workspace()
 
 
 if __name__ == "__main__":  # pragma: no cover
