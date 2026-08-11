@@ -37,6 +37,10 @@ TOOLS: dict[str, dict[str, Any]] = {
         "capacidades": [
             "curvas elípticas: rango analítico, puntos, ap, conductores (PARI/GP)",
             "formas modulares, L-funciones, cuerpos de números, aritmética veloz",
+            "BENCHMARK 2026-08-10 (equivalencia verificada, 300 muestras a escala",
+            "1e11): pari(n).factor() es ~7× más rápido que sympy.factorint —",
+            "para factorización MASIVA usar SIEMPRE cypari2 primero, sympy solo",
+            "de respaldo (así lo hace research/reto50/cover_growth.py)",
         ],
     },
     "python-flint": {
