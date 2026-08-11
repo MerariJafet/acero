@@ -67,6 +67,16 @@ ACTION_MENU: dict[str, dict[str, str]] = {
                 " chequeos faltantes) — arbitraje INTERNO, no validación externa",
         "cuando": "hay un resultado maduro que aspira a nota publicable; ANTES de"
                   " gauss y del experto humano"},
+    "mendeleev": {
+        "hace": "busca ESTRUCTURA en los datos verificados del proyecto: deriva"
+                " representaciones (log, razones, módulos), detecta correlaciones,"
+                " invariantes aproximados y LEYES simbólicas sencillas (y≈a·x^b…)."
+                " Devuelve PatternCandidates: patrón ≠ descubrimiento, causalidad NO"
+                " establecida, con rivales H1-H4 y procedencia reproducible",
+        "cuando": "hay una tabla de observaciones (≥5 filas) y la pregunta es '¿qué"
+                  " estructura hay aquí?' — p.ej. buscar la fórmula de una ley de"
+                  " crecimiento o de una llave dinámica. NO para probar teoremas ni"
+                  " con 3 datos"},
     "reiniciar": {
         "hace": "adopta un ENUNCIADO nuevo (tu 'statement') y vuelve a empezar el ataque",
         "cuando": "el enunciado actual se agotó pero la reformulación abre camino"},
@@ -100,9 +110,17 @@ DECIDE_SCHEMA: dict[str, Any] = {
         "disposition": {"type": "string",
                         "description": "solo cerrar: " + " | ".join(HONEST_DISPOSITIONS)
                                        + " ('' si no)"},
+        "dataset_ref": {"type": "string",
+                        "description": "solo mendeleev: ruta bajo research/ a un JSON "
+                                       "con la lista de filas a analizar ('' = usar "
+                                       "los datos numéricos del ledger del proyecto)"},
+        "target": {"type": "string",
+                   "description": "solo mendeleev: columna objetivo para buscar una "
+                                  "ley y=f(x) ('' = solo correlaciones/invariantes)"},
     },
     "required": ["action", "reason", "expected", "statement", "frontier", "why_stuck",
-                 "idea", "piezas", "budget_min", "disposition"],
+                 "idea", "piezas", "budget_min", "disposition", "dataset_ref",
+                 "target"],
     "additionalProperties": False,
 }
 
@@ -133,7 +151,8 @@ class BohrOrchestrator:
                  knowledge: str = "", max_actions: int = 200,
                  wall_budget_s: float = 7 * 86400.0,
                  on_step: Callable[[str, dict, dict], None] | None = None,
-                 on_think: Callable[[int, int], None] | None = None) -> None:
+                 on_think: Callable[[int, int], None] | None = None,
+                 on_restart: Callable[[str], str] | None = None) -> None:
         self._provider = provider
         self._ex = executors
         self._knowledge = knowledge
@@ -144,6 +163,11 @@ class BohrOrchestrator:
         # LLM que decide la jugada. Es el único latido durante ese tramo, que puede
         # durar horas — sin él, "pensando" es indistinguible de "colgado".
         self._on_think = on_think
+        # on_restart(nuevo_enunciado) -> advertencia|"" : el guardián de premisa.
+        # 'reiniciar' es LA jugada que cambia el enunciado — el punto exacto donde
+        # las definiciones se degradaron en silencio entre las rondas 2 y 3 de
+        # Erdős–Straus. La advertencia se anexa al historial para que Bohr la VEA.
+        self._on_restart = on_restart
 
     # --- contexto que ve Bohr en cada decisión --------------------------------------
     def _context(self, statement: str, history: list[dict[str, Any]],
@@ -215,6 +239,13 @@ class BohrOrchestrator:
                                      "reinicio SIN enunciado nuevo — ignorado")}
                 if new_stmt:
                     statement = new_stmt
+                    if self._on_restart:
+                        try:
+                            warn = self._on_restart(new_stmt)
+                        except Exception:  # noqa: BLE001 - guardián roto ≠ bloquear
+                            warn = ""
+                        if warn:
+                            entry["summary"] += f" | {warn}"
                 history.append(entry)
                 if self._on_step:
                     self._on_step(act, d, entry)

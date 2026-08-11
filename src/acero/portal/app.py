@@ -390,6 +390,73 @@ def build_portal_router() -> APIRouter:
                             if mode != "clasico" else
                             "El Consejo corre el ciclo clásico; refresca en un minuto.")}
 
+    @r.post("/api/projects/{project_id}/premise")
+    def project_premise(project_id: str, body: dict[str, Any],
+                        sess: Session = Depends(_require_session),
+                        x_csrf_token: str | None = Header(default=None)
+                        ) -> dict[str, Any]:
+        """Sella la premisa de la investigación: porqué (objetivo irrenunciable),
+        medio (instrumental) y definiciones operativas EXACTAS. Bohr la verá en cada
+        decisión y el guardián marcará cualquier enunciado que la debilite."""
+        _require_csrf(sess, x_csrf_token)
+        from .premise import get_premise, seal_premise
+        porque = str((body or {}).get("porque") or "").strip()
+        medio = str((body or {}).get("medio") or "").strip()
+        defs = {str(k): str(v) for k, v in
+                ((body or {}).get("definiciones") or {}).items() if str(v).strip()}
+        if not porque:
+            raise HTTPException(422, "la premisa necesita al menos el PORQUÉ — el "
+                                     "objetivo que nunca debe perderse")
+        sid = seal_premise(project_id, porque=porque, medio=medio,
+                           definiciones=defs)
+        return {"premise_id": sid, "sealed": True,
+                "premise": get_premise(project_id)}
+
+    @r.get("/api/projects/{project_id}/premise")
+    def project_premise_get(project_id: str,
+                            sess: Session = Depends(_require_session)
+                            ) -> dict[str, Any]:
+        from .premise import get_premise
+        return {"premise": get_premise(project_id)}
+
+    @r.get("/api/projects/{project_id}/patterns/graph")
+    def project_patterns_graph(project_id: str,
+                               sess: Session = Depends(_require_session)
+                               ) -> dict[str, Any]:
+        """El mapa de Mendeleev: nodos = variables y patrones candidatos, aristas =
+        'este patrón relaciona estas variables' con su fuerza. El front lo dibuja
+        como grafo de fuerzas y lo refresca en polling — descubrimiento EN VIVO."""
+        from ..discovery.store import DiscoveryStore
+        from ..ledger.db import default_session_factory
+        from ..ledger.service import ResearchLedger
+        sf = default_session_factory()
+        st = DiscoveryStore(sf, ResearchLedger(sf))
+        pats = st.list_objects(project_id, kind="pattern")
+        nodes: dict[str, dict[str, Any]] = {}
+        edges: list[dict[str, Any]] = []
+        for p in pats:
+            pid_n = str(p.get("pattern_id") or p.get("id") or "")
+            if not pid_n:
+                continue
+            nodes[pid_n] = {"id": pid_n, "type": "pattern",
+                            "label": str(p.get("expression")
+                                         or p.get("description") or "")[:60],
+                            "support": float(p.get("support_score") or 0),
+                            "stability": float(p.get("stability_score") or 0),
+                            "views": int(p.get("independent_views") or 1),
+                            "method": ",".join(p.get("methods_agree") or
+                                               [str(p.get("method") or "")]),
+                            "ptype": str(p.get("pattern_type") or "relacion")}
+            for v in (p.get("variables") or []):
+                vid = f"var:{v}"
+                nodes.setdefault(vid, {"id": vid, "type": "var",
+                                       "label": str(v)[:40]})
+                edges.append({"source": pid_n, "target": vid,
+                              "weight": float(p.get("support_score") or 0.5)})
+        import time as _t
+        return {"nodes": list(nodes.values()), "edges": edges,
+                "n_patterns": len(pats), "ts": _t.time()}
+
     @r.post("/api/projects/{project_id}/spark")
     def project_spark(project_id: str, body: dict[str, Any], bg: BackgroundTasks,
                       sess: Session = Depends(_require_session),

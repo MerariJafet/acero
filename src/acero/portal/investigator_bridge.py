@@ -26,7 +26,8 @@ PERSONA_ACTOR = {
     "arquimedes": "Arquímedes", "davinci": "Da Vinci", "kepler": "Kepler",
     "tycho": "Tycho", "popper": "Popper", "euclides": "Euclides", "godel": "Gödel",
     "aristoteles": "Aristóteles", "feynman": "Feynman", "bohr": "Bohr", "gauss": "Gauss",
-    "ramanujan": "Ramanujan", "turing": "Turing",
+    "ramanujan": "Ramanujan", "turing": "Turing", "noether": "Noether",
+    "mendeleev": "Mendeleev",
 }
 
 
@@ -798,12 +799,25 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
     día por experimento; solo la honestidad restringe (disposiciones honestas,
     techo humano)."""
     from ..science.bohr import BohrOrchestrator, build_knowledge
+    from .premise import check_drift, drift_warning, get_premise, premise_context
     store = _store(sf)
     hid = record_hypothesis(project_id, claim, persona="hilbert", sf=sf)
     if provider is None and orchestrator is None:
         from ..llm.providers import CodexCliProvider
         provider = CodexCliProvider()
     state: dict[str, Any] = {"n": 0, "last": "bohr", "probe": {}}
+
+    # --- guardián de premisa: si el proyecto tiene premisa SELLADA, Bohr la ve en
+    # cada decisión, y todo cambio de enunciado se contrasta contra el sello ------
+    premise = get_premise(project_id, sf=sf)
+
+    def _drift_check(new_statement: str) -> str:
+        """Devuelve la advertencia (o '') y registra la deriva en el ledger."""
+        if not premise:
+            return ""
+        res = check_drift(provider, premise, new_statement,
+                          project_id=project_id, parent_id=hid, sf=sf)
+        return drift_warning(res)
 
     def _stage(persona: str, label: str) -> None:
         state["n"] += 1
@@ -872,7 +886,12 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
         if ref and ref != statement:
             record_reformulation(project_id, ref,
                                  angle=str(out.get("observation") or "")[:120], sf=sf)
-            return {"summary": f"reformuló: {ref[:160]}", "statement": ref,
+            # el refinamiento de Feynman es el OTRO punto donde el enunciado muta:
+            # el guardián de premisa lo revisa igual que a los reinicios de Bohr
+            warn = _drift_check(ref)
+            return {"summary": f"reformuló: {ref[:160]}"
+                               + (f" | {warn}" if warn else ""),
+                    "statement": ref,
                     "verdict": str(out.get("next_action") or "")}
         return {"summary": f"observación: {str(out.get('observation'))[:180]}; "
                            f"jugada sugerida: {out.get('next_action')}",
@@ -881,9 +900,17 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
     def _ex_godel(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
         _stage("godel", "Gödel/Euclides intentan demostrar")
         from ..science.math_probe import MathProbe, _FileScriptCache
-        r = MathProbe(provider=provider,
-                      script_cache=_FileScriptCache()).probe(statement, max_tries=1,
-                                                             formal_first=True)
+
+        # El solve de Z3 puede durar HORAS sin emitir señal propia: late aquí para que
+        # el tablero distinga "demostrando" de "colgado". Un check() de 13.24 h dejó a
+        # la Ronda 4 congelada en la jugada 51 sin forma de saberlo desde fuera.
+        def _godel_beat(elapsed_s: float) -> None:
+            _beat("godel", "Gödel/Euclides intentan demostrar — prueba mecánica en "
+                           f"curso ({elapsed_s / 60:.0f} min)")
+
+        r = MathProbe(provider=provider, script_cache=_FileScriptCache(),
+                      on_beat=_godel_beat).probe(statement, max_tries=1,
+                                                 formal_first=True)
         v = str(r.get("verdict") or "")
         proved = v in ("verified", "formally_supported")
         record_lemma(project_id, statement, proved=proved,
@@ -987,6 +1014,53 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                            + (f" | mayores: {objs}" if objs else ""),
                 "verdict": str(rep.get("veredicto") or "")}
 
+    def _ex_mendeleev(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        _stage("mendeleev", "Mendeleev busca estructura en los datos")
+        import json as _json
+        from pathlib import Path as _Path
+
+        from ..science.patterns import discover_all
+        rows: list[dict[str, Any]] = []
+        ref = str(decision.get("dataset_ref") or "").strip()
+        if ref:
+            # el dataset vive en un archivo bajo research/ (p.ej. cover_growth.json)
+            base = _Path("research").resolve()
+            fp = (base / _Path(ref).name if not ref.startswith("research")
+                  else _Path(ref)).resolve()
+            if base in fp.parents or fp == base:
+                try:
+                    loaded = _json.loads(fp.read_text(encoding="utf-8"))
+                    rows = loaded if isinstance(loaded, list) else \
+                        list(loaded.get("rows") or [])
+                except Exception as exc:  # noqa: BLE001
+                    return {"summary": f"dataset ilegible ({ref}): "
+                                       f"{str(exc)[:120]}", "verdict": "sin_datos"}
+        if not rows:
+            # sin ref: las métricas numéricas de los experimentos del proyecto
+            for e in store.list_objects(project_id, kind="experiment"):
+                m = (e.get("result") or {}).get("metrics") or {}
+                if m:
+                    rows.append({k: v for k, v in m.items()
+                                 if isinstance(v, (int, float))})
+        if len(rows) < 3:
+            return {"summary": "sin datos suficientes (≥3 filas numéricas) — "
+                               "Mendeleev no inventa estructura donde no hay tabla",
+                    "verdict": "sin_datos"}
+        target = str(decision.get("target") or "").strip() or None
+        cands = discover_all(rows, target=target)
+        for c in cands:
+            store.put(project_id, "pattern", new_id("pat"),
+                      {**c, "origin": "consejo"}, status=c.get("status", "CANDIDATE"),
+                      parent_id=hid, actor="Mendeleev",
+                      summary=str(c.get("description") or "")[:140])
+        top = "; ".join(f"[{c['support_score']:.2f}|{c['independent_views']}v] "
+                        f"{str(c.get('expression') or c['description'])[:70]}"
+                        for c in cands[:3])
+        return {"summary": (f"{len(cands)} patrones candidatos (causalidad NO "
+                            f"establecida): {top}" if cands else
+                            "sin patrones que superen los umbrales — honesto"),
+                "verdict": f"{len(cands)}_patrones"}
+
     def _ex_gauss(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
         _stage("gauss", "Gauss empaqueta el dossier")
         store.put(project_id, "dossier", new_id("dos"),
@@ -1002,7 +1076,8 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                      "feynman": _ex_feynman, "godel": _ex_godel,
                      "ramanujan": _ex_ramanujan, "turing": _ex_turing,
                      "aristoteles": _ex_aristoteles, "kepler": _ex_kepler,
-                     "noether": _ex_noether, "gauss": _ex_gauss}
+                     "noether": _ex_noether, "mendeleev": _ex_mendeleev,
+                     "gauss": _ex_gauss}
 
     # cada jugada deja su resumen en el LOG compartido — Aristóteles (y cualquier
     # revisor) ve el trabajo real del ciclo, no un resumen vacío
@@ -1031,10 +1106,14 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
         _beat("bohr", "Bohr estudia el tablero y decide la siguiente jugada"
                       + (f" (reintento {intento})" if intento > 1 else ""))
 
+    knowledge = build_knowledge()
+    if premise:
+        # el sello va ANTES del conocimiento del Consejo: es lo primero que Bohr lee
+        knowledge = premise_context(premise) + "\n\n" + knowledge
     orch = orchestrator or BohrOrchestrator(
-        provider, executors, knowledge=build_knowledge(),
+        provider, executors, knowledge=knowledge,
         max_actions=max_actions, wall_budget_s=wall_budget_s, on_step=_on_step,
-        on_think=_on_think)
+        on_think=_on_think, on_restart=_drift_check)
     _live(project_id, {"persona": "bohr", "from_persona": "bohr",
                        "next_persona": "bohr",
                        "label": "Bohr estudia el tablero y decide la primera jugada",
