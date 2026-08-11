@@ -74,6 +74,18 @@ TOOLS: dict[str, dict[str, Any]] = {
             "curvas/abelianas, teoría de Galois — run_sage(codigo) lo ejecuta jaulado",
         ],
     },
+    "gpu-cuda": {
+        "check": "own:acero.science.gpu", "install": None,
+        "nivel": "cálculo-experto",
+        "capacidades": [
+            "GPU NVIDIA (~8GB VRAM) para TENSORES: GNN/autoencoders de Mendeleev,",
+            "embeddings, bootstraps masivos. NO para z3/factorización/DP (lógica",
+            "irregular: la GPU pierde ahí). PROTOCOLO: gpu.status() y si no está",
+            "lista, AVISAR a Merari (debe reiniciar la PC para el driver) — jamás",
+            "lanzar sin su confirmación. Regla del 90% de VRAM: wait_for_vram()",
+            "antes de cargar (fila, no competencia).",
+        ],
+    },
     "sat_escalation": {
         "check": "own:acero.science.sat_escalation", "install": None,
         "nivel": "prueba-mecánica",
