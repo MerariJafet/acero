@@ -49,3 +49,6 @@ research/selfimprove/
 experiments/
 script.py
 research/calibration.json
+
+# checkpoints de cómputo largo (cover_growth.ckpt pesa ~460 MB: es estado reanudable, no fuente)
+research/reto50/*.ckpt

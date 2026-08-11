@@ -1,0 +1,20 @@
+[10:04:15] llave maestra: 45 puertas/década, KMAX=300, holdout=30%
+[10:04:15] década 1e5: 45 puertas, llaves válidas por puerta (media) 8.7
+[10:04:15] década 1e6: 45 puertas, llaves válidas por puerta (media) 10.9
+[10:04:15] década 1e7: 45 puertas, llaves válidas por puerta (media) 12.5
+[10:04:15] década 1e8: 45 puertas, llaves válidas por puerta (media) 12.9
+[10:04:15] década 1e9: 45 puertas, llaves válidas por puerta (media) 13.8
+[10:04:15] década 1e10: 45 puertas, llaves válidas por puerta (media) 15.0
+[10:04:15] década 1e11: 45 puertas, llaves válidas por puerta (media) 16.4
+[10:04:15] train=163 holdout=152 (split por p mod 10, determinista y declarado)
+[10:04:15] reglas sin excepción en train: 44
+[10:04:15] HOLDOUT: cobertura 94.7% | precisión certificada 0.8819 | fallos 10
+[10:04:15] FIN masterkey: 315 puertas en 0.0 min
+[10:33:15] llave maestra: 80 puertas/década, KMAX=400, holdout=30%
+[10:33:15] REUTILIZANDO 315 puertas ya calculadas (solo re-análisis)
+[10:33:15] train=163 holdout=152 (split por p mod 10, determinista y declarado)
+[10:33:15] reglas sin excepción en train: 44
+[10:33:15] HOLDOUT: cobertura 94.7% | precisión certificada 0.8819 | fallos 10
+[10:33:15] CONTROL TRIVIAL: la llave fija k=23 sola cubre 75.7% del holdout — las reglas solo aportan si superan eso
+[10:33:15] llaves válidas por puerta: 1e5=8.69 1e6=10.93 1e7=12.47 1e8=12.89 1e9=13.8 1e10=15.02 1e11=16.42
+[10:33:15] FIN masterkey: 315 puertas en 0.0 min
