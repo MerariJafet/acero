@@ -38,6 +38,7 @@ KIND_WRITERS: dict[str, set[str] | None] = {
     "report": {"Bohr"},
     "council_status": None,
     "session": None,
+    "violation": None,      # evento de seguridad epistémica: lo escribe el sistema
 }
 
 # backends que cuentan como prueba MECÁNICA (para lemma.proved=True)
@@ -67,3 +68,21 @@ def check_put(actor: str, kind: str, payload: dict[str, Any]
     if violations:
         out["_permiso_violado"] = violations
     return out, violations
+
+
+def record_violation(store: Any, project_id: str, *, actor: str, kind: str,
+                     violations: list[str], parent_id: str | None = None) -> None:
+    """El INTENTO de violación es información de seguridad epistémica: degradar
+    silenciosamente escondería que una ruta intenta elevar resultados sin
+    autorización. Si mañana algo lo intenta 300 veces, estas filas lo delatan.
+    Best-effort: registrar el evento jamás rompe la escritura original."""
+    import time
+    try:
+        store.put(project_id, "violation", f"viol_{int(time.time() * 1000)}",
+                  {"actor_intento": actor, "kind_objetivo": kind,
+                   "violaciones": violations, "origin": "permisos-mecanicos"},
+                  status="FLAGGED", parent_id=parent_id, actor="Sistema",
+                  summary=f"intento no autorizado: {actor}→{kind}: "
+                          f"{violations[0][:90]}")
+    except Exception:  # noqa: BLE001
+        pass

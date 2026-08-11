@@ -178,7 +178,7 @@ def record_lemma(project_id: str, statement: str, *, proved: bool = False, backe
     necessary condition on any counterexample, a bound, or a weaker variant. Honest:
     `proved` reflects the mechanical verification, and a proved contribution is partial
     progress, NEVER a solution to an open problem."""
-    from ..science.permissions import check_put
+    from ..science.permissions import check_put, record_violation
     store = _store(sf)
     lid = new_id("lem")
     payload, violations = check_put("Gödel", "lemma", {
@@ -190,6 +190,11 @@ def record_lemma(project_id: str, statement: str, *, proved: bool = False, backe
               status=("PROVED" if payload.get("proved") else
                       ("FLAGGED" if violations else "PROPOSED")),
               parent_id=parent_id, actor="Gödel", summary=statement[:120])
+    if violations:
+        # el intento queda como EVENTO auditable — degradar sin registrar
+        # escondería una ruta que insiste en elevar sin autorización
+        record_violation(store, project_id, actor="Gödel", kind="lemma",
+                         violations=violations, parent_id=parent_id)
     return lid
 
 

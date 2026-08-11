@@ -51,12 +51,50 @@ ACTION_RISK: dict[str, float] = {
 WEIGHTS = {"info": 1.5, "falsif": 1.0, "novedad": 0.8, "incert": 0.7,
            "costo": 1.0, "riesgo": 1.2}
 
+# Versionado (auditoría externa): los pesos NO son dogma — cada decisión registra
+# con qué versión de política se puntuó, para poder recalibrar contra resultados
+# reales (Research Genome) sin reescribir la historia.
+POLICY_VERSION = "policy-v1"
+
+# NORMALIZACIÓN (contrato explícito): TODAS las variables viven en [0,1].
+#   info/falsif/novedad/incert/riesgo_llm → _clip a [0,1] (estimaciones del LLM)
+#   costo  → tabla en [0, 0.45] ⊂ [0,1]
+#   riesgo → max(tabla, estimación LLM) ∈ [0,1]
+#   repetición → [0, ~1.9] (penalización, puede dominar A PROPÓSITO: repetir lo
+#   idéntico debe perder contra casi cualquier alternativa)
+# Rango resultante de U: aprox [-3.1, +4.0]. Comparable entre candidatas SIEMPRE.
+
+# FUENTES (auditoría externa: "¿quién calcula cada score?"). v1, honesto:
+#   proposer (LLM): info, falsif, novedad, incert, riesgo(parcial)
+#   mechanical:     costo (tabla), riesgo (piso de tabla), repetición (historial)
+#   historical:     NO EXISTE AÚN — interfaz declarada abajo; se activará con el
+#                   Research Genome cuando haya volumen (>100 rondas). Hasta
+#                   entonces, decirlo — no fingirlo.
+SCORE_SOURCES = {"info": "proposer", "falsif": "proposer", "novedad": "proposer",
+                 "incert": "proposer", "costo": "mechanical",
+                 "riesgo": "mechanical+proposer", "repeticion": "mechanical"}
+
+
+def historical_estimate(action: str, history: list[dict[str, Any]]
+                        ) -> float | None:
+    """Estimación EMPÍRICA de ganancia de una acción, minada de rondas pasadas.
+    v1: devuelve None SIEMPRE — no hay volumen suficiente para minar trayectorias
+    (Research Genome, roadmap). La interfaz existe para que activarla no cambie
+    ningún contrato; los tests fijan que None se maneja correctamente."""
+    del action, history
+    return None
+
 
 def _clip(v: Any) -> float:
+    """A [0,1], con guardas: NaN/Inf/None/no-numérico → 0.0 (jamás propagar)."""
+    import math
     try:
-        return max(0.0, min(1.0, float(v)))
+        f = float(v)
     except (TypeError, ValueError):
         return 0.0
+    if not math.isfinite(f):
+        return 0.0
+    return max(0.0, min(1.0, f))
 
 
 def _repetition_penalty(action: str, history: list[dict[str, Any]]) -> float:
@@ -88,13 +126,17 @@ def score(candidate: dict[str, Any], history: list[dict[str, Any]]
     costo = ACTION_COST.get(action, 0.20)
     riesgo = max(ACTION_RISK.get(action, 0.10), riesgo_llm)
     rep = _repetition_penalty(action, history)
+    hist = historical_estimate(action, history)      # v1: None (declarado)
     utility = (WEIGHTS["info"] * info + WEIGHTS["falsif"] * falsif
                + WEIGHTS["novedad"] * novedad + WEIGHTS["incert"] * incert
                - WEIGHTS["costo"] * costo - WEIGHTS["riesgo"] * riesgo - rep)
     return {"action": action, "utility": round(utility, 4),
+            "policy_version": POLICY_VERSION,
             "desglose": {"info": info, "falsif": falsif, "novedad": novedad,
                          "incert": incert, "costo": costo, "riesgo": riesgo,
-                         "repeticion": round(rep, 3)}}
+                         "repeticion": round(rep, 3)},
+            "fuentes": SCORE_SOURCES,
+            "historical_estimate": hist}
 
 
 class PolicyEngine:

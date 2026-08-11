@@ -99,6 +99,48 @@ def test_propose_schema_es_estricto() -> None:
     assert "info_esperada" in item["required"]
 
 
+# --- CONS-3: guardas adversariales del PolicyEngine --------------------------------
+def test_policy_estimaciones_infladas_se_recortan_a_1() -> None:
+    """El LLM no puede comprar el ranking inflando: info=99 vale igual que 1.0,
+    y el riesgo tiene PISO de tabla que su autoevaluación no puede rebajar."""
+    s = score(_cand("reiniciar", info_esperada=99.0, novedad=99.0, riesgo=0.0), [])
+    assert s["desglose"]["info"] == 1.0 and s["desglose"]["novedad"] == 1.0
+    assert s["desglose"]["riesgo"] >= 0.45          # piso mecánico de 'reiniciar'
+
+
+def test_policy_nan_inf_y_faltantes_no_propagan() -> None:
+    import math
+    s = score(_cand("hipatia", info_esperada=float("nan"),
+                    falsabilidad=float("inf"), novedad=None), [])
+    assert s["desglose"]["info"] == 0.0
+    assert s["desglose"]["falsif"] == 0.0
+    assert s["desglose"]["novedad"] == 0.0
+    assert math.isfinite(s["utility"])              # jamás NaN en la utilidad
+
+
+def test_policy_registra_version_y_fuentes() -> None:
+    """Auditoría: cada score declara su FUENTE (proposer/mechanical) y la versión
+    de política; el estimador histórico existe como interfaz y devuelve None
+    honestamente (v1 no aprende del historial más allá de la repetición)."""
+    from acero.science.policy import POLICY_VERSION, historical_estimate
+    s = score(_cand("popper"), [])
+    assert s["policy_version"] == POLICY_VERSION
+    assert s["fuentes"]["info"] == "proposer"       # estimación del LLM, declarada
+    assert s["fuentes"]["costo"] == "mechanical"
+    assert s["historical_estimate"] is None
+    assert historical_estimate("popper", []) is None
+
+
+def test_policy_repeticion_disfrazada_con_otra_razon_igual_se_penaliza() -> None:
+    """Cambiar el 'reason' no engaña a la penalización: mira acción+resultado."""
+    hist = [{"action": "turing", "summary": "budget_exhausted: sin señal"},
+            {"action": "turing", "summary": "budget_exhausted: sin señal"}]
+    disfrazada = _cand("turing", reason="ahora con OTRO ángulo totalmente nuevo",
+                       info_esperada=0.95, novedad=0.95)
+    s = score(disfrazada, hist)
+    assert s["desglose"]["repeticion"] > 0.5
+
+
 # --- UPG-2: capacidades tipadas + permisos -----------------------------------------
 def test_capacidades_sin_huerfanas_ni_fantasmas() -> None:
     from acero.science.capabilities import (PERSONA_CAPABILITIES,
@@ -129,7 +171,9 @@ def test_permisos_actor_no_autorizado_queda_marcado() -> None:
     assert viol2 == [] and "_permiso_violado" not in out2
 
 
-def test_record_lemma_aplica_permisos(session_factory) -> None:
+def test_record_lemma_aplica_permisos_y_registra_el_intento(session_factory) -> None:
+    """La degradación NO basta: el INTENTO queda como kind='violation' — si una
+    ruta intenta 300 veces elevar a prueba, estas filas lo delatan."""
     from acero.discovery.store import DiscoveryStore
     from acero.ledger.service import ResearchLedger
     from acero.portal.investigator_bridge import record_lemma
@@ -139,6 +183,12 @@ def test_record_lemma_aplica_permisos(session_factory) -> None:
     st = DiscoveryStore(session_factory, ResearchLedger(session_factory))
     lem = st.list_objects(p.id, kind="lemma")[0]
     assert lem["proved"] is False and lem["_permiso_violado"]
+    viols = st.list_objects(p.id, kind="violation")
+    assert len(viols) == 1
+    assert viols[0]["kind_objetivo"] == "lemma"
+    # un lema legítimo NO genera evento
+    record_lemma(p.id, "lema real", proved=True, backend="z3", sf=session_factory)
+    assert len(st.list_objects(p.id, kind="violation")) == 1
 
 
 # --- UPG-3: discovery fabric fase 1 ------------------------------------------------
