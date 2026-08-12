@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from acero.science import proof_assistant as ga
@@ -100,6 +102,30 @@ def test_latido_roto_no_tumba_el_solve(monkeypatch):
     r = ga.prove("int_forall", expr="n*n >= 0", vars=["n"], timeout_s=60.0,
                  beat_every_s=0.3, on_beat=_boom)
     assert r["result"] == "proved"
+
+
+def test_fallo_al_lanzar_hijo_se_loguea_y_queda_marcado_degradado(monkeypatch, caplog):
+    """Si `ctx.Process(...)` no puede lanzarse (fork falla), el fallback a
+    `_prove_direct` sigue existiendo ("mejor resolver que no resolver") pero ya NO
+    puede ser silencioso: debe quedar logueado con traceback y el resultado debe
+    decir explícitamente que corrió sin aislamiento ni techo de tiempo, para que esto
+    sea diagnosticable sin tener que hurgar en /proc como con la Ronda 4/Ronda 7."""
+    import multiprocessing as mp
+
+    class _BoomContext:
+        def Queue(self, *a, **kw):
+            raise RuntimeError("fork no disponible en este runtime (simulado)")
+
+    monkeypatch.setattr(mp, "get_context", lambda name: _BoomContext())
+    caplog.set_level(logging.ERROR, logger="acero.science.proof_assistant")
+
+    r = ga.prove("bool_sat", expr="a", vars=["a"], sort="bool")
+
+    assert r["degraded_no_isolation"] is True
+    assert r["result"] == "proved"               # el fallback SÍ resuelve el claim
+    assert any("aislamiento" in rec.message or "fork" in rec.message
+               for rec in caplog.records)
+    assert any(rec.exc_info for rec in caplog.records)   # traceback real, no solo texto
 
 
 def test_techo_por_defecto_es_de_dias_no_de_minutos(monkeypatch):

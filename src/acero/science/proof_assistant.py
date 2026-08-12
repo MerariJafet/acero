@@ -24,7 +24,10 @@ the same trust model as sympy's `sympify` in Euclides.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 RESULTS = ("proved", "refuted", "unknown")
 KINDS = ("int_forall", "real_forall", "bool_forall", "int_exists", "bool_sat")
@@ -116,7 +119,17 @@ def prove(kind: str, *, timeout_s: float | None = None,
                     pass
         return q.get(timeout=5)
     except Exception:  # noqa: BLE001 - sin proceso hijo, mejor resolver que no resolver
-        return _prove_direct(kind, **kw)
+        log.error(
+            "prove(): fallo al lanzar/vigilar el proceso hijo aislado (fork) para "
+            "kind=%r — cayendo a _prove_direct SIN aislamiento de proceso ni techo de "
+            "tiempo. Esto reproduce el patrón de la Ronda 4 (ver docstring de prove()): "
+            "un solve que se cuelga aquí será indistinguible de un cuelgue del proceso "
+            "llamador salvo hurgando en /proc.",
+            kind, exc_info=True,
+        )
+        result = _prove_direct(kind, **kw)
+        result["degraded_no_isolation"] = True
+        return result
 
 
 def _prove_child(q: Any, kind: str, kw: dict[str, Any]) -> None:
