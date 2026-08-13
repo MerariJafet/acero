@@ -285,3 +285,46 @@ def test_run_bohr_cycle_sugiere_la_siguiente_ronda_automaticamente(
     rep = next(r for r in rows if r["kind"] == "report")
     assert "🧭 Recomendación automática" in rep["payload"]["markdown"]
     assert "Ataca ahora la Hipótesis B" in rep["payload"]["markdown"]
+
+
+def test_mendeleev_lee_datasets_con_clave_filas(session_factory) -> None:
+    """Regresión (Ronda 7 Erdős-Straus, 2026-08-12): el ejecutor de Mendeleev
+    solo miraba loaded.get("rows"), pero los datasets reales del proyecto (p.ej.
+    matriz_puerta_llave.json) usan la clave "filas" — 3 jugadas consecutivas
+    fallaron con 'sin datos suficientes' pese a que el archivo cargaba bien y
+    tenía 1680 filas. dataset_ref debe aceptar ambas claves."""
+    import json
+    from pathlib import Path
+
+    from acero.discovery.store import DiscoveryStore
+    from acero.ledger.service import ResearchLedger
+    from acero.portal.investigator_bridge import run_bohr_cycle
+
+    research = Path("research").resolve()
+    fp = research / "_test_mendeleev_filas.json"
+    fp.write_text(json.dumps({"filas": [
+        {"a": 1, "b": 2}, {"a": 2, "b": 4}, {"a": 3, "b": 6}, {"a": 4, "b": 8},
+    ]}), encoding="utf-8")
+    try:
+        class _Prov:
+            def __init__(self) -> None:
+                self._ds = [
+                    _d("mendeleev", dataset_ref="_test_mendeleev_filas.json"),
+                    _d("cerrar", disposition="needs_human_review"),
+                ]
+
+            def complete_json(self, prompt, schema, *, temperature=0.0):
+                return self._ds.pop(0)
+
+        lg = ResearchLedger(session_factory)
+        p = lg.create_project("Mendeleev filas", domain="matemáticas")
+        run_bohr_cycle(p.id, "conjetura de prueba", provider=_Prov(),
+                       sf=session_factory)
+        store = DiscoveryStore(session_factory, lg)
+        rows = store.list_rows(p.id)
+        rep = next(r for r in rows if r["kind"] == "report")
+        md = rep["payload"]["markdown"]
+        assert "sin datos suficientes" not in md
+        assert "patrones candidatos" in md
+    finally:
+        fp.unlink(missing_ok=True)

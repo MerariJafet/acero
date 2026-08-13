@@ -1046,7 +1046,7 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                 try:
                     loaded = _json.loads(fp.read_text(encoding="utf-8"))
                     rows = loaded if isinstance(loaded, list) else \
-                        list(loaded.get("rows") or [])
+                        list(loaded.get("rows") or loaded.get("filas") or [])
                 except Exception as exc:  # noqa: BLE001
                     return {"summary": f"dataset ilegible ({ref}): "
                                        f"{str(exc)[:120]}", "verdict": "sin_datos"}
