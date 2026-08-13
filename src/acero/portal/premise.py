@@ -31,6 +31,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from ..core.ids import new_id
+
 DRIFT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -145,7 +147,12 @@ def check_drift(provider: Any, premise: dict[str, Any], statement: str,
               "razon": str(out.get("razon") or ""), "sin_revision": False}
     if result["deriva"] and project_id:
         store = _store(sf)
-        store.put(project_id, "drift", f"drift_{int(time.time() * 1000)}",
+        # new_id() (timestamp + os.urandom) y NO f"drift_{int(time.time()*1000)}":
+        # dos derivas registradas en el mismo milisegundo compartían id y la
+        # segunda pisaba a la primera en el store — count_grave() subcontaba
+        # las derivas graves reales (visto en tests que corren check_drift en
+        # ráfaga: 4 llamadas rápidas solo dejaban 3 ids distintos).
+        store.put(project_id, "drift", new_id("drift"),
                   {**result, "statement": statement[:500],
                    "premise_version": premise.get("version"),
                    "origin": "guardian-premisa"},

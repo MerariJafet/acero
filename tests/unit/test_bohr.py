@@ -330,6 +330,47 @@ def test_mendeleev_lee_datasets_con_clave_filas(session_factory) -> None:
         fp.unlink(missing_ok=True)
 
 
+def test_el_enunciado_de_apertura_tambien_se_revisa_contra_el_sello(
+        session_factory) -> None:
+    """Antes, _drift_check solo se disparaba en 'reiniciar' y en la reformulación
+    de Feynman — el enunciado CON EL QUE ARRANCA la ronda nunca se contrastaba
+    contra la premisa. Visto en vivo (Ronda 8): el enunciado inicial ya llegaba
+    desviado (heredado de la sugerencia automática de cierre de la ronda
+    anterior) y nadie lo marcó hasta la jugada 6; las jugadas 1-5 atacaron la
+    pregunta equivocada sin ninguna alerta. Esto fija que el guardián revisa
+    también el enunciado de apertura, antes de que Bohr juegue nada."""
+    from acero.ledger.service import ResearchLedger
+    from acero.portal.investigator_bridge import _store, run_bohr_cycle
+    from acero.portal.premise import seal_premise
+
+    lg = ResearchLedger(session_factory)
+    p = lg.create_project("Apertura ya desviada", domain="matemáticas")
+    seal_premise(
+        p.id, sf=session_factory,
+        porque="construir una llave DINÁMICA k(p) que se adapte al crecimiento",
+        medio="ley de crecimiento de cover(N)",
+        definiciones={"C(p,k)": "existe t | (p·x)² con t ≡ −px (mod k), x=(p+k)/4"})
+
+    class _Prov:
+        def complete_json(self, prompt, schema, *, temperature=0.0):
+            if "deriva" in schema.get("properties", {}):
+                return {"deriva": True, "severidad": "grave",
+                        "que_se_debilito": "el enunciado de apertura ya abandona "
+                                           "el porqué sellado",
+                        "razon": "hereda una sugerencia de cierre ya desviada"}
+            return _d("cerrar", disposition="needs_human_review")
+
+    out = run_bohr_cycle(
+        p.id, "predecir si k_min(p) > K con una regla estadística en holdout",
+        provider=_Prov(), sf=session_factory)
+    del out
+
+    drifts = _store(session_factory).list_objects(p.id, kind="drift")
+    assert len(drifts) == 1                          # se registró SIN esperar
+    assert drifts[0]["severidad"] == "grave"          # a un 'reiniciar' o reformulación
+    assert "apertura" in drifts[0]["que_se_debilito"]
+
+
 def test_alternativas_del_revisor_no_se_pierden_en_el_log(session_factory, monkeypatch
                                                           ) -> None:
     """Cuando Aristóteles marca algo "defectuoso" porque propone OTRA idea, esa

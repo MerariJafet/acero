@@ -1214,6 +1214,17 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
     if premise:
         # el sello va ANTES del conocimiento del Consejo: es lo primero que Bohr lee
         knowledge = premise_context(premise) + "\n\n" + knowledge
+        # el guardián solo se llamaba en 'reiniciar' y en la reformulación de
+        # Feynman — el enunciado CON EL QUE ARRANCA la ronda nunca se revisaba.
+        # Visto en vivo (Ronda 8): el enunciado inicial ya venía desviado del
+        # porqué sellado (heredado de la sugerencia automática de cierre de la
+        # Ronda 7) y nadie lo marcó hasta la jugada 6, cuando Feynman reformuló
+        # por primera vez — jugadas 1-5 atacaron la pregunta equivocada sin que
+        # nada lo señalara. Revisar el enunciado de apertura, no solo sus
+        # reformulaciones, cierra ese hueco.
+        warn0 = _drift_check(claim)
+        if warn0:
+            knowledge = knowledge + "\n\n" + warn0
     orch = orchestrator or BohrOrchestrator(
         provider, executors, knowledge=knowledge,
         max_actions=max_actions, wall_budget_s=wall_budget_s, on_step=_on_step,
