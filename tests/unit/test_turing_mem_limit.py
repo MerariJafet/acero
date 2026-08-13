@@ -14,9 +14,11 @@ estos tests fijan es que sin jaula ≠ sin techo.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import pytest
 
+from acero.core.config import repo_root
 from acero.science.turing import _default_run, mem_limit_bytes
 
 
@@ -93,3 +95,69 @@ def test_el_limite_llega_al_hijo() -> None:
                      timeout_s=60)
     assert f"LIM {int(3 * 1024 ** 3)}" in r["stdout"]
     del os.environ["ACERO_TURING_MEM_GB"]
+
+
+# --- cosecha de research/: lo que Turing "materializa" no puede perderse -----------
+#
+# Incidente real (Ronda 8, 2026-08-13): Turing corre con cwd=sandbox_efímero, así
+# que un script que escribe 'research/reto50/x.json' lo deja dentro del sandbox,
+# que se borra al terminar _default_run. El VEREDICTO decía OK pero Mendeleev
+# recibía FileNotFoundError — el archivo existió, brevemente, en un directorio ya
+# destruido. Estos tests fijan que lo que se escribe bajo research/ sobrevive.
+
+def _limpiar(rel: str) -> None:
+    dest = repo_root() / "research" / rel
+    if dest.exists():
+        dest.unlink()
+    # limpia directorios intermedios que el test haya creado, si quedan vacíos
+    for parent in dest.parents:
+        if parent == repo_root() / "research" or parent == repo_root():
+            break
+        try:
+            parent.rmdir()
+        except OSError:
+            break
+
+
+def test_lo_escrito_bajo_research_sobrevive_al_sandbox(monkeypatch) -> None:
+    monkeypatch.setenv("ACERO_TURING_MEM_GB", "1")
+    rel = "_test_cosecha/materializado.json"
+    try:
+        r = _default_run(
+            "import os, json\n"
+            "os.makedirs('research/_test_cosecha', exist_ok=True)\n"
+            "json.dump({'ok': True}, open('research/_test_cosecha/materializado.json', 'w'))\n"
+            "print('VEREDICTO: OK')\n",
+            timeout_s=60)
+        assert r["rc"] == 0 and "VEREDICTO: OK" in r["stdout"]
+        dest = repo_root() / "research" / rel
+        assert dest.is_file(), "el artefacto no sobrevivió al sandbox efímero"
+        assert "materializado.json" in r["stderr"]  # queda anotado qué se copió
+    finally:
+        _limpiar(rel)
+
+
+def test_sin_escritura_bajo_research_no_pasa_nada_ni_falla(monkeypatch) -> None:
+    monkeypatch.setenv("ACERO_TURING_MEM_GB", "1")
+    r = _default_run("print('VEREDICTO: sin artefactos')\n", timeout_s=60)
+    assert r["rc"] == 0
+    assert "artefactos copiados" not in r["stderr"]
+
+
+def test_la_cosecha_tambien_corre_si_hay_timeout(monkeypatch) -> None:
+    """Un experimento que escribe y LUEGO cuelga no debe perder lo ya materializado."""
+    monkeypatch.setenv("ACERO_TURING_MEM_GB", "1")
+    rel = "_test_cosecha_timeout/parcial.json"
+    try:
+        r = _default_run(
+            "import os, json, time\n"
+            "os.makedirs('research/_test_cosecha_timeout', exist_ok=True)\n"
+            "json.dump({'parcial': True}, "
+            "open('research/_test_cosecha_timeout/parcial.json', 'w'))\n"
+            "time.sleep(30)\n",
+            timeout_s=2)
+        assert r["rc"] == -1 and "TIMEOUT" in r["stderr"]
+        dest = repo_root() / "research" / rel
+        assert dest.is_file(), "lo escrito antes del timeout también debe cosecharse"
+    finally:
+        _limpiar(rel)

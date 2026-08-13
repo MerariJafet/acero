@@ -328,3 +328,53 @@ def test_mendeleev_lee_datasets_con_clave_filas(session_factory) -> None:
         assert "patrones candidatos" in md
     finally:
         fp.unlink(missing_ok=True)
+
+
+def test_alternativas_del_revisor_no_se_pierden_en_el_log(session_factory, monkeypatch
+                                                          ) -> None:
+    """Cuando Aristóteles marca algo "defectuoso" porque propone OTRA idea, esa
+    idea no debe quedar enterrada como un campo del objeto critique que nadie
+    vuelve a leer. Bohr decide la siguiente jugada mirando el RESUMEN de cada
+    jugada, TRUNCADO a ~220 caracteres (bohr.py línea 223) — así que el aviso
+    tiene que ir al frente y corto, o la propia crítica (summary+objeciones)
+    ya llena el presupuesto de caracteres y el aviso se trunca de todos modos.
+    Sin esto, ni la decisión en vivo ('rivales'/'reinterpretar') ni la
+    Recomendación automática de cierre pueden verlo — la idea nueva se desecha
+    en silencio en vez de trabajarse."""
+    from acero.discovery.store import DiscoveryStore
+    from acero.ledger.service import ResearchLedger
+    from acero.portal.critic import CriticAgent
+    from acero.portal.investigator_bridge import run_bohr_cycle
+
+    def _fake_critique_now(self, project_id, target_id, task, context, *,
+                           use_ai=True):
+        return {"verdict": "defectuoso",
+                "summary": "el mecanismo propuesto no explica el caso k=23",
+                "objections": ["no cubre k=23"],
+                "alternatives": ["podría ser un efecto de la clase residual, "
+                                 "no del mecanismo del divisor"]}
+    monkeypatch.setattr(CriticAgent, "critique_now", _fake_critique_now)
+
+    class _Prov:
+        def __init__(self) -> None:
+            self._ds = [_d("aristoteles"),
+                       _d("cerrar", disposition="needs_human_review")]
+
+        def complete_json(self, prompt, schema, *, temperature=0.0):
+            if self._ds:
+                return self._ds.pop(0)
+            return {"hilos_no_explorados": [], "pista_pendiente": "",
+                    "siguiente_claim": "", "razon": ""}
+
+    lg = ResearchLedger(session_factory)
+    p = lg.create_project("Alternativas no perdidas", domain="matemáticas")
+    out = run_bohr_cycle(p.id, "conjetura de prueba", provider=_Prov(),
+                         sf=session_factory)
+    resumen = out["history"][0]["summary"]
+    assert resumen.startswith("⚠️1 ALTERNATIVA")       # al frente, no al fondo
+    assert "rivales" in resumen and "reinterpretar" in resumen  # con la pista de qué hacer
+    assert "⚠️1 ALTERNATIVA" in resumen[:220]           # sobrevive el truncado real de Bohr
+
+    store = DiscoveryStore(session_factory, lg)
+    rep = next(r for r in store.list_rows(p.id) if r["kind"] == "report")
+    assert "⚠️1 ALTERNATIVA" in rep["payload"]["markdown"]     # y en el informe

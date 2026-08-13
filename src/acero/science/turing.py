@@ -14,12 +14,15 @@ Honestidad:
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
+from pathlib import Path
 from typing import Any, Callable
 
+from ..core.config import repo_root
 from . import toolbox
 
 TURING_SCHEMA: dict[str, Any] = {
@@ -93,6 +96,33 @@ _LANZADOR = (
 )
 
 
+def _harvest_research_outputs(sandbox_dir: str) -> list[str]:
+    """Copia a la ubicación REAL cualquier archivo que el experimento haya escrito
+    bajo research/ dentro de su sandbox efímero.
+
+    El experimento corre con cwd=sandbox_dir, así que un path relativo como
+    'research/reto50/x.json' aterriza dentro del sandbox, no en el proyecto real —
+    y el sandbox se borra al salir del `with` de _default_run. Visto en vivo
+    (Ronda 8, 2026-08-13): Turing reportaba VEREDICTO: OK con la tabla
+    "materializada", pero Mendeleev recibía FileNotFoundError tres jugadas
+    seguidas al intentar leerla — el archivo existió, brevemente, en un directorio
+    que ya no existía. Sin esta cosecha, cualquier cosa que Turing escriba bajo
+    research/ es descartada aunque el veredicto diga lo contrario."""
+    src = Path(sandbox_dir) / "research"
+    if not src.is_dir():
+        return []
+    dest_root = repo_root() / "research"
+    copied: list[str] = []
+    for fp in src.rglob("*"):
+        if fp.is_file():
+            rel = fp.relative_to(src)
+            dest = dest_root / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(fp, dest)
+            copied.append(str(rel))
+    return copied
+
+
 def _default_run(code: str, timeout_s: int) -> dict[str, Any]:
     """Corre el script con el python del venv, aislado en un dir temporal.
 
@@ -131,10 +161,16 @@ def _default_run(code: str, timeout_s: int) -> dict[str, Any]:
                         f"{limite / 1024 ** 3:.1f} GiB. Rehazlo con menos memoria: "
                         "procesa por lotes o en streaming en vez de materializar "
                         "todo, y no acumules listas del tamaño del barrido.")
+            cosechado = _harvest_research_outputs(td)
+            if cosechado:
+                err += f"\n[ACERO] artefactos copiados a research/: {cosechado}"
             return {"rc": r.returncode, "stdout": r.stdout[-6000:], "stderr": err,
                     "mem_limit_bytes": limite}
         except subprocess.TimeoutExpired:
-            return {"rc": -1, "stdout": "", "stderr": f"TIMEOUT {timeout_s}s",
+            cosechado = _harvest_research_outputs(td)
+            extra = f" (artefactos copiados: {cosechado})" if cosechado else ""
+            return {"rc": -1, "stdout": "",
+                    "stderr": f"TIMEOUT {timeout_s}s{extra}",
                     "mem_limit_bytes": limite}
 
 

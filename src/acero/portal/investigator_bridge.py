@@ -1000,7 +1000,18 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
         if not v:
             return {"summary": "crítica NO disponible (revisor caído) — no cuenta "
                                "como corroboración", "verdict": "sin_revision"}
-        return {"summary": f"crítica[{v}]: {str(crit.get('summary'))[:160]}"
+        # las "alternatives" del Revisor son EXPLICACIONES DISTINTAS que no
+        # descartó — si se quedan solo en el objeto critique del ledger, Bohr
+        # (que decide la próxima jugada leyendo ESTE resumen truncado a ~220
+        # caracteres, no la BD entera) nunca las ve y una idea nueva se pierde
+        # en vez de trabajarse con "rivales"/"reinterpretar". Por eso el AVISO
+        # va AL FRENTE, corto y sin reproducir el texto completo — lo largo
+        # (la alternativa en sí) sigue completo en el critique del ledger; lo
+        # que no puede perderse en la primera línea es que EXISTE.
+        n_alts = len(crit.get("alternatives") or [])
+        alt_flag = (f"⚠️{n_alts} ALTERNATIVA(S) SIN DESCARTAR (no desechar — "
+                    f"trabajar con 'rivales'/'reinterpretar') " if n_alts else "")
+        return {"summary": f"{alt_flag}crítica[{v}]: {str(crit.get('summary'))[:120]}"
                            + (f" | objeciones: {objs}" if objs else ""),
                 "verdict": v}
 
