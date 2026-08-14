@@ -114,7 +114,13 @@ def _harvest_research_outputs(sandbox_dir: str) -> list[str]:
     dest_root = repo_root() / "research"
     copied: list[str] = []
     for fp in src.rglob("*"):
-        if fp.is_file():
+        # symlinks se saltan a propósito: Turing ya corre sin jaula (decisión
+        # humana explícita) y puede leer cualquier archivo del sistema con una
+        # ruta absoluta de todos modos, pero un symlink DENTRO del sandbox que
+        # apunte fuera (p.ej. a una clave SSH) haría que la cosecha lo copiara
+        # a research/, un directorio persistente y visible — sin ganar acceso
+        # nuevo, evita dejar ese rastro por accidente.
+        if fp.is_file() and not fp.is_symlink():
             rel = fp.relative_to(src)
             dest = dest_root / rel
             dest.parent.mkdir(parents=True, exist_ok=True)

@@ -137,6 +137,31 @@ def test_lo_escrito_bajo_research_sobrevive_al_sandbox(monkeypatch) -> None:
         _limpiar(rel)
 
 
+def test_la_cosecha_no_sigue_symlinks_fuera_del_sandbox(monkeypatch, tmp_path) -> None:
+    """Turing corre SIN jaula (decisión humana explícita) y ya puede leer cualquier
+    archivo del sistema con una ruta absoluta — esto no le da acceso nuevo. Pero un
+    symlink DENTRO de research/ que apunte a un archivo real haría que la cosecha
+    copiara ese contenido a research/, un directorio persistente y visible: un rastro
+    que no debería quedar por accidente. La cosecha debe saltarse symlinks."""
+    monkeypatch.setenv("ACERO_TURING_MEM_GB", "1")
+    secreto = tmp_path / "afuera_del_sandbox.txt"
+    secreto.write_text("contenido que NO debe terminar en research/")
+    rel = "_test_cosecha_symlink/enlace.txt"
+    try:
+        r = _default_run(
+            "import os\n"
+            "os.makedirs('research/_test_cosecha_symlink', exist_ok=True)\n"
+            f"os.symlink({str(secreto)!r}, 'research/_test_cosecha_symlink/enlace.txt')\n"
+            "print('VEREDICTO: symlink creado')\n",
+            timeout_s=60)
+        assert r["rc"] == 0
+        dest = repo_root() / "research" / rel
+        assert not dest.exists(), "el symlink no debia cosecharse"
+        assert "enlace.txt" not in r["stderr"]
+    finally:
+        _limpiar(rel)
+
+
 def test_sin_escritura_bajo_research_no_pasa_nada_ni_falla(monkeypatch) -> None:
     monkeypatch.setenv("ACERO_TURING_MEM_GB", "1")
     r = _default_run("print('VEREDICTO: sin artefactos')\n", timeout_s=60)
