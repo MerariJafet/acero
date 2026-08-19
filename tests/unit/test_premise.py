@@ -229,3 +229,34 @@ def test_deriva_sin_version_cuenta_igual(session_factory) -> None:
            {"severidad": "grave", "que_se_debilito": "x", "razon": "y"},
            status="FLAGGED", actor="Hilbert", summary="deriva sin versión")
     assert count_grave(pid, sf=session_factory) == 1
+
+
+def test_deriva_adjudicada_deja_de_contar_sin_borrarse(session_factory) -> None:
+    """Decisión humana (2026-08-19, run 3): una deriva grave ADJUDICADA
+    (RESOLVED_BY_SCOPE, RESOLVED_BY_FIX, SCIENTIFIC_LINE_REJECTED,
+    MOVED_TO_SEPARATE_PROGRAM) deja de contar contra el sello, pero el evento
+    sigue íntegro en el ledger. ACTIVE y HUMAN_DECISION_REQUIRED siguen
+    contando: no se fuerza el cero."""
+    from acero.discovery.store import DiscoveryStore
+    from acero.ledger.service import ResearchLedger
+    from acero.portal.premise import count_grave
+
+    pid, prem = _sello(session_factory)
+    prov = _Prov({"deriva": True, "severidad": "grave",
+                  "que_se_debilito": "optimiza el selector", "razon": "medio"})
+    for _ in range(3):
+        check_drift(prov, prem, "enunciado que deriva", project_id=pid,
+                    sf=session_factory)
+    assert count_grave(pid, sf=session_factory) == 3
+
+    st = DiscoveryStore(session_factory, ResearchLedger(session_factory))
+    drifts = [r for r in st.list_rows(pid) if r["kind"] == "drift"]
+    # dos adjudicadas con estados de cierre, una queda pendiente de humano
+    for row, estado in zip(drifts, ("RESOLVED_BY_SCOPE",
+                                    "SCIENTIFIC_LINE_REJECTED",
+                                    "HUMAN_DECISION_REQUIRED")):
+        pay = dict(row["payload"]); pay["estado"] = estado
+        st.put(pid, "drift", row["id"], pay, status=estado)
+    assert count_grave(pid, sf=session_factory) == 1
+    # nada se borró
+    assert len([r for r in st.list_rows(pid) if r["kind"] == "drift"]) == 3

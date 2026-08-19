@@ -189,9 +189,18 @@ def count_grave(project_id: str, sf: Any = None,
         if vigente is None:
             prem = get_premise(project_id, sf=sf)
             vigente = int(prem.get("version") or 0) if prem else 0
+        # Estados de adjudicación que CIERRAN una deriva (decisión humana del
+        # 2026-08-19, run 3): el evento queda intacto en el ledger, pero una
+        # deriva adjudicada ya no cuenta contra el sello. Sin `estado` (o con
+        # ACTIVE / HUMAN_DECISION_REQUIRED) sigue contando: bloquear de más
+        # antes que dejar pasar.
+        cerradas = {"RESOLVED", "RESOLVED_BY_FIX", "RESOLVED_BY_SCOPE",
+                    "SCIENTIFIC_LINE_REJECTED", "MOVED_TO_SEPARATE_PROGRAM"}
         n = 0
         for d in objetos:
             if d.get("severidad") != "grave":
+                continue
+            if str(d.get("estado") or "").upper() in cerradas:
                 continue
             v = d.get("premise_version")
             if v is None or int(v) == vigente:
