@@ -13,6 +13,8 @@ en separar los cuatro casos de arriba, no en fingir probabilidades calibradas.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from typing import Any
 
@@ -44,13 +46,31 @@ def _huella(kind: str, payload: dict[str, Any]) -> str:
                         or payload.get("verdict"))
         claim = _norm(payload.get("claim") or payload.get("statement")
                       or payload.get("hypothesis"))
-        return f"experiment|{claim}|{verdict}"
+        # el DOMINIO es parte de la identidad de la evidencia: el mismo claim
+        # sostenido en n=3000 y luego en n=15000 son dos piezas de evidencia,
+        # no una re-corrida idéntica (auditoría ML0, 2026-08-19).
+        res = payload.get("result") or {}
+        dominio = _norm(res.get("n_tested") or payload.get("n_tested")
+                        or res.get("rango") or payload.get("rango") or "")
+        return f"experiment|{claim}|{verdict}|{dominio}"
     if kind == "negative":
         return "negative|" + _norm(payload.get("statement") or payload.get("claim"))
     if kind == "pattern":
         return "pattern|" + _norm(payload.get("expr") or payload.get("description")
                                   or payload.get("statement"))
-    return kind + "|" + _norm(payload.get("statement"))
+    contenido = _norm(payload.get("statement"))
+    if not contenido:
+        # Sin campo de contenido NO hay base para declarar "misma evidencia".
+        # Antes esto devolvía "kind|" y colapsaba TODAS las filas de ese kind en
+        # un solo grupo (auditoría ML0 2026-08-19: 749 decisiones + 375
+        # literaturas + 239 builds DISTINTAS contadas como "duplicados" — el
+        # 81% de descartes que disparó la alarma). La huella honesta de una
+        # fila sin statement es su payload completo: solo filas byte-iguales
+        # son la misma evidencia.
+        canon = json.dumps(payload, sort_keys=True, ensure_ascii=False,
+                           default=str)
+        return kind + "|sha:" + hashlib.sha256(canon.encode()).hexdigest()[:24]
+    return kind + "|" + contenido
 
 
 def credence_for(rows: list[dict[str, Any]]) -> dict[str, Any]:

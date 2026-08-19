@@ -139,3 +139,31 @@ def test_render_line_sigue_funcionando():
 def test_la_formula_declara_que_deduplica():
     r = credence_for([_lemma("A", rid=1)])
     assert "DEDUPLICADA" in r["formula"] or "deduplicada" in r["formula"].lower()
+
+
+def test_filas_sin_statement_NO_colapsan_entre_si():
+    """Auditoría ML0 (2026-08-19): kinds sin campo `statement` (decision,
+    literature, build...) devolvían la huella vacía "kind|" y TODAS las filas
+    de ese kind colapsaban en un grupo — 1685/2070 filas del proyecto real
+    contadas como "duplicados" sin serlo."""
+    filas = [{"id": i, "kind": "decision",
+              "payload": {"persona": "bohr", "razon": f"jugada distinta {i}"}}
+             for i in (1, 2, 3)]
+    r = credence_for(filas)
+    assert r["duplicados_descartados"]["por_contenido"] == 0
+
+
+def test_filas_sin_statement_byte_iguales_SI_deduplican():
+    pay = {"persona": "bohr", "razon": "la misma jugada re-registrada"}
+    r = credence_for([{"id": 1, "kind": "decision", "payload": dict(pay)},
+                      {"id": 2, "kind": "decision", "payload": dict(pay)}])
+    assert r["duplicados_descartados"]["por_contenido"] == 1
+
+
+def test_mismo_claim_en_dominios_distintos_son_evidencias_distintas():
+    """El mismo claim sostenido en n=3000 y en n=15000 no es una re-corrida
+    idéntica: el dominio es parte de la identidad de la evidencia."""
+    r = credence_for([_exp("claim X", rid=1, n_tested=3000),
+                      _exp("claim X", rid=2, n_tested=15000)])
+    assert r["a_favor_debil"] == 2
+    assert r["duplicados_descartados"]["por_contenido"] == 0
