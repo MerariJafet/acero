@@ -301,6 +301,21 @@ class PrincipalInvestigator:
         if digest.get("open_anomalies"):
             return {"action": "generate_and_run", "focus": "explicar anomalías",
                     "n_new": 2, "reasoning": "hay anomalías abiertas que perseguir"}
+        # ANTI-BUCLE: insistir con la misma jugada que no cierra nada es la
+        # definición de estancamiento. 2026-08-21: este fallback solo sabía emitir
+        # 2 de las 4 acciones ('deepen' y 'pause' eran INALCANZABLES), y como el
+        # LLM decisor estaba caído siempre caía aquí → 5+ rondas idénticas de
+        # 'run_existing' (el BUCLE_DE_DECISION del Auditor). Si ya se lanzó y
+        # nada volvió con veredicto, cambia de táctica: profundizar literatura
+        # sí produce conocimiento y no depende del agente de codegen.
+        recientes = [str((d or {}).get("action") or "")
+                     for d in (digest.get("recent_decisions") or [])]
+        if len(recientes) >= 3 and set(recientes[-3:]) == {"run_existing"} \
+                and not digest.get("recent_verdicts"):
+            return {"action": "deepen", "focus": "", "n_new": 0,
+                    "reasoning": ("3 rondas lanzando sin UN veredicto: insistir no "
+                                  "cierra preguntas — profundizar la literatura sí "
+                                  "aporta y no depende de la fábrica")}
         return {"action": "run_existing", "focus": "", "n_new": 0,
                 "reasoning": "correr lo aprobado pendiente"}
 

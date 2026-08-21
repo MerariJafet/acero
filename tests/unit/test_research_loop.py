@@ -530,3 +530,36 @@ def test_deepen_reporta_el_motivo_cuando_no_puede(monkeypatch):
     rec = pi.tick("pdeep2")
     assert rec["applied"]["deepened"] == 0
     assert any("investiga primero" in b for b in rec["applied"]["blocks"])
+
+
+def test_deterministico_rompe_el_bucle_cuando_lanzar_no_cierra_nada():
+    """El fallback solo sabía emitir 2 de las 4 acciones ('deepen' y 'pause'
+    eran inalcanzables) y con el LLM caído siempre caía aquí → 5+ rondas
+    idénticas. Si lanzar no devuelve veredictos, hay que cambiar de táctica."""
+    pi = _pi(None)
+    d = pi._deterministic({
+        "hypotheses_by_status": {"APPROVED": 5}, "open_anomalies": [],
+        "recent_decisions": [{"action": "run_existing"}] * 3,
+        "recent_verdicts": []})
+    assert d["action"] == "deepen"
+    assert "veredicto" in d["reasoning"]
+
+
+def test_deterministico_sigue_lanzando_si_hay_veredictos_frescos():
+    """Repetir jugada NO es bucle si está produciendo: no romper lo que funciona."""
+    pi = _pi(None)
+    d = pi._deterministic({
+        "hypotheses_by_status": {"APPROVED": 5}, "open_anomalies": [],
+        "recent_decisions": [{"action": "run_existing"}] * 3,
+        "recent_verdicts": [{"verdict": "refuted"}]})
+    assert d["action"] == "run_existing"
+
+
+def test_deterministico_no_escala_con_pocas_rondas():
+    """Dos rondas iguales todavía no son un bucle — dale tiempo al trabajo."""
+    pi = _pi(None)
+    d = pi._deterministic({
+        "hypotheses_by_status": {"APPROVED": 5}, "open_anomalies": [],
+        "recent_decisions": [{"action": "run_existing"}] * 2,
+        "recent_verdicts": []})
+    assert d["action"] == "run_existing"
