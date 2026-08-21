@@ -344,3 +344,53 @@ def test_sin_veredictos_SI_se_reporta_con_la_infra_sana():
     sig = _sig(misiones={"PENDING": 10, "RUNNING": 2, "DONE": 5},
                ultimo_veredicto_h=15.2)
     assert "SIN_VEREDICTOS" in _codes(sig)
+
+
+# --- "pegada" se mide desde que EMPIEZA a trabajar, no desde que se crea ------
+
+class _Store:
+    """Ledger mínimo: solo devuelve las misiones que le inyectas."""
+
+    def __init__(self, missions):
+        self._m = missions
+
+    def list_objects(self, pid, kind=None):
+        return self._m if kind == "mission" else []
+
+
+def _mision(*, creada_h, primer_paso_h, pct):
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+
+    def iso(h):
+        return None if h is None else (now - timedelta(hours=h)).isoformat()
+    return {"id": "msn_x", "kind": "mission", "status": "RUNNING",
+            "progress_pct": pct, "created_at": iso(creada_h),
+            "heartbeat_ts": __import__("time").time(),
+            "steps": [{"name": "investigate", "started_at": iso(primer_paso_h)},
+                      {"name": "experiments_run", "started_at": None}]}
+
+
+def _signals(missions):
+    from acero.portal.supervisor import project_signals
+    return project_signals(_Store(missions), "p1",
+                           loop_state={}, feedback=[])
+
+
+def test_una_mision_que_hizo_fila_horas_no_esta_pegada():
+    """2026-08-21: una misión con 4,0 h de edad y 24% llevaba 11 MINUTOS
+    trabajando — las otras 3,8 h las pasó en la cola. Medir desde created_at
+    convertía la espera en avería. De la fila ya informa COLA_SATURADA."""
+    s = _signals([_mision(creada_h=4.0, primer_paso_h=0.2, pct=24)])
+    assert s["estancadas"] == []
+
+
+def test_una_mision_que_lleva_horas_trabajando_al_24_por_ciento_SI_esta_pegada():
+    s = _signals([_mision(creada_h=6.0, primer_paso_h=5.0, pct=24)])
+    assert len(s["estancadas"]) == 1
+    assert s["estancadas"][0]["edad_h"] == 5.0     # horas de TRABAJO, no de vida
+
+
+def test_una_mision_que_ni_ha_empezado_esta_encolada_no_pegada():
+    s = _signals([_mision(creada_h=9.0, primer_paso_h=None, pct=0)])
+    assert s["estancadas"] == []

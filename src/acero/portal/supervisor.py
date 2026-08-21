@@ -77,6 +77,14 @@ def _age_h(iso_ts: str | None) -> float | None:
         return None
 
 
+def _primer_arranque(mission: dict[str, Any]) -> str | None:
+    """Cuándo la misión empezó a TRABAJAR de verdad (primer paso arrancado).
+    None si aún no ha empezado ninguno: entonces está haciendo fila, no pegada."""
+    marcas = [str(s.get("started_at")) for s in (mission.get("steps") or [])
+              if s.get("started_at")]
+    return min(marcas) if marcas else None
+
+
 def project_signals(store: Any, pid: str, *, loop_state: dict[str, Any],
                     feedback: list[dict[str, Any]]) -> dict[str, Any]:
     """Los HECHOS de un proyecto: puro conteo sobre el ledger, cero opinión."""
@@ -106,11 +114,17 @@ def project_signals(store: Any, pid: str, *, loop_state: dict[str, Any],
         hb_age = now - float(m.get("heartbeat_ts") or 0)
         if hb_age > 600:                      # 10 min sin latir: nadie lo está corriendo
             zombies.append({"id": m["id"], "hb_age_s": round(hb_age)})
-        started_h = _age_h(m.get("created_at"))
-        if started_h and started_h > STUCK_MISSION_HOURS and \
+        # "Pegada" se mide desde que la misión EMPEZÓ A TRABAJAR, no desde que
+        # se creó. Con la cola saturada, la edad desde created_at la domina la
+        # espera: 2026-08-21, una misión con 4,0 h de edad y 24% llevaba solo 11
+        # min trabajando (3,8 h haciendo fila) y el auditor la llamaba pegada.
+        # Sin primer paso arrancado no está pegada: está encolada, y de eso ya
+        # informa COLA_SATURADA.
+        trabajo_h = _age_h(_primer_arranque(m))
+        if trabajo_h and trabajo_h > STUCK_MISSION_HOURS and \
                 int(m.get("progress_pct") or 0) < 30:
             stuck.append({"id": m["id"], "pct": m.get("progress_pct"),
-                          "edad_h": round(started_h, 1)})
+                          "edad_h": round(trabajo_h, 1)})
 
     # averías de la fábrica: ¿los experimentos no corren por límite o por caída?
     # Se clasifica por el TEXTO del error, no solo por la marca 'infra': así el
