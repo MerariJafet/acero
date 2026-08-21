@@ -96,15 +96,15 @@ const PHASE_RUN = {
   experimentos: { ep: "/experiments/run-all", label: "⚗️ Proponer + correr experimentos" },
 };
 // the essential "start the research" actions — every real flow launches from here.
+// NOTA UX (2026-08-21): Generar hipótesis / Investigar literatura / Correr
+// experimentos vivían AQUÍ duplicados (mismo endpoint, mismos parámetros) con los
+// botones "phase-primary" de sus propias tarjetas de fase más abajo. Se quitaron de
+// aquí -- viven mejor en su tarjeta, donde el usuario ya está viendo el contexto
+// (cuántas aprobadas, cuántos papers). Lo que queda aquí es lo que NO tiene tarjeta
+// propia.
 const LAUNCH = [
-  { ep: "/missions/start-all", icon: "🚀", label: "Misión completa",
-    desc: "corre TODO el ciclo por cada hipótesis aprobada (autónomo)", primary: true },
-  { ep: "/hypotheses/generate", icon: "🧠", label: "Generar hipótesis",
-    desc: "propone hipótesis nuevas orientadas a descubrimiento" },
-  { ep: "/investigate-all", icon: "📚", label: "Investigar literatura",
-    desc: "busca papers reales (DOI + retracción) para cada hipótesis" },
-  { ep: "/experiments/run-all", icon: "⚗️", label: "Correr experimentos",
-    desc: "propone y ejecuta experimentos con datos reales" },
+  { ep: "/missions/start-all", icon: "🚀", label: "Análisis secundario",
+    desc: "confronta las hipótesis ya aprobadas con literatura y datos reales — una pasada completa, no continuo", primary: true },
   { ep: "/novelty/assess-all", icon: "🎯", label: "Evaluar novedad",
     desc: "clasifica cada hipótesis (asentada→frontera)" },
   { ep: "/anomalies/harvest", icon: "🔥", label: "Cazar anomalías",
@@ -183,7 +183,7 @@ async function wireLoopPanel(view, pid) {
         ${dec.focus ? `— <span class="tag">${esc(String(dec.focus).slice(0, 70))}</span>` : ""}
         <div class="tag">generadas ${esc(a.generated || 0)} · aprobadas ${esc(a.approved || 0)} · misiones ${esc(a.started || 0)}${tail}</div>
         ${blk}</div>`;
-    }).join("") : "<p class='tag'>sin ticks aún — pulsa Iniciar para arrancar el ciclo autónomo</p>";
+    }).join("") : "<p class='tag'>sin ticks aún — enciende el Centinela para arrancar</p>";
 
     const modoLoopBar = inModoLoop ? `
       <div id="pi-countdown-wrap" style="margin:.5rem 0">
@@ -192,31 +192,39 @@ async function wireLoopPanel(view, pid) {
         <div class="tag" id="pi-countdown"></div>
       </div>` : "";
 
+    const listening = running
+      ? `<span class="live-dot" aria-hidden="true"></span><span class="tag">escuchando el proceso — puede decidir en cualquier momento</span>`
+      : "";
+
     body.innerHTML = `
-      <p class="tag">El agente decide → la máquina corre los experimentos → la retro vuelve al agente → repite. La metodología gobierna; nada se promueve a descubrimiento sin ti.</p>
-      <div class="tag">estado: <b>${esc(st.paused ? "pausado" : (st.status || "idle"))}</b> · ticks ${esc(st.ticks || 0)} · seco×${esc(st.dry_streak || 0)}</div>
-      ${modoLoopBar}
+      <p class="tag">Un agente queda escuchando y viendo todo el proceso: decide → la
+        máquina corre los experimentos → la retro vuelve al agente → repite. La
+        metodología gobierna; nada se promueve a descubrimiento sin ti.</p>
+      <div class="tag">estado: <b>${esc(st.paused ? "apagado" : (st.status || "idle"))}</b> · ticks ${esc(st.ticks || 0)} · seco×${esc(st.dry_streak || 0)}</div>
+      <div class="centinela-live">${listening}</div>
       <div class="launch-primary" style="margin:.5rem 0; flex-wrap:wrap">
-        <button class="act" id="pi-start" ${running ? "disabled" : ""}>▶ ${st.ticks ? "Reanudar" : "Iniciar"}</button>
-        <button class="act ghost" id="pi-pause" ${running ? "" : "disabled"}>⏸ Pausar</button>
+        <button class="act ${running ? "centinela-on" : "centinela-off"}" id="pi-toggle">
+          👁 Centinela: ${running ? "ACTIVO — apagar" : "apagado — encender"}</button>
         <button class="act ghost" id="pi-tick">⏭ Avanzar un tick</button>
       </div>
-      <div class="launch-primary" style="margin:.5rem 0; flex-wrap:wrap; align-items:center">
-        <label class="tag" for="pi-modo-hours">🔁 Modo Loop — corre autónomo por</label>
-        <input type="number" id="pi-modo-hours" class="pub-input" style="width:5rem"
-               min="1" max="72" step="1" value="10" ${running ? "disabled" : ""}>
-        <label class="tag" for="pi-modo-hours">horas, y al terminar Bohr sintetiza
-          todo y decide el siguiente lanzamiento solo.</label>
-        <button class="act" id="pi-modo-loop" ${running ? "disabled" : ""}>⏱ Activar Modo Loop</button>
+      <div class="modo-loop-card">
+        ${modoLoopBar}
+        <div class="launch-primary" style="margin:.3rem 0; flex-wrap:wrap; align-items:center">
+          <label class="tag" for="pi-modo-hours">⏱ Modo Loop — corre por</label>
+          <input type="number" id="pi-modo-hours" class="pub-input" style="width:5rem"
+                 min="1" max="72" step="1" value="10" ${running ? "disabled" : ""}>
+          <label class="tag" for="pi-modo-hours">horas y al terminar Bohr sintetiza
+            todo y decide el siguiente lanzamiento solo — distinto de encender el
+            Centinela sin límite.</label>
+          <button class="act warn-act" id="pi-modo-loop" ${running ? "disabled" : ""}>Activar Modo Loop</button>
+        </div>
       </div>
       <div class="loop-feed">${rows}</div>`;
 
-    body.querySelector("#pi-start").addEventListener("click", async () => {
-      if (statusEl) statusEl.textContent = "⏳ arrancando…";
-      await post(base + "/start", {}); setTimeout(draw, 800);
-    });
-    body.querySelector("#pi-pause").addEventListener("click", async () => {
-      await post(base + "/pause", {}); setTimeout(draw, 300);
+    body.querySelector("#pi-toggle").addEventListener("click", async () => {
+      if (statusEl) statusEl.textContent = running ? "⏳ apagando…" : "⏳ encendiendo…";
+      await post(base + (running ? "/pause" : "/start"), {});
+      setTimeout(draw, running ? 300 : 800);
     });
     body.querySelector("#pi-tick").addEventListener("click", async (e) => {
       e.target.disabled = true; e.target.textContent = "⏳ tick…";
@@ -486,6 +494,21 @@ export async function renderProjectDash(view, pid, cb) {
        </button>
      </div>
 
+     <section class="engines-guide" aria-label="Tres formas de avanzar">
+       <div class="eg-item"><b>🎩 Consejo / Bohr</b>
+         <p>Ataca la conjetura en sí: probar → reformular → lema. Arranca solo con el
+           enunciado. Úsalo cuando quieres que el sistema le entre al problema
+           matemático directamente.</p></div>
+       <div class="eg-item"><b>🚀 Análisis secundario</b>
+         <p>Confronta las hipótesis <b>ya aprobadas</b> con literatura y datos reales —
+           una pasada, una vez. Úsalo cuando ya tienes hipótesis y quieres
+           contrastarlas contra el mundo real.</p></div>
+       <div class="eg-item"><b>👁 Centinela</b>
+         <p>Las deja corriendo solas: genera, aprueba, corre, y decide — sin límite o
+           por horas (Modo Loop), y al terminar sintetiza y relanza. Úsalo cuando
+           quieres soltarlo y no volver a tocar nada.</p></div>
+     </section>
+
      <section class="launch-bar" aria-label="Qué se investiga">
        <div class="launch-head"><b>🔬 Qué se está investigando</b>
          <span class="launch-status">${k.hypotheses || 0} hipótesis · ${k.experiments || 0} experimentos</span></div>
@@ -516,10 +539,9 @@ export async function renderProjectDash(view, pid, cb) {
          <span class="launch-status" id="launch-status" aria-live="polite"></span></div>
        <div class="launch-primary">
          ${primaryBtn}
-         <p class="tag">Por cada hipótesis <b>aprobada</b> corre el flujo CLÁSICO con datos:
-           literatura → experimentos → sintetizar → rigor. <b>No es lo mismo que 🎩 Bohr</b>:
-           Bohr corre el ciclo matemático/computacional de la conjetura (probar → reformular →
-           lema); este botón la confronta con papers y datos reales. Se complementan.</p>
+         <p class="tag">Por cada hipótesis <b>aprobada</b>: literatura → experimentos →
+           sintetizar → rigor. Una pasada, no continuo — ver "Tres formas de avanzar"
+           arriba.</p>
        </div>
        <details class="launch-adv">
          <summary>⚙️ Pasos individuales (avanzado) — corre solo una parte del ciclo</summary>
@@ -534,8 +556,8 @@ export async function renderProjectDash(view, pid, cb) {
        <div id="epistemic-out" aria-live="polite"></div>
      </section>
 
-     <section class="launch-bar" id="pi-loop" aria-label="Loop autónomo">
-       <div class="launch-head"><b>🔁 Loop autónomo (Investigador Principal)</b>
+     <section class="launch-bar" id="pi-loop" aria-label="Centinela">
+       <div class="launch-head"><b>👁 Centinela (Investigador Principal)</b>
          <span class="launch-status" id="pi-loop-status" aria-live="polite"></span></div>
        <div id="pi-loop-body"><p class="tag">cargando…</p></div>
      </section>
@@ -631,9 +653,25 @@ export async function renderProjectDash(view, pid, cb) {
     const run = body && (body.run || (body.id && body.status ? body : null));
     if (rok && run && run.id) await pollProjectRun(pid, run.id, sEl);
     btn.disabled = false; btn.classList.remove("running"); btn.innerHTML = orig;
-    if (sEl) sEl.textContent = rok
-      ? "✓ listo — actualizando…"
-      : "error: " + ((body && (body.detail || body.error)) || "flujo");
+    if (sEl) {
+      if (!rok) {
+        sEl.textContent = "error: " + ((body && (body.detail || body.error)) || "flujo");
+      } else if (Array.isArray(body?.started) && Array.isArray(body?.skipped)) {
+        // /missions/start-all: el Centinela puede ya tener misiones corriendo sobre
+        // las mismas hipótesis -- decirlo, no dejar que "listo" parezca que arrancó
+        // algo nuevo cuando en realidad todo estaba ya en curso.
+        const already = body.skipped.filter((s) =>
+          (s.why || "").includes("ya hay una misión activa")).length;
+        sEl.textContent = body.started.length
+          ? `✓ ${body.started.length} misión(es) nueva(s)` +
+            (already ? ` · ${already} ya las tenía corriendo el Centinela` : "")
+          : already
+            ? `el Centinela ya tiene las ${already} hipótesis aprobadas corriendo — nada nuevo que lanzar`
+            : "✓ listo — actualizando…";
+      } else {
+        sEl.textContent = "✓ listo — actualizando…";
+      }
+    }
     cb.openOperations(pid);
   }
   view.querySelectorAll(".launch-btn").forEach((b) =>

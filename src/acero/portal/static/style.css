@@ -455,6 +455,7 @@ caption { text-align: left; color: var(--muted); padding-bottom: .4rem; }
   .chat-panel { width: 100%; max-height: 45vh; border-right: 0; border-bottom: 1px solid var(--border); }
   .proj-grid, .phase-grid { grid-template-columns: 1fr; }
   .tenant-picker select { max-width: 180px; }
+  .engines-guide { grid-template-columns: 1fr; }
 }
 .pill.vtag { font-weight: 600; letter-spacing: .02em; border: 1px solid transparent; }
 .pill.vtag.warn { border-color: #7a5a12; }
@@ -601,6 +602,39 @@ button.hyp-step:hover { border-color: var(--accent); color: var(--fg); }
 .launch-adv > summary:hover { color: var(--accent); }
 .launch-adv[open] > summary { color: var(--fg); }
 .launch-adv .launch-grid { margin-top: .5rem; }
+
+/* ---- tres formas de avanzar: guía siempre visible ------------------------ */
+.engines-guide {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem;
+  margin-bottom: 1rem;
+}
+.eg-item {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: .6rem .75rem;
+}
+.eg-item b { display: block; margin-bottom: .3rem; font-size: .86rem; }
+.eg-item p { margin: 0; font-size: .76rem; color: var(--muted); line-height: 1.35; }
+
+/* ---- Centinela: interruptor único + indicador en vivo -------------------- */
+.centinela-live { display: flex; align-items: center; gap: .45rem; margin: .35rem 0; min-height: 1.1rem; }
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: 0 0 8px;
+  box-shadow: 0 0 0 0 rgba(46,160,67,.6); animation: live-pulse 1.6s infinite;
+}
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(46,160,67,.55); }
+  70% { box-shadow: 0 0 0 7px rgba(46,160,67,0); }
+  100% { box-shadow: 0 0 0 0 rgba(46,160,67,0); }
+}
+.act.centinela-on { background: var(--ok); color: #04210a; }
+.act.centinela-off { background: transparent; color: var(--fg); border: 1px solid var(--border); }
+.act.centinela-off:hover { border-color: var(--ok); color: var(--ok); }
+.modo-loop-card {
+  background: #221a0c; border: 1px solid #4a3b1f; border-radius: 10px;
+  padding: .6rem .75rem; margin: .6rem 0;
+}
+.act.warn-act { background: var(--warn); color: #241a02; }
+.act.warn-act:disabled { background: var(--warn); }
 
 /* ---- ficha de fase como MINI-REPORTE ------------------------------------ */
 .rkpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
