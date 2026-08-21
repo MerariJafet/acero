@@ -1169,13 +1169,58 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
         return {"summary": "dossier borrador empaquetado (techo: revisión humana)",
                 "verdict": "draft"}
 
+    def _ex_euler(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        # Reconexión 2026-08-21: Euler tenía su motor (sweep.py) pero ninguna
+        # jugada lo lanzaba — Bohr no podía ordenar exploración en ancho.
+        _stage("euler", "Euler barre en paralelo alrededor del enunciado")
+        from .sweep import SweepEngine
+        try:
+            n = max(2, min(12, int(decision.get("n_sweep") or 0) or 8))
+        except Exception:  # noqa: BLE001
+            n = 8
+        r = SweepEngine(sf).run_and_enqueue(project_id, n=n, focus=statement[:200])
+        top = "; ".join(str(s.get("title") or "")[:70]
+                        for s in (r.get("survivors") or [])[:3])
+        return {"summary": (f"barrido: {r.get('generated', 0)} generadas → "
+                            f"{r.get('kept', 0)} sobreviven novedad+EVA → "
+                            f"{r.get('approved', 0)} aprobadas, "
+                            f"{r.get('started', 0)} misiones. {top}"),
+                "verdict": "sweep"}
+
+    def _ex_davinci(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
+        # Reconexión 2026-08-21: Da Vinci tenía su motor (math_explorer) pero
+        # ninguna jugada lo lanzaba — la divergencia de enfoques quedaba muerta.
+        _stage("davinci", "Da Vinci diverge: varios enfoques del mismo objetivo")
+        from ..science.math_explorer import MathExplorer
+        try:
+            k = max(2, min(6, int(decision.get("approaches") or 0) or 4))
+        except Exception:  # noqa: BLE001
+            k = 4
+        r = MathExplorer(provider=provider).explore(statement, approaches=k,
+                                                    rounds=1) or {}
+        viable = r.get("viable_approaches") or []
+        store.put(project_id, "exploration", new_id("xpl"),
+                  {"by": "davinci", "goal": statement[:300],
+                   "status": r.get("status"), "hypothesis": r.get("hypothesis"),
+                   "verdict": r.get("verdict"), "conflict": r.get("conflict"),
+                   "viable": viable, "origin": "consejo"},
+                  status="PROPOSED", parent_id=hid, actor="Da Vinci",
+                  summary=f"divergencia ×{k}: {len(viable)} enfoques viables")
+        vias = "; ".join(str(v.get("method") or "")[:60] for v in viable[:3])
+        return {"summary": (f"divergió {k} enfoques → {len(viable)} viables"
+                            + (f" ({vias})" if vias else "")
+                            + (f" · síntesis: {str(r.get('hypothesis'))[:90]}"
+                               if r.get("hypothesis") else "")),
+                "verdict": str(r.get("verdict") or "explorado")}
+
     executors_raw = {"hipatia": _ex_hipatia, "popper": _ex_popper,
                      "feynman": _ex_feynman, "godel": _ex_godel,
                      "ramanujan": _ex_ramanujan, "turing": _ex_turing,
                      "aristoteles": _ex_aristoteles, "kepler": _ex_kepler,
                      "noether": _ex_noether, "mendeleev": _ex_mendeleev,
                      "reinterpretar": _ex_reinterpretar, "rivales": _ex_rivales,
-                     "discriminar": _ex_discriminar, "gauss": _ex_gauss}
+                     "discriminar": _ex_discriminar, "gauss": _ex_gauss,
+                     "euler": _ex_euler, "davinci": _ex_davinci}
 
     # cada jugada deja su resumen en el LOG compartido — Aristóteles (y cualquier
     # revisor) ve el trabajo real del ciclo, no un resumen vacío
@@ -1211,6 +1256,26 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
                       + (f" (reintento {intento})" if intento > 1 else ""))
 
     knowledge = build_knowledge()
+    # Reconexión 2026-08-21: el Modelo del Mundo crecía con cada resultado pero
+    # Bohr nunca lo leía — decidía solo con la memoria de SU ciclo. Ahora el
+    # resumen del grafo (hechos, anomalías, contradicciones acumuladas de TODAS
+    # las rondas) entra a su conocimiento antes de cada jugada.
+    try:
+        import json as _wm_json
+
+        from ..ledger.service import ResearchLedger as _RL
+        from ..world_model.graph import WorldModel as _WM
+        _wsf = sf or __import__(
+            "acero.ledger.db", fromlist=["default_session_factory"]
+        ).default_session_factory()
+        _ws = _WM(_wsf, _RL(_wsf), project_id).stats()
+        if _ws:
+            knowledge += ("\n\nMODELO DEL MUNDO (memoria acumulada del proyecto, "
+                          "todas las rondas — hechos, anomalías y contradicciones "
+                          "que quizá TU ciclo no vivió):\n"
+                          + _wm_json.dumps(_ws, ensure_ascii=False)[:700])
+    except Exception:  # noqa: BLE001 - el mapa nunca bloquea al director
+        pass
     if premise:
         # el sello va ANTES del conocimiento del Consejo: es lo primero que Bohr lee
         knowledge = premise_context(premise) + "\n\n" + knowledge

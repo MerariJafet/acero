@@ -325,14 +325,96 @@ class PrincipalInvestigator:
                   "se prueben con datos INDEPENDIENTES (no derivadas de un resultado ya "
                   "visto); evita marcos post-hoc/HARKing y efectos triviales")
 
+    def _proposed(self, pid: str) -> list[dict[str, Any]]:
+        """Backlog de propuestas sin dictaminar, de más vieja a más nueva.
+        Defensivo: un flow sin store (fakes de test) cuenta como backlog vacío."""
+        try:
+            rows = [h for h in self._flow_().store.list_objects(pid, kind="candidate")
+                    if h.get("id") and (h.get("status") or "").upper() == "PROPOSED"]
+        except Exception:  # noqa: BLE001
+            return []
+        return sorted(rows, key=lambda h: str(h.get("created_at") or h.get("id") or ""))
+
+    def _dictamen_prov(self) -> Any:
+        """Provider para el juicio de Bohr; None ⇒ dictamen determinístico."""
+        if self._provider is not None:
+            return self._provider
+        try:
+            return self._prov()
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _triage(self, pid: str, applied: dict[str, Any]) -> None:
+        """Dictamen del backlog — el juicio es de BOHR, el orquestador: él dirige,
+        él decide qué propuesta promete y cuál no (bohr.dictamen_backlog: el LLM
+        rankea con razones, la máquina acota). NADIE más adjudica las propuestas
+        que dejan sus ciclos, la máquina de anomalías, etc. — sin esto se acumulan
+        PROPOSED para siempre (2026-08-21: 77 en un proyecto, tags duplicados) y
+        el riel se llena de columnas que jamás avanzan. Reversible por el humano
+        (botón restaurar):
+          1) duplicadas (mismo claim normalizado) → REJECTED, se queda la original;
+          2) si el backlog supera ACERO_PI_MAX_PROPOSED (def. 15), Bohr rankea y
+             las que queden fuera del tope → REJECTED con su razón."""
+        try:
+            cap = max(1, int(os.environ.get("ACERO_PI_MAX_PROPOSED", "15")))
+        except ValueError:
+            cap = 15
+        flow = self._flow_()
+        pool = self._proposed(pid)
+        seen: dict[str, str] = {}
+        kept: list[dict[str, Any]] = []
+        for h in pool:                              # 1) dedup — la original se queda
+            key = " ".join(str(h.get("claim") or h.get("title") or "").lower().split())
+            if key and key in seen:
+                flow.set_status(pid, h["id"], "REJECTED",
+                                f"Bohr (triaje): duplicada de {seen[key]}",
+                                actor="bohr")
+                applied["triaged_dup"] = applied.get("triaged_dup", 0) + 1
+                continue
+            if key:
+                seen[key] = str(h.get("tag") or h["id"])
+            kept.append(h)
+        if len(kept) <= cap:
+            return
+        from ..science.bohr import dictamen_backlog     # 2) el juicio de Bohr
+        d = dictamen_backlog(kept, cap, provider=self._dictamen_prov())
+        drop = d["ranked"][cap:]
+        for hid in drop:
+            why = d["reasons"].get(hid) or ("desplazada por candidatas más "
+                                            "prometedoras según su dictamen")
+            flow.set_status(pid, hid, "REJECTED",
+                            f"Bohr (triaje): {why} — restaurable", actor="bohr")
+            applied["triaged_stale"] = applied.get("triaged_stale", 0) + 1
+
     def _generate_and_approve(self, pid: str, n: int, focus: str,
                               applied: dict[str, Any]) -> None:
+        # ADOPTAR antes que inventar: si ya hay propuestas dictaminables en el
+        # backlog (del Consejo, de anomalías…), Bohr rankea y el PI aprueba las
+        # MEJORES según su dictamen en vez de generar candidatas nuevas encima —
+        # así las H existentes AVANZAN y el backlog baja. Solo genera lo que
+        # falte para completar n.
+        flow = self._flow_()
+        pool = self._proposed(pid)
+        if pool and n > 0:
+            from ..science.bohr import dictamen_backlog
+            d = dictamen_backlog(pool, n, provider=self._dictamen_prov())
+            for hid in d["ranked"][:max(0, n)]:
+                try:
+                    flow.set_status(pid, hid, "APPROVED",
+                                    "Bohr: adoptada del backlog (dictamen)",
+                                    actor="bohr")
+                    applied["approved"] += 1
+                    applied["adopted"] = applied.get("adopted", 0) + 1
+                    n -= 1
+                except Exception:  # noqa: BLE001
+                    continue
+        if n <= 0:
+            return
         # Steer generation to pass the EVA gate (anti-HARKing / non-trivial) instead
         # of forcing past it — the methodology gate stays sovereign.
         g = self._hyps_().generate(pid, n=n, use_ai=True, focus=(focus + self._ANTI_HARK))
         created = g.get("created", []) if isinstance(g, dict) else []
         applied["generated"] += len(created)
-        flow = self._flow_()
         for c in created:                          # autonomy: PI approves; methodology
             try:                                    # still gates evidence downstream
                 flow.set_status(pid, c["id"], "APPROVED", "PI loop")
@@ -356,6 +438,12 @@ class PrincipalInvestigator:
     def _apply(self, pid: str, d: dict[str, Any]) -> dict[str, Any]:
         applied: dict[str, Any] = {"generated": 0, "approved": 0, "started": 0,
                                    "blocks": []}
+        # El dictamen del backlog corre SIEMPRE (también en cooldown): no gasta
+        # cómputo científico, solo adjudica lo que nadie más adjudica.
+        try:
+            self._triage(pid, applied)
+        except Exception:  # noqa: BLE001 - el triaje nunca tumba el tick
+            pass
         if d["action"] == "pause":
             # The PI signalling "no productive step now" must NOT stop the loop —
             # autonomy is unlimited until the RESEARCHER pauses. Treat it as a

@@ -82,8 +82,8 @@ class HypothesisFlow:
         self.store = DiscoveryStore(self._sf, self.ledger)
 
     # --- approve / reject --------------------------------------------------
-    def set_status(self, project_id: str, hyp_id: str, status: str, reason: str = ""
-                   ) -> dict[str, Any]:
+    def set_status(self, project_id: str, hyp_id: str, status: str, reason: str = "",
+                   *, actor: str = "human") -> dict[str, Any]:
         h = self.store.get(hyp_id)
         if not h:
             return {"ok": False, "error": "hypothesis not found"}
@@ -94,7 +94,7 @@ class HypothesisFlow:
             return {"ok": False, "error": "aprobar requiere una razón"}
         self.store.update_payload(hyp_id, {"status": status,
                                            "approval_reason": reason}, status=status)
-        self.ledger.record_event(project_id, ProvenanceAction.UPDATE, "human",
+        self.ledger.record_event(project_id, ProvenanceAction.UPDATE, actor,
                                  f"hipótesis {h.get('tag')} → {status}: {reason}"[:150],
                                  {"status": status}, entity_id=hyp_id)
         return {"ok": True, "hyp_id": hyp_id, "status": status}

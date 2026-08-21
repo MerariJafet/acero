@@ -100,6 +100,19 @@ ACTION_MENU: dict[str, dict[str, str]] = {
                   " estructura hay aquí?' — p.ej. buscar la fórmula de una ley de"
                   " crecimiento o de una llave dinámica. NO para probar teoremas ni"
                   " con 3 datos"},
+    "euler": {
+        "hace": "barrido masivo en PARALELO: genera N candidatas alrededor del"
+                " enunciado, las filtra por novedad+EVA concurrentemente, aprueba"
+                " las sobrevivientes y les lanza misiones",
+        "cuando": "la pregunta admite muchas variantes atacables y conviene explorar"
+                  " en ANCHO, no en profundidad; o el ataque directo a UNA sola"
+                  " formulación ya se agotó"},
+    "davinci": {
+        "hace": "divergencia dirigida: propone y CORRE varios enfoques distintos del"
+                " mismo objetivo (math_explorer), aprende de los que fallan y"
+                " sintetiza una hipótesis de los viables — con guardas de consenso",
+        "cuando": "el camino directo se repite sin avanzar; ANTES de rendirte o"
+                  " reformular, mira el problema desde 3-5 ángulos ejecutables"},
     "reiniciar": {
         "hace": "adopta un ENUNCIADO nuevo (tu 'statement') y vuelve a empezar el ataque",
         "cuando": "el enunciado actual se agotó pero la reformulación abre camino"},
@@ -149,10 +162,14 @@ DECIDE_SCHEMA: dict[str, Any] = {
             "type": "string",
             "description": "solo reinterpretar: qué información NO sobrevive a la "
                            "transformación — declararlo es obligatorio ('' si no)"},
+        "n_sweep": {"type": "number",
+                    "description": "solo euler: cuántas candidatas barrer (0 = 8)"},
+        "approaches": {"type": "number",
+                       "description": "solo davinci: cuántos enfoques divergir (0 = 4)"},
     },
     "required": ["action", "reason", "expected", "statement", "frontier", "why_stuck",
                  "idea", "piezas", "budget_min", "disposition", "dataset_ref",
-                 "target", "representacion", "info_perdida"],
+                 "target", "representacion", "info_perdida", "n_sweep", "approaches"],
     "additionalProperties": False,
 }
 
@@ -388,3 +405,62 @@ def build_knowledge() -> str:
     ppl = "\n".join(f"- {p['name']} ({p['id']}): {p['role']} — {p['summary'][:110]}"
                     for p in PERSONAS)
     return f"PERSONAJES:\n{ppl}\n\nPIEZAS (TOOLBOX):\n{catalog_text()}"
+
+
+# --- dictamen del backlog de propuestas ---------------------------------------
+# Bohr es quien dirige: cuando el backlog de hipótesis PROPOSED crece (las dejan
+# sus propios ciclos, la máquina de anomalías, los personajes creativos), es ÉL
+# quien juzga cuáles prometen y cuáles no — no una regla ciega de antigüedad.
+# Patrón de la casa: el LLM PROPONE el ranking con razones, la máquina ACOTA
+# (valida ids, completa faltantes, aplica el tope). Sin LLM, cae a un orden
+# razonable (más recientes primero) para que el dictamen NUNCA se detenga.
+
+DICTAMEN_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "ranked": {"type": "array", "items": {"type": "string"}},
+        "drop_reasons": {"type": "object"},
+    },
+    "required": ["ranked"],
+    "additionalProperties": False,
+}
+
+
+def dictamen_backlog(pool: list[dict], cap: int, *, provider: Any = None) -> dict:
+    """Rankea el backlog de propuestas de más a menos prometedora (juicio de Bohr).
+
+    Devuelve {"ranked": [ids mejor→peor], "reasons": {id: por qué queda fuera},
+    "via": "bohr_llm"|"fallback"}. El que llama decide qué hacer con el orden
+    (adoptar las primeras, rechazar las que exceden el tope)."""
+    order = sorted(pool, key=lambda h: str(h.get("created_at") or h.get("id") or ""),
+                   reverse=True)
+    fallback = [str(h.get("id")) for h in order if h.get("id")]
+    ok = provider is not None and getattr(provider, "available", lambda: False)()
+    if ok and len(fallback) > 1:
+        try:
+            listing = "\n".join(
+                f"- {h.get('id')} [{h.get('tag') or '?'}] "
+                f"{str(h.get('claim') or h.get('title') or '')[:110]}"
+                for h in order[:60])
+            prompt = (
+                _BOHR_SYS
+                + "\n\nDICTAMEN DE BACKLOG. Estas propuestas de hipótesis llevan "
+                  "tiempo sin que nadie las adjudique. Ranquéalas de MÁS a MENOS "
+                  "prometedora para encontrar conocimiento NUEVO: falsable, no "
+                  "trivial, no redundante con las demás, con un ángulo que el "
+                  "proyecto no haya corrido ya. Solo las primeras "
+                + str(max(1, cap))
+                + " sobrevivirán; para las que dejes fuera da una razón de UNA "
+                  "línea (drop_reasons: id → razón). Devuelve TODOS los ids.\n\n"
+                + listing)
+            out = provider.complete_json(prompt, DICTAMEN_SCHEMA, temperature=0.2)
+            valid = set(fallback)
+            ranked = [i for i in (out.get("ranked") or []) if i in valid]
+            ranked += [i for i in fallback if i not in set(ranked)]
+            reasons = {str(k): str(v)[:200]
+                       for k, v in (out.get("drop_reasons") or {}).items()
+                       if str(k) in valid}
+            return {"ranked": ranked, "reasons": reasons, "via": "bohr_llm"}
+        except Exception:  # noqa: BLE001 - el dictamen nunca se detiene por el LLM
+            pass
+    return {"ranked": fallback, "reasons": {}, "via": "fallback"}

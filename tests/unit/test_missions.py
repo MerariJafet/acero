@@ -120,7 +120,7 @@ def test_resume_pending_revives_running_with_fresh_heartbeat(session_factory):
     import time as _t
     p, h, _ = _setup(session_factory)
     eng = MissionEngine(session_factory)
-    r = eng.start(p.id, h["id"], use_ai=False, sync=False)
+    r = eng.start(p.id, h["id"], use_ai=False, sync=True)   # sin pool global
     m = eng.store.get(r["mission_id"])
     m["status"] = "RUNNING"
     m["heartbeat_ts"] = _t.time() - 5          # latido de hace 5s: "fresco"
@@ -143,8 +143,11 @@ def test_watchdog_survives_malformed_mission_record(session_factory, monkeypatch
     eng.store.put(p.id, "mission", new_id("msn"),
                   {"titulo": "nota vieja del meta-loop", "cerrada": "1"},
                   status="DONE", actor="test", summary="nota, no misión")
-    # y una misión zombi real: RUNNING, sin worker, heartbeat viejo
-    r = eng.start(p.id, h["id"], use_ai=False, sync=False)
+    # y una misión zombi real: RUNNING, sin worker, heartbeat viejo.
+    # sync=True para NO tocar el pool global (_ACTIVE): con la suite completa la
+    # misión encolada seguía en _ACTIVE al correr el watchdog y la decisión era
+    # 'reap' en vez de 'resume' (carrera visible solo con el pool saturado).
+    r = eng.start(p.id, h["id"], use_ai=False, sync=True)
     m = eng.store.get(r["mission_id"])
     m["status"] = "RUNNING"
     m["heartbeat_ts"] = _t.time() - 9999

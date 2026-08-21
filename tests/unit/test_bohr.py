@@ -146,7 +146,10 @@ def test_conocimiento_incluye_a_los_16_y_el_toolbox() -> None:
         assert nombre in k
     assert "PIEZAS" in k and "sympy" in k
     assert set(ACTION_MENU) >= {"hipatia", "popper", "ramanujan", "turing",
-                                "reiniciar", "cerrar"}
+                                "reiniciar", "cerrar",
+                                # reconexión 2026-08-21: exploración en ancho y
+                                # divergencia de enfoques ya son jugadas de Bohr
+                                "euler", "davinci"}
     assert "needs_human_review" in HONEST_DISPOSITIONS
 
 

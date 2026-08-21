@@ -356,3 +356,106 @@ def test_run_triggers_synthesis_when_deadline_passed(monkeypatch):
     out = loop.run("m2", wait=False)
     assert called.get("pid") == "m2"
     assert out["ticks"] == 0                # no llegó a tickear: fue directo a síntesis
+
+
+# --- triaje del backlog de propuestas (dictamen del Centinela) ----------------
+
+def _seed_proposed(session_factory, pid, specs):
+    """Crea candidatas PROPOSED directas en el store: specs = [(tag, claim), ...]."""
+    from acero.core.ids import new_id
+    from acero.discovery.store import DiscoveryStore
+    from acero.ledger.service import ResearchLedger
+    store = DiscoveryStore(session_factory, ResearchLedger(session_factory))
+    ids = []
+    for i, (tag, claim) in enumerate(specs):
+        hid = new_id("hyp")
+        store.put(pid, "candidate", hid,
+                  {"id": hid, "tag": tag, "claim": claim, "status": "PROPOSED",
+                   "created_at": f"2026-08-21T00:00:{i:02d}+00:00"},
+                  status="PROPOSED", actor="test", summary=tag)
+        ids.append(hid)
+    return store, ids
+
+
+def test_triage_rejects_duplicates_keeps_original(session_factory):
+    from acero.ledger.service import ResearchLedger
+    p = ResearchLedger(session_factory).create_project("Triage1", domain="astronomy")
+    store, ids = _seed_proposed(session_factory, p.id, [
+        ("H1", "la señal es endotelial"),
+        ("H2", "LA  señal es   ENDOTELIAL"),      # duplicada (normaliza espacios/caso)
+        ("H3", "otra idea distinta"),
+    ])
+    pi = PrincipalInvestigator(session_factory, provider=_Down())
+    applied = {"generated": 0, "approved": 0, "started": 0, "blocks": []}
+    pi._triage(p.id, applied)
+    assert applied.get("triaged_dup") == 1
+    assert store.get(ids[0])["status"] == "PROPOSED"     # la original se queda
+    assert store.get(ids[1])["status"] == "REJECTED"
+    assert "duplicada" in store.get(ids[1])["approval_reason"]
+    assert store.get(ids[2])["status"] == "PROPOSED"
+
+
+def test_triage_caps_backlog_rejecting_oldest(session_factory, monkeypatch):
+    from acero.ledger.service import ResearchLedger
+    monkeypatch.setenv("ACERO_PI_MAX_PROPOSED", "2")
+    p = ResearchLedger(session_factory).create_project("Triage2", domain="astronomy")
+    store, ids = _seed_proposed(session_factory, p.id, [
+        ("H1", "idea uno"), ("H2", "idea dos"), ("H3", "idea tres"), ("H4", "idea cuatro"),
+    ])
+    pi = PrincipalInvestigator(session_factory, provider=_Down())
+    applied = {"generated": 0, "approved": 0, "started": 0, "blocks": []}
+    pi._triage(p.id, applied)
+    assert applied.get("triaged_stale") == 2
+    # las 2 MÁS VIEJAS rechazadas con razón restaurable; las 2 nuevas siguen
+    assert store.get(ids[0])["status"] == "REJECTED"
+    assert store.get(ids[1])["status"] == "REJECTED"
+    assert "restaurable" in store.get(ids[0])["approval_reason"]
+    assert store.get(ids[2])["status"] == "PROPOSED"
+    assert store.get(ids[3])["status"] == "PROPOSED"
+
+
+def test_generate_adopts_existing_proposed_before_creating_new(session_factory):
+    from acero.ledger.service import ResearchLedger
+    p = ResearchLedger(session_factory).create_project("Adopt1", domain="astronomy")
+    store, ids = _seed_proposed(session_factory, p.id, [
+        ("H1", "vieja"), ("H2", "media"), ("H3", "reciente"),
+    ])
+    hyp = _Hyps()
+    pi = PrincipalInvestigator(session_factory, provider=_Down(), hyps=hyp)
+    applied = {"generated": 0, "approved": 0, "started": 0, "blocks": []}
+    pi._generate_and_approve(p.id, 2, "", applied)
+    # adoptó las 2 mejores según el dictamen (fallback: las más recientes)
+    # y NO generó nada nuevo
+    assert applied.get("adopted") == 2 and applied["approved"] == 2
+    assert applied["generated"] == 0 and hyp.calls == []
+    assert store.get(ids[2])["status"] == "APPROVED"
+    assert store.get(ids[1])["status"] == "APPROVED"
+    assert store.get(ids[0])["status"] == "PROPOSED"     # la vieja espera su turno
+
+
+def test_triage_respects_bohr_llm_ranking(session_factory, monkeypatch):
+    """Cuando el LLM de Bohr está disponible, SU ranking manda — no la antigüedad:
+    la que Bohr rankea al final se rechaza aunque sea la más reciente, con SU razón."""
+    from acero.ledger.service import ResearchLedger
+    monkeypatch.setenv("ACERO_PI_MAX_PROPOSED", "2")
+    p = ResearchLedger(session_factory).create_project("Triage3", domain="astronomy")
+    store, ids = _seed_proposed(session_factory, p.id, [
+        ("H1", "idea vieja pero fuerte"), ("H2", "idea media"), ("H3", "idea nueva floja"),
+    ])
+
+    class _Bohr:
+        def available(self):
+            return True
+
+        def complete_json(self, prompt, schema, *, temperature=0.0):
+            # Bohr juzga: la vieja (H1) es la mejor; la nueva (H3) no promete
+            return {"ranked": [ids[0], ids[1], ids[2]],
+                    "drop_reasons": {ids[2]: "redundante y sin predicción a priori"}}
+
+    pi = PrincipalInvestigator(session_factory, provider=_Bohr())
+    applied = {"generated": 0, "approved": 0, "started": 0, "blocks": []}
+    pi._triage(p.id, applied)
+    assert store.get(ids[0])["status"] == "PROPOSED"     # la vieja SOBREVIVE
+    assert store.get(ids[1])["status"] == "PROPOSED"
+    assert store.get(ids[2])["status"] == "REJECTED"     # la nueva cae por juicio
+    assert "redundante" in store.get(ids[2])["approval_reason"]
