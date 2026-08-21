@@ -159,6 +159,21 @@ def project_signals(store: Any, pid: str, *, loop_state: dict[str, Any],
     }
 
 
+def _pool_size() -> int:
+    try:
+        from .missions import MAX_MISSIONS
+        return MAX_MISSIONS
+    except Exception:  # noqa: BLE001
+        return 4
+
+
+def _saturado(s: dict[str, Any]) -> bool:
+    """¿Hay mucha más cola de la que el pool puede procesar? Si sí, un latido
+    envejecido significa 'esperando turno', no 'muerta'."""
+    activas = s["misiones"].get("PENDING", 0) + s["misiones"].get("RUNNING", 0)
+    return activas > _pool_size() * 4
+
+
 def findings_for(pid: str, title: str, s: dict[str, Any], *,
                  interval_min: int = 30) -> list[Finding]:
     """Reglas → hallazgos. Cada regla nació de un fallo REAL observado en vivo."""
@@ -182,8 +197,18 @@ def findings_for(pid: str, title: str, s: dict[str, Any], *,
             {"infra": s["fabrica_infra_caida"],
              "sin_ejecutar": s.get("fabrica_no_ejecutados", 0)}))
 
-    # 1. misiones zombis (el bug del 2026-08-21: 4 quedaron RUNNING 8 horas)
-    if s["zombies"]:
+    # 1. misiones zombis (el bug del 2026-08-21: 4 quedaron RUNNING 8 horas).
+    #    OJO con el doble uso de 'RUNNING': el estado marca tanto "ejecutándose"
+    #    como "esperando turno en el pool". Con la cola saturada, un latido de
+    #    minutos solo significa que espera — eso ya lo dice COLA_SATURADA, y
+    #    gritar BUG encima es ruido. Solo se reporta como zombi si el latido
+    #    supera de largo la gracia de reaping (1 h): eso ya no lo explica la cola.
+    #    (Deuda anotada: lo correcto de raíz sería un estado QUEUED distinto de
+    #    RUNNING; toca dashboard y filtros, así que no se hace a ciegas.)
+    zomb_umbral = 3600.0 if _saturado(s) else 0.0
+    if s["zombies"] and max(z["hb_age_s"] for z in s["zombies"]) <= zomb_umbral:
+        pass                                  # la cola lo explica: no es un bug
+    elif s["zombies"]:
         out.append(Finding(
             "MISIONES_ZOMBIS", SEV_BUG, pid, title,
             f"{len(s['zombies'])} misión(es) en RUNNING sin latido reciente "
@@ -222,12 +247,8 @@ def findings_for(pid: str, title: str, s: dict[str, Any], *,
     #     proyecto con 40 PENDING y CERO corriendo. Acumular no acelera.
     activas = s["misiones"].get("PENDING", 0) + s["misiones"].get("RUNNING", 0)
     corriendo = s["misiones"].get("RUNNING", 0)
-    try:
-        from .missions import MAX_MISSIONS
-        cap_pool = MAX_MISSIONS
-    except Exception:  # noqa: BLE001
-        cap_pool = 4
-    if activas > cap_pool * 4:
+    cap_pool = _pool_size()
+    if _saturado(s):
         out.append(Finding(
             "COLA_SATURADA", SEV_STALL, pid, title,
             f"{activas} misión(es) encoladas/corriendo para {cap_pool} worker(s) "

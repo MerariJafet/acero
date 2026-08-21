@@ -259,3 +259,28 @@ def test_detecta_cola_saturada():
 def test_cola_normal_no_alarma():
     """Unas pocas en cola es operación sana, no saturación."""
     assert "COLA_SATURADA" not in _codes(_sig(misiones={"PENDING": 3, "RUNNING": 4}))
+
+
+def test_con_cola_saturada_un_latido_de_minutos_no_es_zombi():
+    """'RUNNING' marca dos cosas: ejecutándose Y esperando turno. Con la cola
+    saturada un latido de minutos solo dice 'espera' — eso ya lo reporta
+    COLA_SATURADA, y gritar BUG encima es ruido (2026-08-21)."""
+    sig = _sig(misiones={"PENDING": 40, "RUNNING": 4, "DONE": 71},
+               zombies=[{"id": "msn_x", "hb_age_s": 826}])
+    codes = _codes(sig)
+    assert "MISIONES_ZOMBIS" not in codes
+    assert "COLA_SATURADA" in codes            # la cola SÍ se reporta
+
+
+def test_con_cola_saturada_un_latido_de_horas_SIGUE_siendo_zombi():
+    """Pasada la gracia de reaping, la cola ya no lo explica: eso es una avería."""
+    sig = _sig(misiones={"PENDING": 40, "RUNNING": 4, "DONE": 71},
+               zombies=[{"id": "msn_x", "hb_age_s": 9999}])
+    assert "MISIONES_ZOMBIS" in _codes(sig)
+
+
+def test_sin_saturacion_cualquier_zombi_se_reporta():
+    """Sin cola que lo explique, un latido viejo es una avería sin excusa."""
+    sig = _sig(misiones={"RUNNING": 2, "DONE": 5},
+               zombies=[{"id": "msn_x", "hb_age_s": 400}])
+    assert "MISIONES_ZOMBIS" in _codes(sig)
