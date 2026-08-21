@@ -65,6 +65,27 @@ def test_centinela_pausado_o_reciente_no_alarma():
     assert "CENTINELA_MUDO" not in _codes(reciente, interval_min=15)
 
 
+def test_centinela_se_mide_con_SU_intervalo_no_el_del_auditor():
+    """Falso positivo del 2026-08-21: el auditor corre cada 15 min pero el
+    Centinela tickea cada 30 (ACERO_PI_INTERVAL_SEC). Medir contra el intervalo
+    del auditor marcaba 'muerto' a los ~50 min, cuando aún era normal."""
+    sig = _sig(loop={"status": "running", "paused": False, "ticks": 45,
+                     "dry_streak": 0, "ultimo_tick_h": 0.9})   # 54 min
+    assert "CENTINELA_MUDO" not in _codes(sig, interval_min=15)
+
+
+def test_centinela_con_backoff_espera_mas_sin_alarmar():
+    """Tras rondas secas el Centinela espera a propósito: eso es diseño."""
+    # 2 rondas secas → intervalo esperado 30*4 = 120 min; 3 h aún no es avería
+    sig = _sig(loop={"status": "running", "paused": False, "ticks": 20,
+                     "dry_streak": 2, "ultimo_tick_h": 3.0})
+    assert "CENTINELA_MUDO" not in _codes(sig)
+    # pero 8 h ya sí, incluso con backoff
+    sig2 = _sig(loop={"status": "running", "paused": False, "ticks": 20,
+                      "dry_streak": 2, "ultimo_tick_h": 8.0})
+    assert "CENTINELA_MUDO" in _codes(sig2)
+
+
 def test_detecta_giro_en_vacio():
     sig = _sig(loop={"status": "running", "paused": False, "ticks": 20,
                      "dry_streak": 4, "ultimo_tick_h": 0.1})

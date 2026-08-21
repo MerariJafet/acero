@@ -193,17 +193,29 @@ def findings_for(pid: str, title: str, s: dict[str, Any], *,
             "un bug en la recuperación, no un accidente.",
             {"misiones": s["zombies"][:5]}))
 
-    # 2. Centinela declarado vivo pero sin tickear (hilo muerto)
+    # 2. Centinela declarado vivo pero sin tickear (hilo muerto).
+    #    OJO: se mide contra el intervalo REAL del Centinela (ACERO_PI_INTERVAL_SEC,
+    #    30 min por defecto), NO contra cada cuánto corre el auditor. Confundir
+    #    ambos daba un falso positivo a los ~50 min (visto el 2026-08-21) — y un
+    #    auditor que grita en falso erosiona la confianza en TODOS sus hallazgos.
+    #    Se suma el backoff: tras rondas secas el Centinela espera a propósito
+    #    más tiempo, y eso es diseño, no avería.
     tick_h = loop.get("ultimo_tick_h")
+    from .research_loop import DEFAULT_INTERVAL_SEC, DRY_BACKOFF_CAP_SEC
+    dry = int(loop.get("dry_streak") or 0)
+    esperado_s = min(DRY_BACKOFF_CAP_SEC, DEFAULT_INTERVAL_SEC * (2 ** dry)) \
+        if dry else DEFAULT_INTERVAL_SEC
+    umbral_h = (esperado_s / 3600.0) * STALE_TICK_FACTOR
     if loop.get("status") == "running" and not loop.get("paused") and \
-            tick_h is not None and tick_h > (interval_min / 60.0) * STALE_TICK_FACTOR:
+            tick_h is not None and tick_h > umbral_h:
         out.append(Finding(
             "CENTINELA_MUDO", SEV_BUG, pid, title,
             f"el Centinela dice 'running' pero su último tick fue hace "
-            f"{tick_h:.1f} h (esperado: cada ~{interval_min} min)",
+            f"{tick_h:.1f} h (esperado: cada ~{esperado_s / 60:.0f} min"
+            + (f", con backoff por {dry} ronda(s) seca(s)" if dry else "") + ")",
             "El hilo murió sin actualizar su estado (reinicio del portal, "
             "excepción no capturada). Revisar el auto-revive y los logs.",
-            {"ticks": loop.get("ticks")}))
+            {"ticks": loop.get("ticks"), "umbral_h": round(umbral_h, 2)}))
 
     # 3. giro en vacío: tickea pero nada corre
     if loop.get("dry_streak", 0) >= DRY_STREAK_ALERT:
