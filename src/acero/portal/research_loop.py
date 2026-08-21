@@ -275,6 +275,28 @@ class PrincipalInvestigator:
         from .hypothesis_flow import HypothesisFlow
         return HypothesisFlow(self._sf)
 
+    @staticmethod
+    def _stuck_warning(digest: dict[str, Any]) -> str:
+        """Aviso EXPLÍCITO cuando repetir jugada no está cerrando preguntas.
+
+        2026-08-21: el dato ya viajaba en el digest (recent_decisions,
+        recent_verdicts) pero enterrado entre otros diez campos JSON, y el
+        director seguía repitiendo. A un humano le dices 'llevas 4 rondas
+        haciendo lo mismo y no volvió UN resultado' y cambia de táctica; aquí
+        hay que decírselo igual de claro."""
+        recientes = [str((d or {}).get("action") or "")
+                     for d in (digest.get("recent_decisions") or [])]
+        if len(recientes) < 3 or len(set(recientes[-3:])) != 1:
+            return ""
+        if digest.get("recent_verdicts"):
+            return ""                       # repite pero produce: no es bucle
+        return (f"\n\n⚠ ATENCIÓN, DIRECTOR: llevas {len(recientes)} rondas "
+                f"seguidas eligiendo '{recientes[-1]}' y NO ha vuelto un solo "
+                "veredicto. Insistir con la misma jugada no está cerrando "
+                "preguntas — eso es estancamiento, no persistencia. Cambia de "
+                "táctica salvo que tengas una razón concreta para creer que "
+                "esta vez sí cerrará; si la tienes, dila en 'reasoning'.")
+
     def decide(self, digest: dict[str, Any]) -> dict[str, Any]:
         prov = self._prov()
         if prov is not None and getattr(prov, "available", lambda: False)():
@@ -283,6 +305,7 @@ class PrincipalInvestigator:
                 prompt = (brief(700) + "\n\n---\n\n" + _METHODOLOGY
                           + "\n\nESTADO ACTUAL (JSON):\n"
                           + json.dumps(digest, ensure_ascii=False)[:3500]
+                          + self._stuck_warning(digest)
                           + "\n\nDevuelve la decisión.")
                 out = prov.complete_json(prompt, PI_DECISION_SCHEMA, temperature=0.3)
                 if isinstance(out, dict) and out.get("action"):

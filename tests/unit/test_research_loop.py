@@ -563,3 +563,42 @@ def test_deterministico_no_escala_con_pocas_rondas():
         "recent_decisions": [{"action": "run_existing"}] * 2,
         "recent_verdicts": []})
     assert d["action"] == "run_existing"
+
+
+def test_el_prompt_avisa_al_director_cuando_repite_sin_cerrar_nada():
+    """El dato ya viajaba en el digest pero enterrado en JSON y el LLM seguía
+    repitiendo. Ahora el aviso va en texto plano, imposible de pasar por alto."""
+    visto = {}
+
+    class _Spy:
+        def available(self):
+            return True
+
+        def complete_json(self, prompt, schema, *, temperature=0.0):
+            visto["prompt"] = prompt
+            return {"action": "deepen", "reasoning": "cambio de táctica"}
+
+    pi = _pi(_Spy())
+    pi.decide({"hypotheses_by_status": {"APPROVED": 5},
+               "recent_decisions": [{"action": "run_existing"}] * 4,
+               "recent_verdicts": []})
+    assert "ATENCIÓN, DIRECTOR" in visto["prompt"]
+    assert "run_existing" in visto["prompt"]
+
+
+def test_no_avisa_si_la_jugada_repetida_SI_produce():
+    """Repetir mientras se cierran preguntas es persistencia, no estancamiento."""
+    visto = {}
+
+    class _Spy:
+        def available(self):
+            return True
+
+        def complete_json(self, prompt, schema, *, temperature=0.0):
+            visto["prompt"] = prompt
+            return {"action": "run_existing", "reasoning": "va bien"}
+
+    _pi(_Spy()).decide({"hypotheses_by_status": {"APPROVED": 5},
+                        "recent_decisions": [{"action": "run_existing"}] * 4,
+                        "recent_verdicts": [{"verdict": "refuted"}]})
+    assert "ATENCIÓN, DIRECTOR" not in visto["prompt"]
