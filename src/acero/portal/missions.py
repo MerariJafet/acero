@@ -199,10 +199,17 @@ class MissionEngine:
             # watchdog que muere calladito deja misiones zombis y nadie se entera
             print(f"[missions.watchdog] ERROR en el barrido: {exc!r}")
 
-    def watchdog(self) -> dict[str, Any]:
+    def watchdog(self, *, submit: bool = True) -> dict[str, Any]:
         """Recover missions whose worker vanished (re-submit) or hung (force-FAIL),
         WITHOUT a portal restart. Safe to call often: `_submit` dedups on `_ACTIVE`,
         and DONE step checkpoints are preserved so a resume continues, never restarts.
+
+        submit=False ⇒ SOLO DIAGNOSTICA: detecta y reporta, pero no relanza nada.
+        Es lo que necesita un proceso EFÍMERO (el Auditor por cron): _submit()
+        encola en un ThreadPoolExecutor de hilos NO-daemon, así que el intérprete
+        no puede salir hasta que la misión termine — un diagnóstico de 0,4 s se
+        convertía en un proceso colgado horas ejecutando ciencia que no le tocaba
+        (2026-08-21). Quien debe correr misiones es el portal, que vive.
 
         Un registro corrupto NO puede matar el barrido: cada misión se procesa en su
         propio try/except. (2026-08-21: una nota vieja guardada con kind='mission' y
@@ -229,7 +236,8 @@ class MissionEngine:
                                            float(m.get("heartbeat_ts") or 0),
                                            mid in _ACTIVE, now)
                     if action == "resume":
-                        self._submit(mid)
+                        if submit:
+                            self._submit(mid)
                         resumed.append(mid)
                     elif action == "reap":
                         for s in m.get("steps", []):

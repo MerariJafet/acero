@@ -159,3 +159,24 @@ def test_watchdog_survives_malformed_mission_record(session_factory, monkeypatch
     assert r["mission_id"] in out["resumed"]
     assert r["mission_id"] in submitted
     assert out["skipped_bad"]                 # la nota quedó registrada como saltada
+
+
+def test_watchdog_submit_false_diagnostica_sin_ejecutar(session_factory, monkeypatch):
+    """EL AUDITOR OBSERVA, NO EJECUTA. _submit() encola en un pool de hilos
+    NO-daemon: un proceso efímero (cron) no puede salir hasta que la misión
+    termine, así que un diagnóstico de 0,4 s se colgaba horas corriendo ciencia
+    que no le tocaba (2026-08-21). Con submit=False detecta y reporta igual."""
+    import time as _t
+    p, h, _ = _setup(session_factory)
+    eng = MissionEngine(session_factory)
+    r = eng.start(p.id, h["id"], use_ai=False, sync=True)
+    m = eng.store.get(r["mission_id"])
+    m["status"] = "RUNNING"
+    m["heartbeat_ts"] = _t.time() - 9999          # worker desaparecido
+    eng.store.update_payload(m["id"], m, status="RUNNING")
+
+    submitted: list[str] = []
+    monkeypatch.setattr(eng, "_submit", lambda mid: submitted.append(mid))
+    out = eng.watchdog(submit=False)
+    assert r["mission_id"] in out["resumed"]       # la DETECTA
+    assert submitted == []                         # pero NO la ejecuta

@@ -362,14 +362,23 @@ def _judge(findings: list[Finding], provider: Any) -> dict[str, Any]:
 
 def _safe_autocorrect(findings: list[Finding]) -> list[str]:
     """Correcciones AUTOMÁTICAS: solo seguras e idempotentes. El programa jamás
-    reescribe su código ni borra datos — eso queda para el humano."""
+    reescribe su código ni borra datos — eso queda para el humano.
+
+    EL AUDITOR OBSERVA, NO EJECUTA: el watchdog corre en modo diagnóstico
+    (submit=False). Relanzar misiones desde aquí colgaba el proceso efímero
+    horas — los hilos del pool no son daemon, así que el intérprete esperaba a
+    que terminara una misión científica completa antes de poder salir. Quien
+    debe ejecutar es el portal, que está vivo y llama al watchdog por su cuenta."""
     done: list[str] = []
     if any(f.code in ("MISIONES_ZOMBIS", "MISIONES_PEGADAS") for f in findings):
         try:
             from .missions import MissionEngine
-            r = MissionEngine().watchdog()
-            done.append(f"watchdog de misiones: retomadas={len(r.get('resumed', []))} "
-                        f"marcadas-muertas={len(r.get('reaped', []))}")
+            r = MissionEngine().watchdog(submit=False)
+            n_res, n_reap = len(r.get("resumed", [])), len(r.get("reaped", []))
+            done.append(
+                f"watchdog (diagnóstico): {n_res} misión(es) recuperables, "
+                f"{n_reap} dadas por muertas"
+                + (" — el portal las retomará en su próximo barrido" if n_res else ""))
         except Exception as exc:  # noqa: BLE001
             done.append(f"watchdog falló: {str(exc)[:120]}")
     return done
