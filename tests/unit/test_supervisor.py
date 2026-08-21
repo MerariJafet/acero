@@ -323,3 +323,24 @@ def test_sin_tick_en_curso_el_silencio_SI_es_hilo_muerto():
     codes = _codes(sig)
     assert "CENTINELA_MUDO" in codes
     assert "TICK_LENTO" not in codes
+
+
+def test_sin_veredictos_no_se_reporta_si_la_infra_esta_caida():
+    """Sin credenciales NINGÚN veredicto es posible: reportarlo aparte hace
+    parecer que hay tres problemas donde hay uno. Verificado paso a paso el
+    2026-08-21: las misiones avanzan bien, 'experiments_run' cierra plan_only y
+    la síntesis dice honestamente 'sin evidencia ejecutada'."""
+    sig = _sig(misiones={"PENDING": 30, "RUNNING": 2, "DONE": 5},
+               ultimo_veredicto_h=15.2, fabrica_infra_caida=190,
+               fabrica_no_ejecutados=196)
+    codes = _codes(sig)
+    assert "INFRA_CAIDA" in codes                  # la CAUSA sí se grita
+    assert "SIN_VEREDICTOS" not in codes           # el síntoma derivado no
+
+
+def test_sin_veredictos_SI_se_reporta_con_la_infra_sana():
+    """Con la fábrica funcionando, no cerrar ni una pregunta en horas sí es
+    una señal propia: ahí el fallo está en otro lado."""
+    sig = _sig(misiones={"PENDING": 10, "RUNNING": 2, "DONE": 5},
+               ultimo_veredicto_h=15.2)
+    assert "SIN_VEREDICTOS" in _codes(sig)

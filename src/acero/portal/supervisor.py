@@ -293,10 +293,18 @@ def findings_for(pid: str, title: str, s: dict[str, Any], *,
             "foco, no insistir con el mismo ángulo.",
             {}))
 
-    # 4. actividad sin conocimiento: el síntoma que Merari vio a ojo
+    # 4. actividad sin conocimiento: el síntoma que Merari vio a ojo.
+    #    NO se reporta si la infra está caída: sin poder generar el código del
+    #    experimento NINGÚN veredicto es posible, así que este hallazgo no añade
+    #    información — solo hace parecer que hay tres problemas donde hay uno.
+    #    Verificado paso a paso el 2026-08-21: las misiones avanzan bien
+    #    (investigate→propose→run→synthesize), 'experiments_run' cierra como
+    #    plan_only y la síntesis escribe "SIN EVIDENCIA EJECUTADA CONCLUYENTE".
+    #    La maquinaria no está rota; le falta la credencial.
     lv = s.get("ultimo_veredicto_h")
     running = s["misiones"].get("RUNNING", 0) + s["misiones"].get("PENDING", 0)
-    if running and (lv is None or lv > NO_VERDICT_HOURS):
+    infra_abajo = s.get("fabrica_infra_caida", 0) >= 3
+    if running and not infra_abajo and (lv is None or lv > NO_VERDICT_HOURS):
         out.append(Finding(
             "SIN_VEREDICTOS", SEV_STALL, pid, title,
             (f"{running} misión(es) activas y "
