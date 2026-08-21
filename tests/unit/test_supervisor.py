@@ -244,3 +244,18 @@ def test_experimentos_sin_ejecutar_sin_infra_no_es_infra_caida():
     """Sin ejecutar por límite del método (no hay datos descargables) NO es avería."""
     assert "INFRA_CAIDA" not in _codes(_sig(fabrica_infra_caida=0,
                                             fabrica_no_ejecutados=40))
+
+
+def test_detecta_cola_saturada():
+    """2026-08-21: 68 misiones activas con 4 workers (~2,8 h de cola) y un
+    proyecto con 40 PENDING y CERO corriendo. El panel decía 'activas' pero la
+    mayoría solo esperaba turno."""
+    sig = _sig(misiones={"PENDING": 40, "RUNNING": 0, "DONE": 71})
+    f = findings_for("p1", "P", sig)
+    c = next(x for x in f if x.code == "COLA_SATURADA")
+    assert c.severity == SEV_STALL and "40" in c.fact
+
+
+def test_cola_normal_no_alarma():
+    """Unas pocas en cola es operación sana, no saturación."""
+    assert "COLA_SATURADA" not in _codes(_sig(misiones={"PENDING": 3, "RUNNING": 4}))

@@ -520,11 +520,34 @@ class PrincipalInvestigator:
                     f"deepen falló: {str(exc)[:120]}")
         return n
 
+    def _queue_depth(self, pid: str) -> int:
+        """Misiones ya encoladas o corriendo en este proyecto."""
+        try:
+            ms = self._engine_().list_missions(pid)
+        except Exception:  # noqa: BLE001
+            return 0
+        return sum(1 for m in ms
+                   if str(m.get("status") or "").upper() in ("PENDING", "RUNNING"))
+
     def _start(self, pid: str) -> tuple[int, list[str]]:
         """Start missions for approved hypotheses. Returns (n_started, block_reasons).
         Hypotheses the EVA gate rejects (HARKing/trivial/vague) come back as skips —
         we surface those reasons so the next generation can avoid them. We do NOT
-        force past EVA: the methodology gate stays sovereign."""
+        force past EVA: the methodology gate stays sovereign.
+
+        CONTRAPRESIÓN: si ya hay una cola enorme, encolar más no acelera nada —
+        el pool corre MAX_MISSIONS a la vez. 2026-08-21: 68 misiones activas con
+        4 workers (~2,8 h de cola), y un proyecto con 40 PENDING y CERO
+        corriendo porque el otro acaparaba los workers. Acumular trabajo que no
+        se puede hacer solo alarga la espera y hace que el panel mienta."""
+        try:
+            cap = max(1, int(os.environ.get("ACERO_PI_MAX_QUEUE", "12")))
+        except ValueError:
+            cap = 12
+        cola = self._queue_depth(pid)
+        if cola >= cap:
+            return 0, [f"contrapresión: {cola} misiones ya en cola (tope {cap}) — "
+                       "encolar más no acelera nada, el pool procesa de a pocas"]
         r = self._engine_().start_all(pid, use_ai=True, sync=False)
         if not isinstance(r, dict):
             return 0, []

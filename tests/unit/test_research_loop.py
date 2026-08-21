@@ -602,3 +602,31 @@ def test_no_avisa_si_la_jugada_repetida_SI_produce():
                         "recent_decisions": [{"action": "run_existing"}] * 4,
                         "recent_verdicts": [{"verdict": "refuted"}]})
     assert "ATENCIÓN, DIRECTOR" not in visto["prompt"]
+
+
+def test_contrapresion_no_encola_si_la_cola_ya_es_enorme(monkeypatch):
+    """Encolar más no acelera: el pool corre de a pocas. 2026-08-21: 68 misiones
+    activas con 4 workers, y un proyecto famélico con 40 PENDING sin correr."""
+    monkeypatch.setenv("ACERO_PI_MAX_QUEUE", "12")
+
+    class _Lleno(_Engine):
+        def list_missions(self, pid):
+            return [{"status": "PENDING"} for _ in range(40)]
+
+        def start_all(self, pid, *, use_ai=True, sync=False):
+            raise AssertionError("no debió intentar encolar con la cola llena")
+
+    n, blocks = _pi(None, engine=_Lleno())._start("psat")
+    assert n == 0
+    assert any("contrapresión" in b for b in blocks)
+
+
+def test_con_cola_corta_si_encola(monkeypatch):
+    monkeypatch.setenv("ACERO_PI_MAX_QUEUE", "12")
+
+    class _Corta(_Engine):
+        def list_missions(self, pid):
+            return [{"status": "RUNNING"}, {"status": "DONE"}]
+
+    n, _ = _pi(None, engine=_Corta())._start("pok")
+    assert n == 1                              # _Engine.start_all devuelve 1

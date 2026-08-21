@@ -217,6 +217,26 @@ def findings_for(pid: str, title: str, s: dict[str, Any], *,
             "excepción no capturada). Revisar el auto-revive y los logs.",
             {"ticks": loop.get("ticks"), "umbral_h": round(umbral_h, 2)}))
 
+    # 2b. cola saturada: hay MUCHO más encolado de lo que el pool puede procesar.
+    #     2026-08-21: 68 misiones activas con 4 workers (~2,8 h de espera) y un
+    #     proyecto con 40 PENDING y CERO corriendo. Acumular no acelera.
+    activas = s["misiones"].get("PENDING", 0) + s["misiones"].get("RUNNING", 0)
+    corriendo = s["misiones"].get("RUNNING", 0)
+    try:
+        from .missions import MAX_MISSIONS
+        cap_pool = MAX_MISSIONS
+    except Exception:  # noqa: BLE001
+        cap_pool = 4
+    if activas > cap_pool * 4:
+        out.append(Finding(
+            "COLA_SATURADA", SEV_STALL, pid, title,
+            f"{activas} misión(es) encoladas/corriendo para {cap_pool} worker(s) "
+            f"— {corriendo} realmente en marcha",
+            "El panel dice 'activas' pero la mayoría solo espera turno. Encolar "
+            "más no acelera: conviene dejar drenar la cola antes de aprobar más "
+            "hipótesis, y revisar si un proyecto está acaparando los workers.",
+            {"activas": activas, "corriendo": corriendo, "workers": cap_pool}))
+
     # 3. giro en vacío: tickea pero nada corre
     if loop.get("dry_streak", 0) >= DRY_STREAK_ALERT:
         out.append(Finding(
