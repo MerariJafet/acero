@@ -189,51 +189,82 @@ class MissionEngine:
                 return
             _LAST_WATCHDOG[0] = now
         try:
-            self.watchdog()
-        except Exception:  # noqa: BLE001 - self-heal must never break a read
-            pass
+            r = self.watchdog()
+            if r.get("resumed") or r.get("reaped"):
+                print(f"[missions.watchdog] resumed={r['resumed']} reaped={r['reaped']}")
+        except Exception as exc:  # noqa: BLE001 - self-heal must never break a read
+            # nunca romper la lectura del dashboard, pero JAMÁS en silencio: un
+            # watchdog que muere calladito deja misiones zombis y nadie se entera
+            print(f"[missions.watchdog] ERROR en el barrido: {exc!r}")
 
     def watchdog(self) -> dict[str, Any]:
         """Recover missions whose worker vanished (re-submit) or hung (force-FAIL),
         WITHOUT a portal restart. Safe to call often: `_submit` dedups on `_ACTIVE`,
-        and DONE step checkpoints are preserved so a resume continues, never restarts."""
+        and DONE step checkpoints are preserved so a resume continues, never restarts.
+
+        Un registro corrupto NO puede matar el barrido: cada misión se procesa en su
+        propio try/except. (2026-08-21: una nota vieja guardada con kind='mission' y
+        sin 'id' tumbaba TODO el watchdog con KeyError en cada barrido — 4 misiones
+        zombis quedaron RUNNING 8 horas sin que nadie las recuperara ni avisara.)"""
         resumed: list[str] = []
         reaped: list[str] = []
+        skipped_bad: list[str] = []
         now = _now_ts()
         for p in self.ledger.list_projects():
-            for m in self.store.list_objects(p.id, kind="mission"):
-                action = _stale_action(m.get("status", ""),
-                                       float(m.get("heartbeat_ts") or 0),
-                                       m["id"] in _ACTIVE, now)
-                if action == "resume":
-                    self._submit(m["id"])
-                    resumed.append(m["id"])
-                elif action == "reap":
-                    for s in m.get("steps", []):
-                        if s["status"] == "RUNNING":
-                            s["status"] = "FAILED"
-                            s["error"] = "worker colgado sin heartbeat (reaped); reintentable"
-                            s["finished_at"] = now_iso()
-                    m["status"] = "FAILED"
-                    self._save(m)
-                    reaped.append(m["id"])
-        return {"ok": True, "resumed": resumed, "reaped": reaped}
+            try:
+                missions = self.store.list_objects(p.id, kind="mission")
+            except Exception:  # noqa: BLE001 - un proyecto roto no frena a los demás
+                skipped_bad.append(f"project:{p.id}")
+                continue
+            for m in missions:
+                try:
+                    mid = m.get("id")
+                    if not mid or not isinstance(m.get("steps"), list):
+                        # no es una misión de verdad (nota/objeto ajeno con kind=mission)
+                        skipped_bad.append(str(mid or m.get("titulo") or "?")[:40])
+                        continue
+                    action = _stale_action(m.get("status", ""),
+                                           float(m.get("heartbeat_ts") or 0),
+                                           mid in _ACTIVE, now)
+                    if action == "resume":
+                        self._submit(mid)
+                        resumed.append(mid)
+                    elif action == "reap":
+                        for s in m.get("steps", []):
+                            if s["status"] == "RUNNING":
+                                s["status"] = "FAILED"
+                                s["error"] = "worker colgado sin heartbeat (reaped); reintentable"
+                                s["finished_at"] = now_iso()
+                        m["status"] = "FAILED"
+                        self._save(m)
+                        reaped.append(mid)
+                except Exception as exc:  # noqa: BLE001 - aislar registro por registro
+                    skipped_bad.append(f"{m.get('id') or '?'}:{type(exc).__name__}")
+        return {"ok": True, "resumed": resumed, "reaped": reaped,
+                "skipped_bad": skipped_bad}
 
     def resume_pending(self, *, sync: bool = False) -> dict[str, Any]:
-        """After a restart: re-launch PENDING missions and RUNNING ones whose
-        worker died (stale heartbeat). Live ones (fresh heartbeat) are left alone."""
+        """After a restart: re-launch PENDING missions and ALL RUNNING ones.
+
+        Los workers viven DENTRO del proceso del portal: si este proceso acaba de
+        nacer, NINGÚN worker puede seguir vivo — el heartbeat "fresco" de una misión
+        RUNNING solo significa que el proceso anterior murió hace <60s, no que
+        alguien la siga corriendo. (2026-08-21: confiar en el heartbeat aquí dejó 4
+        misiones zombis 8 horas: el reinicio las mató a <3 min de su último latido y
+        'las dejamos en paz' para siempre.) DONE checkpoints se conservan: retomar
+        continúa, no repite."""
         resumed = []
         for p in self.ledger.list_projects():
             for m in self.list_missions(p.id):
-                st = m.get("status")
-                stale = (_now_ts() - float(m.get("heartbeat_ts") or 0)
-                         ) > STALE_HEARTBEAT_SEC
-                if st == "PENDING" or (st == "RUNNING" and stale):
-                    resumed.append(m["id"])
+                mid = m.get("id")
+                if not mid or not isinstance(m.get("steps"), list):
+                    continue                  # nota/objeto ajeno con kind=mission
+                if m.get("status") in ("PENDING", "RUNNING"):
+                    resumed.append(mid)
                     if sync:
-                        self._execute(m["id"])
+                        self._execute(mid)
                     else:
-                        self._submit(m["id"])
+                        self._submit(mid)
         return {"ok": True, "resumed": resumed}
 
     def retry(self, mission_id: str, *, sync: bool = False) -> dict[str, Any]:

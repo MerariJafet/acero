@@ -110,3 +110,49 @@ def test_start_all_only_approved(session_factory):
     out = eng.start_all(p.id, use_ai=False, sync=True)
     assert len(out["started"]) == 2
     assert all(m["status"] == "DONE" for m in eng.list_missions(p.id))
+
+
+def test_resume_pending_revives_running_with_fresh_heartbeat(session_factory):
+    """Reinicio del portal: un proceso recién nacido NO tiene workers, así que una
+    misión RUNNING con heartbeat FRESCO también debe retomarse. (Bug 2026-08-21:
+    confiar en el heartbeat aquí dejó 4 misiones zombis 8 horas — el reinicio las
+    mató a <3 min de su último latido y quedaron 'vivas' para siempre.)"""
+    import time as _t
+    p, h, _ = _setup(session_factory)
+    eng = MissionEngine(session_factory)
+    r = eng.start(p.id, h["id"], use_ai=False, sync=False)
+    m = eng.store.get(r["mission_id"])
+    m["status"] = "RUNNING"
+    m["heartbeat_ts"] = _t.time() - 5          # latido de hace 5s: "fresco"
+    eng.store.update_payload(m["id"], m, status="RUNNING")
+    out = eng.resume_pending(sync=True)
+    assert r["mission_id"] in out["resumed"]
+    assert eng.store.get(r["mission_id"])["status"] == "DONE"
+
+
+def test_watchdog_survives_malformed_mission_record(session_factory, monkeypatch):
+    """Un objeto guardado con kind='mission' pero sin 'id'/'steps' (una nota vieja)
+    NO puede matar el barrido: el watchdog lo salta y aun así recupera la misión
+    zombi que viene después. (Bug 2026-08-21: un KeyError en ese registro tumbaba
+    TODO el watchdog en silencio, cada 30s, durante horas.)"""
+    import time as _t
+    from acero.core.ids import new_id
+    p, h, _ = _setup(session_factory)
+    eng = MissionEngine(session_factory)
+    # la nota malformada primero (kind=mission, payload sin 'id' ni 'steps')
+    eng.store.put(p.id, "mission", new_id("msn"),
+                  {"titulo": "nota vieja del meta-loop", "cerrada": "1"},
+                  status="DONE", actor="test", summary="nota, no misión")
+    # y una misión zombi real: RUNNING, sin worker, heartbeat viejo
+    r = eng.start(p.id, h["id"], use_ai=False, sync=False)
+    m = eng.store.get(r["mission_id"])
+    m["status"] = "RUNNING"
+    m["heartbeat_ts"] = _t.time() - 9999
+    eng.store.update_payload(m["id"], m, status="RUNNING")
+
+    submitted: list[str] = []
+    monkeypatch.setattr(eng, "_submit", lambda mid: submitted.append(mid))
+    out = eng.watchdog()
+    assert r["mission_id"] in out["resumed"]
+    assert r["mission_id"] in submitted
+    assert out["skipped_bad"]                 # la nota quedó registrada como saltada
