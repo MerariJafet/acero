@@ -95,6 +95,25 @@ _UA = "ACERO-experiment-factory/0.1 (+https://github.com/MerariJafet/acero)"
 _RESULT_RE = re.compile(r"^RESULT_JSON:\s*(\{.*\})\s*$", re.MULTILINE)
 _VERDICTS = {"supports", "refutes", "inconclusive"}
 
+# Firma de una falla de INFRAESTRUCTURA (credenciales caídas, sin red), NO de una
+# limitación científica. 2026-08-21: la sesión del agente de codegen expiró y ACERO
+# trató 251 fallos de auth como "aún no sé ejecutar esto" — cayó honestamente a
+# plan_only (nunca fabricó un resultado, el diseño aguantó) pero siguió quemando
+# ciclos ~10 h generando planes que NADIE podía ejecutar. Distinguir "no puedo"
+# de "estoy desconectado" es la diferencia entre un límite y una avería.
+_INFRA_SIGNS = (
+    "not logged in", "please run /login", "authentication_error",
+    "unauthorized", "401", "oauth", "invalid api key", "api key not found",
+    "credential", "econnrefused", "network is unreachable",
+    "temporary failure in name resolution",
+)
+
+
+def is_infra_failure(error: str) -> bool:
+    """¿El fallo es de infraestructura (auth/red) y no una limitación del método?"""
+    low = str(error or "").lower()
+    return any(s in low for s in _INFRA_SIGNS)
+
 PLAN_SCHEMA = {
     "type": "object",
     "properties": {

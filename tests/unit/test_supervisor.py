@@ -196,3 +196,30 @@ def test_run_supervision_respeta_max_passes(monkeypatch):
     out = run_supervision(hours=8.0, every_min=15, max_passes=2,
                           sleeper=lambda s: None, clock=lambda: 0.0)
     assert out["passes"] == 2
+
+
+# --- avería de infraestructura vs límite científico ---------------------------
+
+def test_detecta_infra_caida_como_bug():
+    """2026-08-21: la sesión de codegen expiró y el programa pasó ~10 h planeando
+    experimentos que NADIE podía ejecutar. Una avería no es un límite."""
+    sig = _sig(fabrica_infra_caida=173, fabrica_no_ejecutados=251)
+    f = findings_for("p1", "P", sig)
+    i = next(x for x in f if x.code == "INFRA_CAIDA")
+    assert i.severity == SEV_BUG and "173" in i.fact
+    # la recomendación debe decir claramente que esto lo arregla un HUMANO
+    assert "human" in i.recommendation.lower() or "reautenticar" in i.recommendation.lower()
+    # y va PRIMERO: mientras esté caída, nada más puede cerrar una pregunta
+    assert f[0].code == "INFRA_CAIDA"
+
+
+def test_pocos_fallos_de_infra_no_alarman():
+    """Un 401 aislado es ruido de red; tres o más ya es una sesión caída."""
+    assert "INFRA_CAIDA" not in _codes(_sig(fabrica_infra_caida=1,
+                                            fabrica_no_ejecutados=4))
+
+
+def test_experimentos_sin_ejecutar_sin_infra_no_es_infra_caida():
+    """Sin ejecutar por límite del método (no hay datos descargables) NO es avería."""
+    assert "INFRA_CAIDA" not in _codes(_sig(fabrica_infra_caida=0,
+                                            fabrica_no_ejecutados=40))

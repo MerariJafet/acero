@@ -190,3 +190,17 @@ def test_rerun_clears_stale_output_artifacts(session_factory, monkeypatch):
     assert stored["provenance"] == []                  # NASA viejo LIMPIADO
     assert not stored.get("result")
     assert not stored.get("claim")
+
+
+def test_is_infra_failure_distingue_averia_de_limite():
+    """La firma que separa 'estoy desconectado' de 'no sé hacer esto'."""
+    from acero.portal.experiment_factory import is_infra_failure
+    # averías reales vistas en producción el 2026-08-21
+    assert is_infra_failure("codegen: agente error: Not logged in · Please run /login")
+    assert is_infra_failure('claude CLI error: API Error: 401 {"type":"authentication_error"}')
+    assert is_infra_failure("OAuth token expired")
+    assert is_infra_failure("ECONNREFUSED")
+    # límites científicos legítimos: NO son avería
+    assert not is_infra_failure("experimento download_data sin datos descargables verificables")
+    assert not is_infra_failure("el script terminó con error de sintaxis")
+    assert not is_infra_failure("")

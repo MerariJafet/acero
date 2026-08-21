@@ -602,9 +602,15 @@ class HypothesisFlow:
         except Exception as exc:  # noqa: BLE001 - factory crash must not kill the flow
             fr = {"ok": False, "stage": "factory", "error": str(exc)[:300]}
         if not fr.get("ok"):
-            # keep the honest trace of WHY it could not execute
+            # keep the honest trace of WHY it could not execute — y si fue una
+            # AVERÍA (credenciales caídas, sin red) márcalo: no es lo mismo que
+            # "ACERO todavía no sabe ejecutar esto". El auditor lo usa para gritar
+            # en vez de dejar que el programa queme horas planeando en vacío.
+            from .experiment_factory import is_infra_failure
+            err = str(fr.get("error", ""))
             self.store.update_payload(e["id"], {"factory_error": {
-                "stage": fr.get("stage", ""), "error": fr.get("error", ""),
+                "stage": fr.get("stage", ""), "error": err,
+                "infra": is_infra_failure(err),
                 "attempts": fr.get("attempts", 0), "at": now_iso()}})
             return None
         res = fr["result"]

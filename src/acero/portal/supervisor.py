@@ -112,6 +112,19 @@ def project_signals(store: Any, pid: str, *, loop_state: dict[str, Any],
             stuck.append({"id": m["id"], "pct": m.get("progress_pct"),
                           "edad_h": round(started_h, 1)})
 
+    # averías de la fábrica: ¿los experimentos no corren por límite o por caída?
+    # Se clasifica por el TEXTO del error, no solo por la marca 'infra': así el
+    # auditor también entiende los registros escritos antes de que esa marca
+    # existiera (los 251 del 2026-08-21, precisamente los que había que ver).
+    from .experiment_factory import is_infra_failure
+    infra_fail, plan_only = 0, 0
+    for e in exps:
+        fe = e.get("factory_error") or {}
+        if fe:
+            plan_only += 1
+            if fe.get("infra") or is_infra_failure(str(fe.get("error") or "")):
+                infra_fail += 1
+
     # veredictos: LO QUE DE VERDAD CUENTA COMO PROGRESO
     verdicts = [e for e in exps
                 if ((e.get("result") or {}).get("verdict")
@@ -133,6 +146,7 @@ def project_signals(store: Any, pid: str, *, loop_state: dict[str, Any],
         "hipotesis": by_hyp, "misiones": by_msn,
         "n_experimentos": len(exps), "n_veredictos": len(verdicts),
         "ultimo_veredicto_h": last_verdict_h,
+        "fabrica_infra_caida": infra_fail, "fabrica_no_ejecutados": plan_only,
         "zombies": zombies, "estancadas": stuck,
         "loop": {"status": loop_state.get("status"),
                  "paused": bool(loop_state.get("paused")),
@@ -150,6 +164,23 @@ def findings_for(pid: str, title: str, s: dict[str, Any], *,
     """Reglas → hallazgos. Cada regla nació de un fallo REAL observado en vivo."""
     out: list[Finding] = []
     loop = s["loop"]
+
+    # 0. LA MÁS GRAVE: la fábrica no ejecuta porque está DESCONECTADA, no porque
+    #    el método sea difícil. Va primero a propósito: mientras esto siga así,
+    #    todo lo demás (rondas, hipótesis, planes) es trabajo que no puede cerrar
+    #    ni una sola pregunta. Vivido el 2026-08-21: ~10 h en vacío por una
+    #    sesión de codegen expirada.
+    if s.get("fabrica_infra_caida", 0) >= 3:
+        out.append(Finding(
+            "INFRA_CAIDA", SEV_BUG, pid, title,
+            f"{s['fabrica_infra_caida']} experimento(s) NO se ejecutaron por fallo "
+            f"de credenciales/red (de {s.get('fabrica_no_ejecutados', 0)} sin ejecutar)",
+            "AVERÍA, no límite científico: el agente que escribe el código de los "
+            "experimentos perdió la sesión. Ningún experimento puede correr hasta "
+            "reautenticar — el programa solo puede planear. Requiere a un HUMANO: "
+            "reloguear el CLI (las credenciales no las puede renovar el programa).",
+            {"infra": s["fabrica_infra_caida"],
+             "sin_ejecutar": s.get("fabrica_no_ejecutados", 0)}))
 
     # 1. misiones zombis (el bug del 2026-08-21: 4 quedaron RUNNING 8 horas)
     if s["zombies"]:
