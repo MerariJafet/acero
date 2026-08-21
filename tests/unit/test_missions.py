@@ -209,3 +209,29 @@ def test_watchdog_periodico_respeta_el_interruptor_de_misiones(monkeypatch):
     from acero.portal import missions as ms
     monkeypatch.setenv("ACERO_MISSIONS_DISABLED", "1")
     assert ms.watchdog_loop_on_startup(interval_sec=0.01) is None
+
+
+def test_submit_marca_el_latido_al_encolar(session_factory, monkeypatch):
+    """El pool corre MAX_MISSIONS a la vez; la que espera turno no ejecuta
+    _execute() y nadie late por ella. Desde fuera (el Auditor es otro proceso y
+    no ve _ACTIVE) parecía MUERTA estando solo en cola — 2026-08-21: 8 misiones
+    'RUNNING' con 4 workers. Encolar debe decir la verdad: la tengo en la mano."""
+    import time as _t
+    p, h, _ = _setup(session_factory)
+    eng = MissionEngine(session_factory)
+    r = eng.start(p.id, h["id"], use_ai=False, sync=True)
+    mid = r["mission_id"]
+    # simula una misión vieja sin latir, ya encolada por otro camino
+    m = eng.store.get(mid)
+    m["heartbeat_ts"] = _t.time() - 9999
+    eng.store.update_payload(mid, m, status="RUNNING")
+    monkeypatch.setattr("acero.portal.missions._POOL.submit", lambda fn: None)
+    from acero.portal.missions import _ACTIVE, _LOCK
+    with _LOCK:
+        _ACTIVE.discard(mid)                  # que no lo dedupe
+
+    eng._submit(mid)
+    edad = _t.time() - float(eng.store.get(mid)["heartbeat_ts"])
+    assert edad < 5                            # el latido quedó fresco al encolar
+    with _LOCK:
+        _ACTIVE.discard(mid)                  # limpieza para otros tests

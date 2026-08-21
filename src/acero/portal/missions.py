@@ -148,6 +148,17 @@ class MissionEngine:
             if mission_id in _ACTIVE:
                 return
             _ACTIVE.add(mission_id)
+        # Latido AL ENCOLAR: el pool corre MAX_MISSIONS a la vez, así que una
+        # misión puede esperar turno un buen rato. Mientras espera no ejecuta
+        # _execute() y por tanto nadie late por ella — desde fuera (el Auditor,
+        # que es otro proceso y no ve _ACTIVE) parecía MUERTA cuando en realidad
+        # el sistema la tenía en la mano (2026-08-21: 8 "RUNNING" con 4 workers).
+        # Marcarla aquí dice la verdad: está encolada. Si el latido envejece de
+        # todos modos, eso ya SÍ es señal real de saturación y merece verse.
+        try:
+            self.store.update_payload(mission_id, {"heartbeat_ts": _now_ts()})
+        except Exception:  # noqa: BLE001 - encolar nunca falla por el latido
+            pass
 
         def _run() -> None:
             try:
