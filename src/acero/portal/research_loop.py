@@ -26,8 +26,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+from collections import Counter
+
 from ..core.clock import now_iso
 from ..core.config import repo_root
+from ..core.ids import new_id
 
 MAX_NEW_HYP_PER_TICK = int(os.environ.get("ACERO_PI_MAX_NEW_HYP", "4"))
 DEFAULT_INTERVAL_SEC = int(os.environ.get("ACERO_PI_INTERVAL_SEC", "1800"))
@@ -47,6 +50,31 @@ PI_DECISION_SCHEMA = {
     "required": ["action", "reasoning"],
     "additionalProperties": False,
 }
+
+SYNTHESIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "synthesis": {"type": "string"},
+        "open_questions": {"type": "array", "items": {"type": "string"}},
+        "decision": {"type": "string", "enum": ["relaunch", "needs_human_review"]},
+        "next_focus": {"type": "string"},
+        "next_n": {"type": "integer"},
+    },
+    "required": ["synthesis", "decision"],
+    "additionalProperties": False,
+}
+
+_SYNTHESIS_SYS = (
+    "Eres Bohr, el orquestador del Consejo de ACERO. Se cumplió el temporizador de "
+    "Modo Loop: el Investigador Principal corrió de forma autónoma durante horas "
+    "sin supervisión humana. Tu trabajo ahora es el de un director que vuelve a la "
+    "sala: escuchar TODO lo que pasó -- decisiones tomadas, veredictos, anomalías, "
+    "bloqueos del gate EVA -- y (1) sintetizar honestamente qué se aprendió de "
+    "verdad, sin inflar; (2) listar las preguntas que quedaron abiertas; (3) "
+    "decidir si hay una dirección de siguiente lanzamiento clara y bien fundada, o "
+    "si lo correcto es parar y pedir revisión humana. 'needs_human_review' es un "
+    "cierre digno si nada maduró -- inflar el resultado es el único fracaso real."
+)
 
 
 # --- loop state + feedback file (the "retro a un archivo") --------------------
@@ -70,7 +98,8 @@ def load_state(pid: str) -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             pass
     return {"paused": False, "ticks": 0, "dry_streak": 0, "status": "idle",
-            "started_at": None, "last_tick_at": None}
+            "started_at": None, "last_tick_at": None,
+            "deadline": None, "deadline_hours": None, "last_synthesis_id": None}
 
 
 def save_state(pid: str, state: dict[str, Any]) -> None:
@@ -90,6 +119,19 @@ def resume(pid: str) -> dict[str, Any]:
     st = load_state(pid)
     st["paused"] = False
     st["status"] = "running"
+    save_state(pid, st)
+    return st
+
+
+def start_timed(pid: str, hours: float) -> dict[str, Any]:
+    """Modo Loop: arranca el loop con un temporizador. Al cumplirse las `hours`,
+    el driver (ResearchLoop.run) llama a synthesize_and_relaunch en vez de seguir
+    tickeando indefinidamente — alguien del Consejo cierra el ciclo por su cuenta,
+    sin que el humano tenga que volver a tocar nada."""
+    st = resume(pid)
+    hours = max(0.05, float(hours))
+    st["deadline"] = time.time() + hours * 3600
+    st["deadline_hours"] = hours
     save_state(pid, st)
     return st
 
@@ -185,11 +227,15 @@ def build_digest(sf: Any, pid: str, *, recent: int = 8) -> dict[str, Any]:
 
 _METHODOLOGY = (
     "Eres el INVESTIGADOR PRINCIPAL de ACERO dirigiendo una investigación autónoma. "
-    "La META es DESCUBRIR conocimiento nuevo, no confirmar lo asentado. Decide el "
-    "SIGUIENTE paso MÁS INFORMATIVO dado el estado. Reglas que NO puedes romper: los "
-    "experimentos usan datos públicos reales con controles nulos y verificación "
-    "cruzada independiente; nada se declara descubrimiento sin revisión humana; "
-    "prefiere anomalías y ángulos poco explorados sobre re-testear lo conocido. "
+    "La META es DESCUBRIR conocimiento nuevo, no confirmar lo asentado. No se trata "
+    "de usar una herramienta ya conocida de la forma ya conocida: se trata de "
+    "COMBINAR las herramientas y personajes del Consejo entre sí, como piezas de "
+    "lego, hasta encontrar una combinación que nadie ha probado y que abra algo "
+    "nuevo. Decide el SIGUIENTE paso MÁS INFORMATIVO dado el estado. Reglas que NO "
+    "puedes romper: los experimentos usan datos públicos reales con controles nulos "
+    "y verificación cruzada independiente; nada se declara descubrimiento sin "
+    "revisión humana; prefiere anomalías y ángulos poco explorados sobre re-testear "
+    "lo conocido. "
     "Acciones: 'generate_and_run' (crea n_new hipótesis nuevas hacia 'focus' y corre "
     "misiones), 'run_existing' (corre lo aprobado pendiente sin crear más), 'deepen' "
     "(profundiza el rigor de lo ya corrido), 'pause' (no hay paso informativo ahora)."
@@ -359,6 +405,106 @@ class PrincipalInvestigator:
         return record
 
 
+def _deterministic_synthesis(digest: dict[str, Any], n_ticks: int) -> dict[str, Any]:
+    """Fallback sin LLM: mecánico, honesto, nunca infla."""
+    rigor = digest.get("rigor") or {}
+    anomalies = digest.get("open_anomalies") or []
+    by_status = digest.get("hypotheses_by_status") or {}
+    parts = [f"{n_ticks} ticks corridos.", f"hipótesis por estado: {by_status}."]
+    if rigor:
+        parts.append(f"rigor: {rigor.get('resolved', 0)}/{rigor.get('total', 0)} resuelto.")
+    if anomalies:
+        parts.append(f"{len(anomalies)} anomalía(s) abierta(s) sin perseguir.")
+    if anomalies:
+        return {"synthesis": " ".join(parts), "open_questions": anomalies[:5],
+                "decision": "relaunch", "next_focus": "explicar anomalías abiertas",
+                "next_n": 2}
+    return {"synthesis": " ".join(parts), "open_questions": anomalies[:5],
+            "decision": "needs_human_review", "next_focus": "", "next_n": 0}
+
+
+def synthesize_and_relaunch(sf: Any, pid: str, *, provider: Any = None,
+                            pi: PrincipalInvestigator | None = None) -> dict[str, Any]:
+    """Al cumplirse el temporizador de Modo Loop, alguien del Consejo (Bohr) toma el
+    control: sintetiza todo lo ocurrido, escucha las preguntas abiertas, y decide si
+    hay una dirección clara de siguiente lanzamiento -- y si la hay, la lanza él
+    mismo. Se registra siempre al ledger, se decida lo que se decida: 'inflar' no es
+    una opción, 'needs_human_review' es un cierre digno."""
+    pi = pi or PrincipalInvestigator(sf, provider=provider)
+    digest = build_digest(sf, pid, recent=20)
+    fb = recent_feedback(pid, 200)
+    st = load_state(pid)
+    n_ticks = len(fb)
+    all_blocks = sorted({b for r in fb for b in (r.get("applied", {}).get("blocks") or [])})
+    action_counts = dict(Counter(
+        r.get("decision", {}).get("action") for r in fb if r.get("decision")))
+
+    prov = provider if provider is not None else pi._prov()
+    decision: dict[str, Any] = _deterministic_synthesis(digest, n_ticks)
+    if prov is not None and getattr(prov, "available", lambda: False)():
+        try:
+            from .playbook import brief
+            prompt = (
+                brief(700) + "\n\n---\n\n" + _SYNTHESIS_SYS
+                + "\n\nRESUMEN DE LA VENTANA DE MODO LOOP (JSON):\n"
+                + json.dumps({
+                    "horas_corridas": st.get("deadline_hours"),
+                    "n_ticks": n_ticks,
+                    "acciones_por_tipo": action_counts,
+                    "bloqueos_eva_recientes": all_blocks[:10],
+                    "digest_actual": digest,
+                }, ensure_ascii=False)[:4500]
+                + "\n\nDevuelve la síntesis.")
+            out = prov.complete_json(prompt, SYNTHESIS_SCHEMA, temperature=0.3)
+            if isinstance(out, dict) and out.get("synthesis"):
+                decision = out
+        except Exception:  # noqa: BLE001 - keep the deterministic fallback
+            pass
+
+    if decision.get("decision") not in ("relaunch", "needs_human_review"):
+        decision["decision"] = "needs_human_review"
+
+    relaunched: dict[str, Any] = {"generated": 0, "approved": 0, "started": 0}
+    if decision["decision"] == "relaunch":
+        focus = str(decision.get("next_focus") or "")[:200]
+        n = max(1, min(MAX_NEW_HYP_PER_TICK, int(decision.get("next_n") or 2)))
+        pi._generate_and_approve(pid, n, focus, relaunched)
+        started, blocks = pi._start(pid)
+        relaunched["started"] = started
+        relaunched["blocks"] = blocks
+
+    record = {
+        "id": new_id("syn"),
+        "ts": now_iso(),
+        "hours": st.get("deadline_hours"),
+        "n_ticks": n_ticks,
+        "synthesis": decision.get("synthesis", ""),
+        "open_questions": decision.get("open_questions") or [],
+        "decision": decision["decision"],
+        "next_focus": decision.get("next_focus", ""),
+        "relaunched": relaunched,
+    }
+    try:
+        from ..discovery.store import DiscoveryStore
+        from ..ledger.service import ResearchLedger
+        store = DiscoveryStore(sf, ResearchLedger(sf))
+        store.put(pid, "report", record["id"], record, status="RECORDED",
+                  actor="bohr_modo_loop",
+                  summary=f"Síntesis de Modo Loop ({st.get('deadline_hours')}h, "
+                          f"{n_ticks} ticks) -> {decision['decision']}")
+    except Exception:  # noqa: BLE001
+        pass  # la síntesis igual queda en el estado/feedback del loop
+
+    st["paused"] = True
+    st["status"] = "modo_loop_completed"
+    st["deadline"] = None
+    st["last_synthesis_id"] = record["id"]
+    save_state(pid, st)
+    append_feedback(pid, {"ts": now_iso(), "tick": st.get("ticks", 0),
+                          "modo_loop_synthesis": record})
+    return record
+
+
 # --- the driver: event + interval, unlimited until paused ---------------------
 
 class ResearchLoop:
@@ -393,6 +539,14 @@ class ResearchLoop:
         while True:
             if is_paused(pid):
                 break
+            deadline = load_state(pid).get("deadline")
+            if deadline is not None and time.time() >= float(deadline):
+                # Modo Loop: el temporizador se cumplió. Alguien del Consejo (Bohr)
+                # sintetiza todo lo corrido y decide el siguiente lanzamiento por su
+                # cuenta -- el humano no tiene que volver a tocar nada para que el
+                # ciclo se cierre con una decisión, no en silencio.
+                synthesize_and_relaunch(self._sf, pid)
+                break
             self._pi.tick(pid)          # state + feedback are persisted inside tick
             done += 1
             # NOTE: a PI 'pause'/cooldown decision does NOT break the loop — only the
@@ -401,9 +555,15 @@ class ResearchLoop:
             if max_ticks is not None and done >= max_ticks:
                 break
             if wait:
-                streak = int(load_state(pid).get("dry_streak", 0))
+                st_wait = load_state(pid)
+                streak = int(st_wait.get("dry_streak", 0))
                 wait_for = interval_sec if streak == 0 else min(
                     DRY_BACKOFF_CAP_SEC, interval_sec * (2 ** streak))
+                deadline = st_wait.get("deadline")
+                if deadline is not None:
+                    # No dormir MÁS ALLÁ del temporizador de Modo Loop -- si no, la
+                    # síntesis se dispara hasta interval_sec tarde.
+                    wait_for = max(1, min(wait_for, int(float(deadline) - time.time())))
                 self._wait_for_missions(pid, wait_for, poll_sec, sleeper, clock)
         return {"ticks": done, "state": load_state(pid)}
 

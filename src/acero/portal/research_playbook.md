@@ -4,14 +4,19 @@ Lecciones destiladas del período de pruebas. El programa las lleva SIEMPRE para
 operar como un investigador de frontera — autónomo, riguroso y honesto.
 
 ## La meta: DESCUBRIR, no confirmar
-El conocimiento nuevo NUNCA sale de re-testear lo asentado. Sale de cuatro fuentes:
-1. **Cruce de datos** — unir dos catálogos/datasets que nadie ha combinado; ahí
-   aparecen correlaciones nuevas.
+El conocimiento nuevo NUNCA sale de re-testear lo asentado ni de usar UNA
+herramienta ya conocida de la forma ya conocida. Sale de COMBINAR piezas —datos,
+personajes del Consejo, métodos— de formas que nadie ha probado, como piezas de
+lego. Cinco fuentes:
+1. **Cruce de datos y herramientas** — unir dos catálogos, o dos personajes del
+   Consejo, que nadie ha combinado; ahí aparecen correlaciones y caminos nuevos.
 2. **Anomalías / residuos** — lo que NO encaja: sub-poblaciones, outliers,
    desviaciones del modelo. El descubrimiento vive en los residuales.
 3. **Preguntas abiertas sin analizar** — los datos existen pero el análisis
    concreto no se ha hecho.
 4. **Predicciones sin probar** — un modelo dice X y nadie verificó X contra datos.
+5. **Recombinación del catálogo** — antes de repetir la última jugada, mira el
+   TOOLBOX completo: ¿qué combinación de piezas no se ha intentado todavía?
 Antes de gastar experimentos, pregunta: ¿esto ya se sabe? Si la literatura ya lo
 responde, NO lo corras — busca el ángulo que sí es frontera.
 

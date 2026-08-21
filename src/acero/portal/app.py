@@ -932,12 +932,22 @@ def build_portal_router() -> APIRouter:
                 "feedback": recent_feedback(project_id, 8)}
 
     @r.post("/api/projects/{project_id}/loop/start")
-    def loop_start(project_id: str, sess: Session = Depends(_require_session),
+    def loop_start(project_id: str, body: dict[str, Any] | None = None,
+                   sess: Session = Depends(_require_session),
                    x_csrf_token: str | None = Header(default=None)) -> dict[str, Any]:
-        """Arranca el loop del PI en segundo plano (ilimitado hasta pausar)."""
+        """Arranca el loop del PI en segundo plano.
+
+        Sin `duration_hours`: ilimitado hasta pausar (comportamiento previo). Con
+        `duration_hours` (Modo Loop): corre hasta que se cumpla el temporizador y
+        entonces Bohr sintetiza todo lo ocurrido y decide el siguiente lanzamiento
+        por su cuenta — ver research_loop.synthesize_and_relaunch."""
         _require_csrf(sess, x_csrf_token)
-        from .research_loop import default_loop, load_state, resume
-        resume(project_id)
+        from .research_loop import default_loop, load_state, resume, start_timed
+        hours = (body or {}).get("duration_hours")
+        if hours:
+            start_timed(project_id, float(hours))
+        else:
+            resume(project_id)
         default_loop().start_background(project_id)
         return {"ok": True, "state": load_state(project_id)}
 

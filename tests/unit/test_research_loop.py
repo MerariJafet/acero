@@ -13,8 +13,11 @@ from acero.portal.research_loop import (
     ResearchLoop,
     build_digest,
     is_paused,
+    load_state,
     pause,
     resume,
+    start_timed,
+    synthesize_and_relaunch,
 )
 
 
@@ -249,3 +252,76 @@ def test_wait_polls_until_missions_finish():
     loop._wait_for_missions("q4", interval_sec=100, poll_sec=5,
                             sleeper=_sleep, clock=_clock)
     assert calls["n"] == 2
+
+
+# --- Modo Loop: temporizador + síntesis-y-relanzamiento -----------------------
+
+class _Down:
+    """Fake provider siempre no-disponible — nunca toca red/subprocess real."""
+
+    def available(self):
+        return False
+
+
+def test_start_timed_sets_deadline_hours_from_now(monkeypatch):
+    monkeypatch.setattr(rl.time, "time", lambda: 1000.0)
+    st = start_timed("m1", 2.0)
+    assert st["deadline"] == 1000.0 + 2 * 3600
+    assert st["deadline_hours"] == 2.0
+    assert st["paused"] is False
+
+
+def test_synthesize_no_provider_no_anomalies_needs_human_review(monkeypatch,
+                                                                 session_factory):
+    lg = ResearchLedger(session_factory)
+    p = lg.create_project("Synth1", domain="astronomy")
+    monkeypatch.setattr(rl, "build_digest", lambda sf, pid, recent=8: {
+        "hypotheses_by_status": {"APPROVED": 1}, "recent_verdicts": [],
+        "open_anomalies": [], "rigor": {"resolved": 1, "total": 1}})
+    start_timed(p.id, 1.0)
+    rec = synthesize_and_relaunch(session_factory, p.id, provider=_Down())
+    assert rec["decision"] == "needs_human_review"
+    assert rec["relaunched"]["started"] == 0
+    st = load_state(p.id)
+    assert st["paused"] is True and st["status"] == "modo_loop_completed"
+    assert st["deadline"] is None and st["last_synthesis_id"] == rec["id"]
+    # queda registrado en el ledger, no solo en el estado del loop
+    from acero.discovery.store import DiscoveryStore
+    store = DiscoveryStore(session_factory, lg)
+    rows = store.list_objects(p.id, kind="report")
+    assert any(r.get("id") == rec["id"] for r in rows)
+
+
+def test_synthesize_no_provider_with_anomalies_relaunches(monkeypatch,
+                                                           session_factory):
+    lg = ResearchLedger(session_factory)
+    p = lg.create_project("Synth2", domain="astronomy")
+    monkeypatch.setattr(rl, "build_digest", lambda sf, pid, recent=8: {
+        "hypotheses_by_status": {"APPROVED": 1}, "recent_verdicts": [],
+        "open_anomalies": ["algo raro"], "rigor": {}})
+    eng, hyp, flow = _Engine(), _Hyps(), _Flow()
+    start_timed(p.id, 1.0)
+    rec = synthesize_and_relaunch(session_factory, p.id,
+                                  pi=_pi(_Down(), engine=eng, hyps=hyp, flow=flow))
+    # provider no-disponible -> cae al determinístico, que SÍ decide relanzar
+    # cuando hay anomalías abiertas
+    assert rec["decision"] == "relaunch"
+    assert rec["relaunched"]["started"] == 1
+    assert load_state(p.id)["status"] == "modo_loop_completed"
+
+
+def test_run_triggers_synthesis_when_deadline_passed(monkeypatch):
+    called = {}
+
+    def _fake_synth(sf, pid):
+        called["pid"] = pid
+        pause(pid)                     # como haría synthesize_and_relaunch real
+        return {"decision": "needs_human_review"}
+
+    monkeypatch.setattr(rl, "synthesize_and_relaunch", _fake_synth)
+    start_timed("m2", 1.0)
+    monkeypatch.setattr(rl.time, "time", lambda: 1e18)   # deadline ya pasó
+    loop = ResearchLoop(sf="sf", pi=_FakePI(_Engine()))
+    out = loop.run("m2", wait=False)
+    assert called.get("pid") == "m2"
+    assert out["ticks"] == 0                # no llegó a tickear: fue directo a síntesis

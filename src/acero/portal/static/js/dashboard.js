@@ -128,20 +128,52 @@ async function pollProjectRun(pid, runId, statusEl) {
 }
 
 // 🔁 Autonomous-loop panel embedded in the project dashboard. Reads /loop, renders
-// state + recent PI decisions (with EVA blocks), and wires start/pause/tick. No
-// polling loop (the dashboard re-renders on refresh); each action re-draws the panel.
+// state + recent PI decisions (with EVA blocks), and wires start/pause/tick/Modo
+// Loop. Modo Loop = el loop corre con un temporizador; al cumplirse, Bohr sintetiza
+// todo lo ocurrido y decide el siguiente lanzamiento por su cuenta (ver
+// research_loop.synthesize_and_relaunch) -- no hace falta volver a tocar nada.
+function _fmtRemaining(sec) {
+  if (sec <= 0) return "cerrando…";
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m restantes` : `${m}m restantes`;
+}
+
 async function wireLoopPanel(view, pid) {
   const body = view.querySelector("#pi-loop-body");
   const statusEl = view.querySelector("#pi-loop-status");
   if (!body) return;
   const base = `/portal/api/projects/${encodeURIComponent(pid)}/loop`;
+  let countdownTimer = null;
+  let refreshTimer = null;
+
+  function stopTimers() {
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  }
+
   async function draw() {
+    stopTimers();
     const { ok, body: d } = await get(base);
     if (!ok) { body.innerHTML = "<p class='tag'>no se pudo cargar el loop</p>"; return; }
     const st = d.state || {}, fb = (d.feedback || []).slice().reverse();
     const running = !st.paused && st.status === "running";
+    const inModoLoop = running && st.deadline;
     if (statusEl) statusEl.textContent = st.paused ? "pausado" : (st.status || "idle");
+
     const rows = fb.length ? fb.map((r) => {
+      if (r.modo_loop_synthesis) {
+        const s = r.modo_loop_synthesis;
+        const oq = (s.open_questions || []).map((q) => `<li>${esc(q)}</li>`).join("");
+        return `<div class="card">
+          <b>🔁 Modo Loop (${esc(s.hours || "?")}h, ${esc(s.n_ticks || 0)} ticks) — síntesis de Bohr</b>
+          ${pill(s.decision === "relaunch" ? "relanzado" : "revisión humana",
+                 s.decision === "relaunch" ? "ok" : "warn")}
+          <p class="tag">${esc(s.synthesis || "")}</p>
+          ${oq ? `<div class="tag">preguntas abiertas:</div><ul class="tag">${oq}</ul>` : ""}
+          ${s.next_focus ? `<div class="tag">siguiente foco: ${esc(s.next_focus)}
+            (${esc((s.relaunched || {}).started || 0)} misión(es) lanzada(s))</div>` : ""}
+        </div>`;
+      }
       const dec = r.decision || {}, a = r.applied || {};
       const blk = (a.blocks || []).length
         ? `<div class="tag">⛔ EVA: ${esc((a.blocks || []).join("; ").slice(0, 140))}</div>` : "";
@@ -152,15 +184,33 @@ async function wireLoopPanel(view, pid) {
         <div class="tag">generadas ${esc(a.generated || 0)} · aprobadas ${esc(a.approved || 0)} · misiones ${esc(a.started || 0)}${tail}</div>
         ${blk}</div>`;
     }).join("") : "<p class='tag'>sin ticks aún — pulsa Iniciar para arrancar el ciclo autónomo</p>";
+
+    const modoLoopBar = inModoLoop ? `
+      <div id="pi-countdown-wrap" style="margin:.5rem 0">
+        <div class="progressbar" role="progressbar" id="pi-progressbar"
+             aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><div style="width:0%"></div></div>
+        <div class="tag" id="pi-countdown"></div>
+      </div>` : "";
+
     body.innerHTML = `
       <p class="tag">El agente decide → la máquina corre los experimentos → la retro vuelve al agente → repite. La metodología gobierna; nada se promueve a descubrimiento sin ti.</p>
       <div class="tag">estado: <b>${esc(st.paused ? "pausado" : (st.status || "idle"))}</b> · ticks ${esc(st.ticks || 0)} · seco×${esc(st.dry_streak || 0)}</div>
-      <div class="launch-primary" style="margin:.5rem 0">
+      ${modoLoopBar}
+      <div class="launch-primary" style="margin:.5rem 0; flex-wrap:wrap">
         <button class="act" id="pi-start" ${running ? "disabled" : ""}>▶ ${st.ticks ? "Reanudar" : "Iniciar"}</button>
         <button class="act ghost" id="pi-pause" ${running ? "" : "disabled"}>⏸ Pausar</button>
         <button class="act ghost" id="pi-tick">⏭ Avanzar un tick</button>
       </div>
+      <div class="launch-primary" style="margin:.5rem 0; flex-wrap:wrap; align-items:center">
+        <label class="tag" for="pi-modo-hours">🔁 Modo Loop — corre autónomo por</label>
+        <input type="number" id="pi-modo-hours" class="pub-input" style="width:5rem"
+               min="1" max="72" step="1" value="10" ${running ? "disabled" : ""}>
+        <label class="tag" for="pi-modo-hours">horas, y al terminar Bohr sintetiza
+          todo y decide el siguiente lanzamiento solo.</label>
+        <button class="act" id="pi-modo-loop" ${running ? "disabled" : ""}>⏱ Activar Modo Loop</button>
+      </div>
       <div class="loop-feed">${rows}</div>`;
+
     body.querySelector("#pi-start").addEventListener("click", async () => {
       if (statusEl) statusEl.textContent = "⏳ arrancando…";
       await post(base + "/start", {}); setTimeout(draw, 800);
@@ -172,6 +222,32 @@ async function wireLoopPanel(view, pid) {
       e.target.disabled = true; e.target.textContent = "⏳ tick…";
       await post(base + "/tick", {}); await draw();
     });
+    body.querySelector("#pi-modo-loop").addEventListener("click", async () => {
+      const hours = Number(body.querySelector("#pi-modo-hours").value) || 10;
+      if (statusEl) statusEl.textContent = `⏳ activando Modo Loop (${hours}h)…`;
+      await post(base + "/start", { duration_hours: hours });
+      setTimeout(draw, 800);
+    });
+
+    if (inModoLoop) {
+      const deadlineMs = st.deadline * 1000;
+      const totalSec = Math.max(1, (st.deadline_hours || 1) * 3600);
+      const bar = body.querySelector("#pi-progressbar");
+      const barFill = bar ? bar.querySelector("div") : null;
+      const countdownEl = body.querySelector("#pi-countdown");
+      const tickCountdown = () => {
+        const remainingSec = (deadlineMs - Date.now()) / 1000;
+        const pct = Math.min(100, Math.max(0,
+          Math.round(100 * (1 - remainingSec / totalSec))));
+        if (barFill) barFill.style.width = pct + "%";
+        if (bar) bar.setAttribute("aria-valuenow", String(pct));
+        if (countdownEl) countdownEl.textContent = _fmtRemaining(remainingSec);
+      };
+      tickCountdown();
+      countdownTimer = setInterval(tickCountdown, 1000);
+      // re-consulta el estado cada minuto -- por si Bohr ya sintetizó y cerró
+      refreshTimer = setInterval(draw, 60000);
+    }
   }
   await draw();
 }

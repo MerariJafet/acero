@@ -81,9 +81,18 @@ class Config(BaseModel):
     policies_dir: str = "policies"
 
     def abs_db_url(self, root: Path | None = None) -> str:
-        """Resolve a relative sqlite path against the repo root."""
-        root = root or repo_root()
+        """Resolve the sqlite path -- el espacio de trabajo (~/ACERO) manda; solo cae
+        al legado relativo al repo si ahí es donde de verdad viven los datos (ver
+        core/workspace.data_path). ACERO_DB_URL/root explícitos siempre ganan."""
         prefix = "sqlite:///"
+        if root is None and self.storage.db_url.startswith(prefix):
+            rel = self.storage.db_url[len(prefix):]
+            if not os.path.isabs(rel) and rel == "acero_data/acero.sqlite":
+                from .workspace import data_path
+                path = data_path("datos/acero.sqlite",
+                                 legacy=repo_root() / "acero_data" / "acero.sqlite")
+                return prefix + str(path.resolve())
+        root = root or repo_root()
         if self.storage.db_url.startswith(prefix):
             rel = self.storage.db_url[len(prefix):]
             if not os.path.isabs(rel):
