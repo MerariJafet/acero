@@ -2341,6 +2341,42 @@ def _arranque() -> None:
     from ..core.workspace import ensure_workspace
     ensure_workspace()
 
+@app.command("supervise")
+def supervise(
+    hours: float = typer.Option(0.0, help="Duración total; 0 = UNA sola pasada"),
+    every_min: int = typer.Option(15, help="Minutos entre pasadas"),
+    json_out: bool = typer.Option(False, "--json", help="Volcar el informe en JSON"),
+) -> None:
+    """El Auditor: el programa evalúa su PROPIO progreso y dictamina.
+
+    Una pasada (por defecto) para cron; con --hours corre su propio bucle y se
+    apaga solo. Detecta bugs operando en silencio (misiones zombis, Centinela
+    mudo), estancamiento (actividad sin veredictos) y deriva (bucles de
+    decisión). Solo aplica correcciones SEGURAS: nunca reescribe código.
+    """
+    from ..portal.supervisor import run_supervision, supervise_once
+    if hours and hours > 0:
+        out = run_supervision(hours=hours, every_min=every_min)
+        typer.echo(f"supervisión terminada: {out['passes']} pasada(s)")
+        for r in out["reports"]:
+            typer.echo(f"  {r['ts']}  hallazgos={r['n_hallazgos']}  salud={r['salud']}")
+        return
+    rep = supervise_once(interval_min=every_min)
+    if json_out:
+        import json as _json
+        typer.echo(_json.dumps(rep, ensure_ascii=False, indent=2))
+        return
+    j = rep["juicio"]
+    typer.echo(f"[{rep['ts']}] proyectos vivos: {rep['proyectos_vivos']} · "
+               f"hallazgos: {rep['n_hallazgos']} · salud: {j.get('salud')} "
+               f"({j.get('via')})")
+    typer.echo(f"  diagnóstico: {j.get('diagnostico')}")
+    for f in rep["hallazgos"]:
+        typer.echo(f"  [{f['severity'].upper()}] {f['code']} · {f['project_title'][:40]}")
+        typer.echo(f"      hecho: {f['fact']}")
+        typer.echo(f"      → {f['recommendation'][:160]}")
+    for a in rep["correcciones_automaticas"]:
+        typer.echo(f"  ✓ auto: {a}")
 
 if __name__ == "__main__":  # pragma: no cover
     app()

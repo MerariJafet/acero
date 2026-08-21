@@ -335,6 +335,43 @@ class PrincipalInvestigator:
             return []
         return sorted(rows, key=lambda h: str(h.get("created_at") or h.get("id") or ""))
 
+    def _question_seed(self, pid: str, focus: str) -> str:
+        """Reconexión 2026-08-21 (EP3/F4): los bloqueos EVA recientes SON
+        vulnerabilidades epistémicas detectadas; el motor de preguntas las
+        convierte en preguntas fértiles (gateadas por calidad) que guían la
+        SIGUIENTE generación — el fracaso de ayer se vuelve la pregunta de hoy.
+        Antes el question_engine existía y nadie lo llamaba desde el flujo vivo."""
+        try:
+            blocks: list[str] = []
+            for r in recent_feedback(pid, 6):
+                for b in (r.get("applied") or {}).get("blocks") or []:
+                    s = str(b).strip()
+                    # los "misión activa" son de concurrencia, no epistémicos
+                    if s and "misión activa" not in s and s not in blocks:
+                        blocks.append(s)
+            if not blocks:
+                return focus
+            from ..epistemic.claim_reconstructor import ClaimRecord
+            from ..epistemic.vulnerability import (EpistemicVulnerability,
+                                                   VulnerabilityType)
+            from ..questions.question_engine import generate_portfolio
+            claim = ClaimRecord(
+                claim_id=pid,
+                claim_text=(focus or "las hipótesis del proyecto")[:200])
+            vulns = [EpistemicVulnerability(
+                vulnerability_id=f"evablk-{i}", target_claim=claim.claim_text,
+                type=VulnerabilityType.UNVALIDATED_ASSUMPTION,
+                description=b[:200]) for i, b in enumerate(blocks[:5])]
+            top = [r.question.question_text
+                   for r in generate_portfolio(vulns, claim)[:3] if r.priority > 0]
+            if top:
+                return (focus + " | PREGUNTAS FÉRTILES (motor de preguntas, "
+                        "derivadas de los bloqueos EVA recientes): "
+                        + "; ".join(t[:140] for t in top))
+        except Exception:  # noqa: BLE001 - la semilla nunca rompe la generación
+            pass
+        return focus
+
     def _dictamen_prov(self) -> Any:
         """Provider para el juicio de Bohr; None ⇒ dictamen determinístico."""
         if self._provider is not None:
@@ -412,6 +449,7 @@ class PrincipalInvestigator:
             return
         # Steer generation to pass the EVA gate (anti-HARKing / non-trivial) instead
         # of forcing past it — the methodology gate stays sovereign.
+        focus = self._question_seed(pid, focus)
         g = self._hyps_().generate(pid, n=n, use_ai=True, focus=(focus + self._ANTI_HARK))
         created = g.get("created", []) if isinstance(g, dict) else []
         applied["generated"] += len(created)

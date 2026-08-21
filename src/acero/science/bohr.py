@@ -59,7 +59,10 @@ ACTION_MENU: dict[str, dict[str, str]] = {
         "hace": "cosecha anomalías de los datos del proyecto → hipótesis nuevas",
         "cuando": "hubo experimentos con discrepancias sin explicar"},
     "gauss": {
-        "hace": "empaqueta dossier publicable (solo lo maduro, con límites explícitos)",
+        "hace": "empaqueta dossier publicable (solo lo maduro, con límites explícitos):"
+                " calcula el TECHO de afirmación que la evidencia permite (Claim"
+                " Compiler), detecta sobreafirmaciones en el borrador y anexa la"
+                " incertidumbre desglosada por fuente (Uncertainty Budget)",
         "cuando": "hay un resultado verificado + novedad dictaminada"},
     "noether": {
         "hace": "arbitraje experto de teoría de números: revisa el resultado como"

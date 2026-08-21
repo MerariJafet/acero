@@ -29,10 +29,12 @@ from ..ledger.db import default_session_factory
 from ..ledger.service import ResearchLedger
 from ..provenance.events import ProvenanceAction
 
-STEPS = ["investigate", "experiments_propose", "experiments_run", "synthesize",
-         "rigor_loop"]
-# relative weights → a smooth 0-100% (experiments_run is by far the longest)
-STEP_WEIGHT = {"investigate": 12, "experiments_propose": 12,
+STEPS = ["investigate", "experiments_propose", "recovery_check",
+         "experiments_run", "synthesize", "rigor_loop"]
+# relative weights → a smooth 0-100% (experiments_run is by far the longest).
+# recovery_check pesa 0: es instantáneo e informativo (reporta si el MÉTODO tiene
+# validación de recuperación en el dominio), no trabajo que cuente como avance.
+STEP_WEIGHT = {"investigate": 12, "experiments_propose": 12, "recovery_check": 0,
                "experiments_run": 46, "synthesize": 10, "rigor_loop": 20}
 def _max_missions() -> int:
     """Concurrent missions. Each spawns an INDEPENDENT ephemeral `codex exec`
@@ -359,6 +361,25 @@ class MissionEngine:
                 raise RuntimeError(r.get("error", "investigate failed"))
             return f"{r.get('n_papers')} papers · " \
                    f"{(r.get('confrontation') or {}).get('stance','')}"
+
+        if name == "recovery_check":
+            # Reconexión 2026-08-21 (CCC-7): banco de recuperación — ¿el MÉTODO
+            # puede recuperar una verdad conocida en este dominio? Paso
+            # INFORMATIVO (peso 0): reporta la validación disponible, nunca
+            # bloquea — correr los controles es decisión del humano/benchmark.
+            from .recovery_bench import controls_for
+            try:
+                p = self.ledger.get_project(pid)
+                domain = str(getattr(p, "domain", "") or "general")
+            except Exception:  # noqa: BLE001
+                domain = "general"
+            ctr = controls_for(domain)
+            if not ctr:
+                return (f"dominio '{domain}' sin controles de recuperación "
+                        "predefinidos — el banco (recovery_bench) no aplica aquí")
+            return (f"{len(ctr)} control(es) de recuperación definidos para "
+                    f"'{domain}' — sin corrida registrada en este proyecto; "
+                    "correrlos calibra cuánta confianza merece el método")
 
         if name == "experiments_propose":
             existing = fl.experiments_for(pid, hid)

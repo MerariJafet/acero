@@ -459,3 +459,23 @@ def test_triage_respects_bohr_llm_ranking(session_factory, monkeypatch):
     assert store.get(ids[1])["status"] == "PROPOSED"
     assert store.get(ids[2])["status"] == "REJECTED"     # la nueva cae por juicio
     assert "redundante" in store.get(ids[2])["approval_reason"]
+
+
+def test_question_seed_turns_eva_blocks_into_fertile_questions():
+    """Reconexión EP3/F4: los bloqueos EVA recientes pasan por el motor de
+    preguntas y enriquecen el focus de la siguiente generación."""
+    from acero.portal.research_loop import append_feedback
+    pid = "qseed1"
+    append_feedback(pid, {"ts": "t", "tick": 1, "decision": {}, "applied": {
+        "blocks": ["EVA interno bloqueó la misión: hipótesis vaga sin predicción",
+                   "ya hay una misión activa (msn_X)"]}})
+    pi = _pi(_Down())
+    out = pi._question_seed(pid, "foco original")
+    assert out.startswith("foco original")
+    assert "PREGUNTAS FÉRTILES" in out
+    assert "misión activa" not in out          # bloqueos de concurrencia filtrados
+
+
+def test_question_seed_no_blocks_returns_focus_unchanged():
+    pi = _pi(_Down())
+    assert pi._question_seed("qseed2", "igual") == "igual"

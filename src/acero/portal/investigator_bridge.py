@@ -1160,13 +1160,45 @@ def run_bohr_cycle(project_id: str, claim: str, *, provider: Any = None,
 
     def _ex_gauss(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
         _stage("gauss", "Gauss empaqueta el dossier")
+        # Reconexión 2026-08-21 (CCC-5 + CCC-9): el dossier sale con la afirmación
+        # MÁXIMA que la evidencia permite (Claim Compiler: techo + lint de
+        # sobreafirmaciones) y la incertidumbre DESGLOSADA por fuente (Uncertainty
+        # Budget) — antes ambos módulos existían y nadie los llamaba.
+        from ..science.claim_compiler import (EvidenceProfile, compile_claim,
+                                              max_claim, scan_overclaims)
+        from ..science.preregistration import Regime
+        from ..science.uncertainty_budget import UncertaintyBudget
+        synthesis = str(decision.get("reason") or "")[:400]
+        # perfil conservador: ciclo del Consejo = régimen de DESCUBRIMIENTO; sin
+        # ataque computacional registrado ni siquiera se permite "asociación"
+        profile = EvidenceProfile(
+            exposure="el resultado del ciclo", outcome=statement[:120],
+            regime=Regime.DISCOVERY, has_null_test=bool(state.get("probe")))
+        ceiling = max_claim(profile)
+        viols = scan_overclaims(f"{statement} {synthesis}", profile)
+        budget = UncertaintyBudget(measurement=0.5, sampling=0.5, model=0.5,
+                                   preprocessing=0.5, selection=0.5,
+                                   missing_data=0.5, generalization=0.5,
+                                   causal=0.5, novelty=0.5)
         store.put(project_id, "dossier", new_id("dos"),
                   {"claim": statement[:200], "origin": "consejo",
-                   "synthesis": str(decision.get("reason") or "")[:400],
-                   "readiness": "needs_human_review"},
+                   "synthesis": synthesis,
+                   "readiness": "needs_human_review",
+                   "claim_ceiling": ceiling.name,
+                   "claim_ceiling_text": compile_claim(profile),
+                   "overclaims": [{"phrase": v.phrase, "reason": v.reason}
+                                  for v in viols],
+                   "uncertainty": {**budget.report(),
+                                   "nota": "0.5 en cada dimensión = DEFAULT "
+                                           "declarado (sin medición específica "
+                                           "del ciclo); el humano las refina"}},
                   status="DRAFT", parent_id=hid, actor="Gauss",
                   summary=f"dossier: {statement[:90]}")
-        return {"summary": "dossier borrador empaquetado (techo: revisión humana)",
+        return {"summary": (f"dossier empaquetado · techo de afirmación: "
+                            f"{ceiling.name}"
+                            + (f" · {len(viols)} sobreafirmación(es) detectadas"
+                               if viols else " · sin sobreafirmaciones")
+                            + " (techo final: revisión humana)"),
                 "verdict": "draft"}
 
     def _ex_euler(statement: str, decision: dict[str, Any]) -> dict[str, Any]:
