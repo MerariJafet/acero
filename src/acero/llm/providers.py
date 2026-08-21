@@ -323,6 +323,27 @@ class ClaudeError(RuntimeError):
     pass
 
 
+def _is_auth_error(msg: str) -> bool:
+    """¿El CLI falló porque la SESIÓN está muerta (401/token revocado)?
+
+    Distinguir esto de cualquier otro error importa: un token revocado no se
+    arregla reintentando — solo lo arregla un humano con `claude login`."""
+    low = (msg or "").lower()
+    return ("revoked" in low or "401" in low or "authentication_error" in low
+            or "failed to authenticate" in low or "unauthorized" in low)
+
+
+def _claude_session_dead() -> bool:
+    """El cortacircuitos compartido con el agente enjaulado: si la sesión del
+    CLI ya se marcó muerta y NADIE se ha vuelto a loguear desde entonces, ni
+    intentarlo. Se cierra solo cuando cambian las credenciales."""
+    try:
+        from ..sandbox.agentic_runner import agent_breaker_open
+        return agent_breaker_open()
+    except Exception:  # noqa: BLE001 - el breaker jamás rompe una corrida
+        return False
+
+
 class ClaudeCliProvider:
     """Local LLM provider that shells out to the `claude` CLI (Claude Code) in print mode.
 
@@ -351,6 +372,11 @@ class ClaudeCliProvider:
         self.last_params: dict = {}
 
     def available(self) -> bool:
+        # 2026-08-21: con el token revocado, ACERO llamó al CLI ~300 veces en un
+        # día — un 401 por experimento, ~10 h "planeando" lo que nadie podía
+        # ejecutar. El breaker convierte eso en una sola avería visible.
+        if _claude_session_dead():
+            return False
         return shutil.which(self.command) is not None or Path(self.command).exists()
 
     def _build_cmd(self, prompt: str) -> list[str]:
@@ -390,8 +416,14 @@ class ClaudeCliProvider:
             stdout, stderr, rc = proc.stdout, proc.stderr, proc.returncode
         text, usage, err = self._parse(stdout or "")
         if err:
-            hint = (" — corre `claude login` para renovar la sesión"
-                    if "revoked" in err.lower() or "auth" in err.lower() else "")
+            auth = _is_auth_error(err)
+            if auth:
+                try:
+                    from ..sandbox.agentic_runner import mark_agent_unauthenticated
+                    mark_agent_unauthenticated(err)
+                except Exception:  # noqa: BLE001
+                    pass
+            hint = " — corre `claude login` para renovar la sesión" if auth else ""
             raise ClaudeError(f"claude CLI error: {err[:300]}{hint}")
         if rc != 0 and not text:
             raise ClaudeError(f"claude CLI exited {rc}: {(stderr or '').strip()[:500]}")

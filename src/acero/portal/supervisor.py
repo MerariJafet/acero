@@ -152,7 +152,11 @@ def project_signals(store: Any, pid: str, *, loop_state: dict[str, Any],
                  "paused": bool(loop_state.get("paused")),
                  "ticks": int(loop_state.get("ticks") or 0),
                  "dry_streak": int(loop_state.get("dry_streak") or 0),
-                 "ultimo_tick_h": _age_h(loop_state.get("last_tick_at"))},
+                 "ultimo_tick_h": _age_h(loop_state.get("last_tick_at")),
+                 # 'tick en curso': se escribe al ARRANCAR el tick y se borra al
+                 # terminar. Sin esto, un tick lento (varias llamadas al LLM
+                 # encadenadas) y un hilo muerto se ven idénticos desde fuera.
+                 "tick_en_curso_h": _age_h(loop_state.get("tick_started_at"))},
         "decisiones_recientes": decisions,
         "bloqueos_recientes": blocks_recent,
         "lanzadas_recientes": started_recent,
@@ -192,8 +196,10 @@ def findings_for(pid: str, title: str, s: dict[str, Any], *,
             f"de credenciales/red (de {s.get('fabrica_no_ejecutados', 0)} sin ejecutar)",
             "AVERÍA, no límite científico: el agente que escribe el código de los "
             "experimentos perdió la sesión. Ningún experimento puede correr hasta "
-            "reautenticar — el programa solo puede planear. Requiere a un HUMANO: "
-            "reloguear el CLI (las credenciales no las puede renovar el programa).",
+            "reautenticar. Requiere a un HUMANO: reloguear el CLI (`claude login`) "
+            "— las credenciales no las puede renovar el programa. Mientras tanto "
+            "ACERO FRENA en vez de acumular planes muertos, y se reanuda solo en "
+            "cuanto cambien las credenciales.",
             {"infra": s["fabrica_infra_caida"],
              "sin_ejecutar": s.get("fabrica_no_ejecutados", 0)}))
 
@@ -231,7 +237,23 @@ def findings_for(pid: str, title: str, s: dict[str, Any], *,
     esperado_s = min(DRY_BACKOFF_CAP_SEC, DEFAULT_INTERVAL_SEC * (2 ** dry)) \
         if dry else DEFAULT_INTERVAL_SEC
     umbral_h = (esperado_s / 3600.0) * STALE_TICK_FACTOR
+    en_curso_h = loop.get("tick_en_curso_h")
     if loop.get("status") == "running" and not loop.get("paused") and \
+            tick_h is not None and tick_h > umbral_h and en_curso_h is not None:
+        # Está VIVO, solo lento: el tick arrancó y aún no termina. Un tick
+        # encadena varias llamadas al LLM (decidir + dictamen de Bohr sobre el
+        # backlog + generar) y con el fallback a Claude CLI puede tardar media
+        # hora. Decirle "hilo muerto" a esto sería el mismo falso positivo que
+        # ya erosionó la confianza en el auditor una vez hoy.
+        out.append(Finding(
+            "TICK_LENTO", SEV_STALL, pid, title,
+            f"el Centinela lleva {en_curso_h:.1f} h DENTRO de un mismo tick "
+            f"(el anterior cerró hace {tick_h:.1f} h)",
+            "No está muerto: está esperando al LLM. Si se repite, el cuello de "
+            "botella es el encadenado de llamadas por tick (decisión + dictamen "
+            "de Bohr + generación), no el hilo.",
+            {"tick_en_curso_h": round(en_curso_h, 2), "ticks": loop.get("ticks")}))
+    elif loop.get("status") == "running" and not loop.get("paused") and \
             tick_h is not None and tick_h > umbral_h:
         out.append(Finding(
             "CENTINELA_MUDO", SEV_BUG, pid, title,

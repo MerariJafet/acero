@@ -125,6 +125,24 @@ def test_tick_generates_approves_and_starts(monkeypatch):
     assert rl.load_state("p1")["ticks"] == 1
 
 
+def test_tick_marca_el_arranque_antes_de_trabajar(monkeypatch):
+    """Un tick encadena varias llamadas al LLM y puede tardar media hora. Si solo
+    se escribiera 'last_tick_at' AL TERMINAR, desde fuera un tick lento y un hilo
+    muerto se verían idénticos (2026-08-21). Así que la marca se pone ANTES."""
+    visto: dict[str, object] = {}
+
+    def _spy(sf, pid, **kw):                       # corre DENTRO del tick
+        visto["en_curso"] = rl.load_state(pid).get("tick_started_at")
+        return _canned_digest(sf, pid, **kw)
+
+    monkeypatch.setattr(rl, "build_digest", _spy)
+    pi = _pi(_Prov({"action": "run_existing", "reasoning": "x"}),
+             engine=_Engine(), hyps=_Hyps(), flow=_Flow())
+    pi.tick("pt")
+    assert visto["en_curso"]                       # visible mientras trabaja
+    assert rl.load_state("pt")["tick_started_at"] is None   # y se limpia al cerrar
+
+
 class _NoStart(_Engine):
     def start_all(self, pid, *, use_ai=True, sync=False):
         return {"started": [], "skipped": []}
@@ -661,3 +679,22 @@ def test_ronda_de_verdad_esteril_SI_cuenta_como_seca(monkeypatch):
              engine=_NoStart(), hyps=_NoHyps(), flow=_Flow())
     rec = pi.tick("pdry")
     assert rec["dry"] is True and rl.load_state("pdry")["dry_streak"] == 1
+
+
+def test_con_la_sesion_revocada_no_se_encola_trabajo_muerto(monkeypatch, tmp_path):
+    """Sin sesión válida la fábrica no puede escribir código: cada misión nueva
+    solo produce un plan que nadie ejecutará (2026-08-21: 310 planes muertos en
+    un día). Es contrapresión, NO pausa — el loop sigue vivo y se reanuda solo
+    cuando el humano hace `claude login`."""
+    from acero.sandbox import agentic_runner as ar
+    monkeypatch.setenv("ACERO_AGENT_BREAKER", str(tmp_path / "b.json"))
+    ar.mark_agent_unauthenticated("401 revoked")
+    monkeypatch.setattr(rl, "build_digest", _canned_digest)
+    eng = _Engine()
+    pi = _pi(_Prov({"action": "run_existing", "reasoning": "x"}),
+             engine=eng, hyps=_Hyps(), flow=_Flow())
+    rec = pi.tick("pinfra")
+    assert eng.started == []                       # no se encoló nada
+    assert rec["applied"]["backpressure"] is True
+    assert rec["dry"] is False                     # frenar no es girar en vacío
+    assert not rl.load_state("pinfra")["paused"]   # y el loop NO se apaga

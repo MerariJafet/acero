@@ -300,3 +300,26 @@ def test_giro_en_vacio_SI_se_dispara_sin_cola():
                loop={"status": "running", "paused": False, "ticks": 60,
                      "dry_streak": 4, "ultimo_tick_h": 0.1})
     assert "GIRO_EN_VACIO" in _codes(sig)
+
+
+def test_tick_lento_no_se_confunde_con_hilo_muerto():
+    """Un tick encadena varias llamadas al LLM y puede tardar media hora. Con
+    solo 'last_tick_at' —que se escribe al TERMINAR— un tick lento y un hilo
+    muerto se veían idénticos desde fuera (2026-08-21: 41 min de silencio sin
+    poder distinguir cuál era). 'tick_started_at' rompe el empate."""
+    sig = _sig(loop={"status": "running", "paused": False, "ticks": 59,
+                     "dry_streak": 0, "ultimo_tick_h": 2.0,
+                     "tick_en_curso_h": 0.7})
+    codes = _codes(sig)
+    assert "TICK_LENTO" in codes
+    assert "CENTINELA_MUDO" not in codes        # está vivo, solo lento
+
+
+def test_sin_tick_en_curso_el_silencio_SI_es_hilo_muerto():
+    """Si nadie arrancó un tick y el último cerró hace rato, no hay excusa."""
+    sig = _sig(loop={"status": "running", "paused": False, "ticks": 59,
+                     "dry_streak": 0, "ultimo_tick_h": 2.0,
+                     "tick_en_curso_h": None})
+    codes = _codes(sig)
+    assert "CENTINELA_MUDO" in codes
+    assert "TICK_LENTO" not in codes

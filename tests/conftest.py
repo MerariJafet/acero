@@ -29,6 +29,10 @@ def _isolated_side_effects(tmp_path, monkeypatch):
     monkeypatch.setenv("ACERO_MISSIONS_DISABLED", "1")
     monkeypatch.setenv("ACERO_WATCHDOG_DISABLED", "1")
     monkeypatch.setenv("ACERO_EMBEDDINGS_DISABLED", "1")  # no heavy model in tests
+    # el cortacircuitos de credenciales vive en $HOME: si la sesión real del
+    # humano está caída, la suite empezaba a fallar sola (visto el 2026-08-21).
+    # Un test jamás debe depender de si alguien está logueado.
+    monkeypatch.setenv("ACERO_AGENT_BREAKER", str(tmp_path / "_agent_breaker.json"))
     # get_config() is lru_cached — force it to re-read the temp DB_URL each test
     from acero.core.config import get_config
     get_config.cache_clear()

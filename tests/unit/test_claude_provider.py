@@ -105,3 +105,50 @@ def test_no_fallback_when_disabled(monkeypatch):
     import pytest
     with pytest.raises(CodexError):
         p.complete("hola")
+
+
+# --- sesión revocada: fallar UNA vez, no 300 -----------------------------------
+
+def _runner_401(cmd, env):
+    return json.dumps({
+        "type": "result", "subtype": "error_during_execution",
+        "is_error": True,
+        "result": ('API Error: 401 {"type":"error","error":'
+                   '{"type":"authentication_error",'
+                   '"message":"OAuth access token has been revoked."}}'),
+    }), "", 1
+
+
+def test_token_revocado_abre_el_cortacircuitos(tmp_path, monkeypatch):
+    """El 2026-08-21 el token quedó revocado y ACERO llamó al CLI ~300 veces:
+    un 401 por experimento, ~10 h 'planeando' lo que nadie podía ejecutar. Un
+    fallo de credenciales NO se arregla reintentando — solo con `claude login`."""
+    import pytest
+    from acero.llm.providers import ClaudeError
+    from acero.sandbox import agentic_runner as ar
+
+    monkeypatch.setenv("ACERO_AGENT_BREAKER", str(tmp_path / "breaker.json"))
+    p = ClaudeCliProvider(runner=_runner_401)
+    assert p.available() is True                  # antes del fallo, disponible
+    with pytest.raises(ClaudeError):
+        p.complete("hola")
+    assert ar.agent_breaker_open() is True         # la avería quedó registrada
+    assert p.available() is False                  # y ya nadie vuelve a intentar
+
+
+def test_un_error_normal_NO_abre_el_cortacircuitos(tmp_path, monkeypatch):
+    """Solo la sesión muerta corta: un timeout o un error de prompt son
+    reintentables, y apagar el proveedor por ellos sería peor que el fallo."""
+    import pytest
+    from acero.llm.providers import ClaudeError
+    from acero.sandbox import agentic_runner as ar
+
+    monkeypatch.setenv("ACERO_AGENT_BREAKER", str(tmp_path / "breaker.json"))
+
+    def run(cmd, env):
+        return json.dumps({"type": "result", "is_error": True,
+                           "result": "context window exceeded"}), "", 1
+    p = ClaudeCliProvider(runner=run)
+    with pytest.raises(ClaudeError):
+        p.complete("hola")
+    assert ar.agent_breaker_open() is False

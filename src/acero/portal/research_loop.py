@@ -42,6 +42,16 @@ _ACTIONS = {"generate_and_run", "run_existing", "deepen", "pause"}
 _BACKPRESSURE = "contrapresión"
 _TERMINAL = {"DONE", "FAILED"}
 
+
+def _sesion_caida() -> bool:
+    """¿La sesión del CLI está marcada como muerta (token revocado)? Se cierra
+    sola en cuanto el humano se re-loguea: la huella de credenciales cambia."""
+    try:
+        from ..sandbox.agentic_runner import agent_breaker_open
+        return agent_breaker_open()
+    except Exception:  # noqa: BLE001
+        return False
+
 PI_DECISION_SCHEMA = {
     "type": "object",
     "properties": {
@@ -103,7 +113,8 @@ def load_state(pid: str) -> dict[str, Any]:
             pass
     return {"paused": False, "ticks": 0, "dry_streak": 0, "status": "idle",
             "started_at": None, "last_tick_at": None,
-            "deadline": None, "deadline_hours": None, "last_synthesis_id": None}
+            "deadline": None, "deadline_hours": None, "last_synthesis_id": None,
+            "tick_started_at": None}
 
 
 def save_state(pid: str, state: dict[str, Any]) -> None:
@@ -548,6 +559,15 @@ class PrincipalInvestigator:
             cap = max(1, int(os.environ.get("ACERO_PI_MAX_QUEUE", "12")))
         except ValueError:
             cap = 12
+        # AVERÍA DE CREDENCIALES: sin sesión válida, la fábrica no puede escribir
+        # ni una línea de código de experimento — cada misión nueva solo produce
+        # un plan que nadie ejecutará (2026-08-21: 194 y 116 planes muertos en un
+        # día). Se trata como contrapresión, no como pausa: el loop sigue vivo y
+        # en cuanto el humano hace `claude login` el cortacircuitos se cierra
+        # solo y el trabajo se reanuda sin que nadie toque nada.
+        if _sesion_caida():
+            return 0, [f"{_BACKPRESSURE}: sesión del CLI revocada — la fábrica no "
+                       "puede generar código; requiere `claude login` (humano)"]
         cola = self._queue_depth(pid)
         if cola >= cap:
             return 0, [f"{_BACKPRESSURE}: {cola} misiones ya en cola (tope {cap}) — "
@@ -608,6 +628,14 @@ class PrincipalInvestigator:
         return applied
 
     def tick(self, pid: str) -> dict[str, Any]:
+        # Marcar el ARRANQUE, no solo el final: un tick encadena varias llamadas
+        # al LLM (decidir + dictamen de Bohr sobre el backlog + generar) y puede
+        # tardar media hora. Con solo 'last_tick_at' —que se escribe al TERMINAR—
+        # un tick lento y un hilo muerto se ven idénticos desde fuera
+        # (2026-08-21: 41 min de silencio sin saber cuál de las dos era).
+        st0 = load_state(pid)
+        st0["tick_started_at"] = now_iso()
+        save_state(pid, st0)
         digest = build_digest(self._sf, pid)
         decision = self._validate(self.decide(digest))
         applied = self._apply(pid, decision)
@@ -626,6 +654,7 @@ class PrincipalInvestigator:
         st = load_state(pid)
         st["ticks"] = int(st.get("ticks", 0)) + 1
         st["last_tick_at"] = now_iso()
+        st["tick_started_at"] = None          # terminó: ya no hay tick en curso
         st["started_at"] = st.get("started_at") or now_iso()
         st["dry_streak"] = (int(st.get("dry_streak", 0)) + 1) if dry else 0
         st["status"] = "paused" if applied.get("paused") else "running"
