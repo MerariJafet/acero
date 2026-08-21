@@ -461,7 +461,11 @@ export async function renderProjectDash(view, pid, cb) {
         "vive abajo en 👁 Centinela.")}</div>
       <div class="sc-row">
         <div class="sc-stat"><b>${esc(lst_state.ticks || 0)}</b><span>rondas</span></div>
-        <div class="sc-stat"><b>${esc(gen)}</b><span>hipótesis generadas</span></div>
+        <div class="sc-stat"><b>${esc(gen)}</b><span>hipótesis generadas${helpIcon(
+          "Solo lo que el Centinela mismo ha generado, sumado ronda por ronda (por eso " +
+          "puede ser menor que el total del proyecto). Si el Consejo/Bohr o Análisis " +
+          "secundario también generaron hipótesis por su cuenta, esas SÍ cuentan en el " +
+          "total de '🔬 Qué se está investigando' de más abajo, pero no aquí.")}</span></div>
         <div class="sc-stat"><b>${esc(appr)}</b><span>aprobadas</span></div>
         <div class="sc-stat"><b>${esc(started)}</b><span>misiones lanzadas</span></div>
       </div>
@@ -565,11 +569,12 @@ export async function renderProjectDash(view, pid, cb) {
      <div class="pulse-head">
        <h1>${esc(ph.title)}</h1>
        <span class="tag">${pill(ph.domain)} ${pill(ph.state, "ok")} · creado ${esc(today)}</span>
-       <button class="act" id="dash-council" title="Bohr convoca al Consejo: los 14 personajes trabajan el problema"
+       <button class="act" id="dash-council"
+         title="Solo TE LLEVA al Consejo -- no lanza nada por sí sola. Arrancar un ciclo se hace DENTRO, en la tarjeta de Bohr."
          style="margin-left:auto;display:inline-flex;align-items:center;gap:9px;padding:5px 14px 5px 5px">
          <span style="width:34px;height:34px;display:inline-block;line-height:0;flex:0 0 34px">${councilFace({ id: "bohr-cta", face: BOHR_FACE }, 34)}</span>
          <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.15">
-           <b>Iniciar Consejo</b><small style="opacity:.65;font-size:10px">dirige: Bohr</small></span>
+           <b>🎩 Ver el Consejo</b><small style="opacity:.65;font-size:10px">los 14 personajes · dirige: Bohr</small></span>
        </button>
      </div>
 
@@ -588,7 +593,10 @@ export async function renderProjectDash(view, pid, cb) {
 
      <section class="launch-bar" aria-label="Qué se investiga">
        <div class="launch-head"><b>🔬 Qué se está investigando</b>
-         <span class="launch-status">${k.hypotheses || 0} hipótesis · ${k.experiments || 0} experimentos</span></div>
+         <span class="launch-status">${k.hypotheses || 0} hipótesis · ${k.experiments || 0} experimentos</span>${helpIcon(
+           "Este es el TOTAL del proyecto (todas las hipótesis, vengan del Consejo/Bohr, " +
+           "de Análisis secundario o del Centinela). Es normal que sea distinto del número " +
+           "de '📈 Cómo va' de arriba, que solo cuenta lo que el Centinela generó él solo.")}</div>
        ${(() => {
          const hp = phases.find((f) => f.key === "hipotesis") || { items: [] };
          const rows = (hp.items || []).slice(0, 6).map((i) =>

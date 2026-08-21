@@ -120,7 +120,9 @@ def test_stories_narrate_each_persona_work_per_hypothesis():
     ]
     flows = build_flows(rows)
     st = build_stories(flows)
-    assert st["hilbert"][0].startswith("H1: planteé la conjetura")
+    # el tag lleva el título/claim entre paréntesis -- sin esto, dos hipótesis con
+    # el mismo tipo de paso (p.ej. ambas "planteadas") se leían como duplicadas
+    assert st["hilbert"][0].startswith("H1 (C): planteé la conjetura")
     assert "Se la pasé a Hipatia" in st["hilbert"][0]           # el porqué del pase
     assert "leí 2 fuente(s)" in st["hipatia"][0]                # con números reales
     assert "veredicto: refuted" in st["popper"][0]
@@ -134,7 +136,7 @@ def test_stories_narrate_each_persona_work_per_hypothesis():
     # y viaja dentro de council_for → el cajón del personaje lo muestra
     c = council_for({}, flows=flows)
     by = {p["id"]: p for p in c["personas"]}
-    assert by["popper"]["story"] and by["popper"]["story"][0].startswith("H1:")
+    assert by["popper"]["story"] and by["popper"]["story"][0].startswith("H1 (C):")
 
 
 def test_flow_state_closed_vs_open():

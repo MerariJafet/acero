@@ -586,3 +586,34 @@ def default_pi() -> PrincipalInvestigator:
 
 def default_loop() -> ResearchLoop:
     return ResearchLoop(_default_sf())
+
+
+def resume_on_startup(delay_sec: float = 3.0) -> None:
+    """Portal boot hook: el Centinela (PI) corre como hilo EN EL PROCESO del
+    portal -- si el portal se reinicia, el hilo muere aunque el state.json
+    siga diciendo 'running'. Sin esto, cada reinicio dejaba proyectos
+    marcados como corriendo pero en silencio hasta que alguien volviera a
+    tocar el botón. Aquí se revive solo lo que estaba realmente activo."""
+    if os.environ.get("ACERO_PI_RESUME_DISABLED") == "1":
+        return
+
+    def _later() -> None:
+        time.sleep(delay_sec)
+        root = loop_root()
+        if not root.exists():
+            return
+        loop = default_loop()
+        for d in root.iterdir():
+            if not d.is_dir():
+                continue
+            pid = d.name
+            try:
+                st = load_state(pid)
+                if st.get("paused") or st.get("status") != "running":
+                    continue
+                loop.start_background(pid)
+            except Exception:  # noqa: BLE001 - one broken project must not block the rest
+                continue
+
+    import threading
+    threading.Thread(target=_later, name="pi-resume", daemon=True).start()

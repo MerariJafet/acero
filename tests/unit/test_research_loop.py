@@ -310,6 +310,37 @@ def test_synthesize_no_provider_with_anomalies_relaunches(monkeypatch,
     assert load_state(p.id)["status"] == "modo_loop_completed"
 
 
+def test_resume_on_startup_revives_only_running_projects(monkeypatch):
+    import time as _time
+
+    resume("running1")
+    pause("paused1")
+    # "idle2" never touched -> status stays "idle", must NOT be revived either
+
+    started = []
+
+    class _FakeLoop:
+        def start_background(self, pid, **kw):
+            started.append(pid)
+
+    monkeypatch.setattr(rl, "default_loop", lambda: _FakeLoop())
+    rl.resume_on_startup(delay_sec=0)
+    for _ in range(50):
+        if started:
+            break
+        _time.sleep(0.02)
+    assert started == ["running1"]
+
+
+def test_resume_on_startup_disabled_via_env(monkeypatch):
+    resume("running2")
+    monkeypatch.setenv("ACERO_PI_RESUME_DISABLED", "1")
+    called = {"n": 0}
+    monkeypatch.setattr(rl, "default_loop", lambda: called.update(n=called["n"] + 1))
+    rl.resume_on_startup(delay_sec=0)
+    assert called["n"] == 0
+
+
 def test_run_triggers_synthesis_when_deadline_passed(monkeypatch):
     called = {}
 

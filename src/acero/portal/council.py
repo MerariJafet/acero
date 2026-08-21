@@ -355,12 +355,19 @@ def build_flows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         last_v = str(steps[-1].get("verdict") or "")
         closed = (status in ("REJECTED", "CLOSED", "ARCHIVED")
                   or last_v in ("verified", "refuted"))
+        # 'bare' = propuesta cruda, nunca se le trabajó nada más (sin literatura,
+        # sin experimento, sin veredicto) NI se decidió (ni aprobada ni rechazada).
+        # El riel del Consejo las agrupa en un bloque colapsado en vez de una
+        # columna por cada una -- si no, con 30+ propuestas sin tocar el riel se
+        # vuelve ilegible y ninguna decisión real (aprobada/rechazada) se distingue.
+        bare = status == "PROPOSED" and len(steps) <= 1
         flows.append({
             "id": pay.get("tag") or f"H{i + 1}", "hid": h.get("id"),
             "title": (pay.get("title") or pay.get("claim")
                       or pay.get("description") or "")[:120],
             "status": h.get("status") or "",
             "state": "closed" if closed else "open",
+            "bare": bare,
             "steps": steps, "current": cur, "from": prev, "next": _next_of(cur),
         })
     return flows
@@ -522,10 +529,18 @@ def build_stories(flows: list[dict[str, Any]] | None) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     for f in flows or []:
         steps = f.get("steps") or []
+        # 2026-08-21: sin el título, dos hipótesis con el mismo tipo de paso (p.ej.
+        # ambas recién "planteadas") mostraban el MISMO párrafo plantilla palabra por
+        # palabra -- se leía como un bug/duplicado aunque cada una era de verdad
+        # distinta. El título entre paréntesis es lo único que lo distingue de un
+        # vistazo.
+        title = (f.get("title") or "").strip()
+        tag = f"{f.get('id')} ({title[:70]}{'…' if len(title) > 70 else ''})" \
+            if title else str(f.get("id"))
         for i, s in enumerate(steps):
             nxt = steps[i + 1]["persona"] if i + 1 < len(steps) else None
             nxt = nxt if nxt != s["persona"] else None
-            line = f"{f.get('id')}: {_story_line(s, nxt)}."
+            line = f"{tag}: {_story_line(s, nxt)}."
             out.setdefault(s["persona"], []).append(line)
     return out
 

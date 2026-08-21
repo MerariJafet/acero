@@ -1668,6 +1668,9 @@ def mount_portal(app: FastAPI) -> None:
     # daily literature watchdog (push: new papers find YOU)
     from .watchdog import watchdog_on_startup
     watchdog_on_startup()
+    # Centinela (PI loop): revive los que quedaron "running" antes del reinicio
+    from .research_loop import resume_on_startup as pi_resume_on_startup
+    pi_resume_on_startup()
 
     @app.middleware("http")
     async def _security_headers(request, call_next):  # type: ignore[no-untyped-def]

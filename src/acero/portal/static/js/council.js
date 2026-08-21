@@ -1,6 +1,7 @@
 // El Consejo — 3 fases (pasteles) + rostros distintos + riel de pelotas (hipótesis en flujo).
 // Fetches /portal/api/projects/{pid}/council.
 import { post } from "./api.js";
+import { helpIcon } from "./components.js";
 
 const SC = { good: "#54c08a", warn: "#e0a96d", new: "#5b8def", weak: "#e0736f" };
 const SL = { good: "sólido", warn: "mejorable", new: "nuevo", weak: "débil" };
@@ -63,7 +64,23 @@ function injectStyles() {
   .cv-mrl{font-size:9px;color:var(--faint);text-align:center;line-height:1.15;height:22px;overflow:hidden}
   .cv-stt{position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;border-radius:50%;border:2px solid #121a29}
   .cv-rail{position:relative;background:linear-gradient(180deg,var(--panel),#111826);border:1px solid var(--line);border-radius:20px;padding:12px 0}
-  .cv-rail-h{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);text-align:center;margin-bottom:6px}
+  .cv-rail-h{font-family:var(--mono);font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);text-align:center;margin-bottom:6px;display:flex;align-items:center;justify-content:center;gap:8px}
+  .cv-max-btn{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:none;color:var(--faint);background:transparent;border:1px solid var(--line);border-radius:8px;padding:2px 8px;cursor:pointer}
+  .cv-max-btn:hover{color:#e7ecf7;border-color:#4a5878}
+  .cv-rail-backdrop{position:fixed;inset:0;background:rgba(8,11,18,.72);z-index:998}
+  .cv-rail-maxed{position:fixed !important;inset:3vh 3vw;z-index:999;max-width:none;padding:16px 0;box-shadow:0 20px 60px rgba(0,0,0,.6);display:flex;flex-direction:column}
+  .cv-rail-maxed .cv-fcols{flex:1;overflow-y:auto;flex-wrap:wrap}
+  body.cv-rail-lock{overflow:hidden}
+  .cv-bare{margin:0 10px 10px;border:1px solid var(--line);border-radius:12px;background:#141b2b}
+  .cv-bare-head{width:100%;display:flex;align-items:center;gap:6px;background:transparent;border:0;color:#cfd8ea;font-family:var(--mono);font-size:11px;padding:8px 10px;cursor:pointer;text-align:left}
+  .cv-bare-head:hover{color:#e7ecf7}
+  .cv-bare-car{margin-left:auto;transition:transform .15s}
+  .cv-bare.open .cv-bare-car{transform:rotate(90deg)}
+  .cv-bare-list{border-top:1px solid var(--line);padding:8px 10px;max-height:260px;overflow-y:auto}
+  .cv-bare-row{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;border-bottom:1px solid #1e263a}
+  .cv-bare-row:last-of-type{border-bottom:0}
+  .cv-bare-tag{font-family:var(--mono);font-size:10px;color:var(--faint);min-width:28px}
+  .cv-bare-title{flex:1;color:#cfd8ea;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .cv-track{position:absolute;left:50%;top:48px;bottom:14px;width:3px;transform:translateX(-50%);
     background:linear-gradient(180deg,#7ba7ff,#5ec7a8,#e0a96d);border-radius:3px;opacity:.5}
   .cv-zone{position:relative;height:calc((100% - 54px)/3);display:flex;align-items:center;justify-content:center}
@@ -258,7 +275,15 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
   const journeyHtml = !jn ? "" :
     `<div class="cv-journey">
       <div class="cv-jtop">
-        <div><div class="cv-jlabel">investigación completa · hitos</div><div class="cv-jpct">${jn.pct}%</div></div>
+        <div><div class="cv-jlabel">investigación completa · hitos${helpIcon(
+          "Este % mide el PROYECTO completo contra una lista fija de hitos (conjetura " +
+          "planteada, novedad revisada, atacada computacionalmente, etc.) — sube poco a " +
+          "poco y casi nunca llega a 100 rápido. Es DISTINTO del % que ves más abajo en " +
+          "'ronda X/Y', que es solo el avance del ciclo de Bohr QUE ESTÁ CORRIENDO AHORA " +
+          "MISMO (ese sí puede llegar a 100% en minutos y reiniciar en la próxima ronda). " +
+          "Y también es distinto del anillo de 'fases con trabajo' del dashboard de " +
+          "Operaciones, que solo cuenta cuántas de las 6 fases tienen algo. Tres números, " +
+          "tres preguntas distintas — no es un error si no coinciden.")}</div><div class="cv-jpct">${jn.pct}%</div></div>
         <div class="cv-jbar"><span style="width:${jn.pct}%"></span></div>
         <div class="cv-jnext">➜ Siguiente: <b>${esc(jn.next_step)}</b></div>
       </div>
@@ -289,7 +314,10 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
         <b>${esc(lv.label || "trabajando…")}</b>
         <span class="tagx">ronda ${lv.round || 1}/${lv.max_rounds || 3} · ¿otra vuelta? <b style="color:${wrC}">${esc(lv.will_retry || "…")}</b></span>
         <div class="cv-live-bar"><span style="width:${lv.pct || 0}%"></span></div>
-        <span class="tagx">${lv.pct || 0}%</span>
+        <span class="tagx">${lv.pct || 0}%${helpIcon(
+          "Avance de ESTE ciclo de Bohr nada más (ronda actual sobre el máximo de rondas). " +
+          "Llega a 100% cuando el ciclo termina y VUELVE A EMPEZAR en 0% en el próximo — no " +
+          "es el progreso total del proyecto. Ese es el % de arriba, 'investigación completa · hitos'.")}</span>
         ${lv.statement ? `<div class="cv-live-stmt">“${esc(lv.statement)}”</div>` : ""}</div>`
     : `<div class="cv-live done"><span class="tagx">ciclo terminado</span>
         <div class="cv-live-bar" style="max-width:140px"><span style="width:100%"></span></div>
@@ -304,10 +332,31 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
         <span class="tagx" style="margin-left:auto">🎩 otra ronda: Bohr → Investigar — esta barra se REINICIA y avanza con el nuevo ciclo</span></div>`);
 
   // --- riel: una COLUMNA por hipótesis con la cadena de quién hizo qué (en orden) ---
-  const flows = d.flows || [];
+  const allFlows = d.flows || [];
+  // 'bare' = propuestas crudas sin trabajo ni decisión -- si se dejan como columna
+  // completa, 30 de estas ahogan las pocas que sí avanzan. Van en un bloque
+  // colapsado aparte con acción rápida para dictaminarlas (aprobar/rechazar).
+  const flows = allFlows.filter((f) => !f.bare);
+  const bareFlows = allFlows.filter((f) => f.bare);
+  const bareHtml = !bareFlows.length ? "" : `<div class="cv-bare" id="cv-bare">
+      <button class="cv-bare-head" id="cv-bare-toggle">📋 ${bareFlows.length} propuesta${bareFlows.length === 1 ? "" : "s"} sin trabajar aún ${helpIcon(
+        "Hipótesis que se propusieron pero nadie decidió todavía -- ni se aprobaron " +
+        "para investigarse, ni se rechazaron. Se agrupan aquí para no ahogar el riel " +
+        "con columnas vacías. Ábrelas para aprobar o rechazar cada una; 'Rechazar " +
+        "todas' las cierra de un golpe si ya no valen la pena.")} <span class="cv-bare-car">▸</span></button>
+      <div class="cv-bare-list" id="cv-bare-list" hidden>
+        ${bareFlows.map((f) => `<div class="cv-bare-row" data-hid="${esc(f.hid)}">
+          <span class="cv-bare-tag">${esc(f.id)}</span>
+          <span class="cv-bare-title">${esc(f.title || "(sin título)")}</span>
+          <button class="act ghost" data-bare-approve="${esc(f.hid)}" data-tag="${esc(f.id)}">Aprobar</button>
+          <button class="act ghost" data-bare-reject="${esc(f.hid)}">Rechazar</button></div>`).join("")}
+        <button class="cv-back" id="cv-bare-reject-all" style="margin-top:8px">✕ Rechazar todas (${bareFlows.length})</button>
+      </div></div>`;
   const railHtml = flows.length
-    ? `<div class="cv-rail-h">flujo · quién hizo qué</div>
-       <div class="cv-fcols">${flows.map((f) => {
+    ? `<div class="cv-rail-h">flujo · quién hizo qué
+         <button class="cv-max-btn" id="cv-rail-max" title="Maximizar — útil cuando hay muchas hipótesis y las columnas quedan apretadas">⛶ Maximizar</button></div>
+       ${bareHtml}
+       <div class="cv-fcols" id="cv-fcols">${flows.map((f) => {
          // estado de la columna: el ciclo EN VIVO la trabaja → normal;
          // 'closed' → GRIS (terminada, nada pendiente);
          // abierta sin ciclo → ROJA (espera decisión), salvo la cara que decide.
@@ -336,10 +385,12 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
          return `<div class="cv-fcol${colCls}" title="${esc(f.id)} · ${esc(tip)}${f.title ? " — " + esc(f.title) : ""}">
            <div class="cv-fh">${esc(f.id)}</div>${chain}${nx}</div>`;
        }).join("")}</div>`
-    : `<div class="cv-rail-h">flujo · hipótesis</div><div class="cv-track"></div>
+    : (allFlows.length
+        ? `<div class="cv-rail-h">flujo · quién hizo qué</div>${bareHtml}`
+        : `<div class="cv-rail-h">flujo · hipótesis</div><div class="cv-track"></div>
         <div class="cv-zone"><span class="cv-zl">creativa</span><div class="cv-balls" data-b="creativa"></div></div>
         <div class="cv-zone"><span class="cv-zl">investig.</span><div class="cv-balls" data-b="investig"></div></div>
-        <div class="cv-zone"><span class="cv-zl">crítica</span><div class="cv-balls" data-b="critica"></div></div>`;
+        <div class="cv-zone"><span class="cv-zl">crítica</span><div class="cv-balls" data-b="critica"></div></div>`);
 
   view.innerHTML = `<div class="cv"><canvas class="cv-stars"></canvas>
     <div class="cv-top"><div><div class="cv-eyebrow">ACERO · consejo de investigación</div>
@@ -361,7 +412,8 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
         <button class="cv-back" id="cv-report-x">✕ Cerrar</button></div>
       <div class="cv-report-body">${esc(d.report.markdown || "")}</div></div>` : ""}
     <div class="cv-board"><div class="cv-phases">${phasesHtml}</div>
-      <div class="cv-rail">${railHtml}</div></div>
+      <div class="cv-rail" id="cv-rail">${railHtml}</div></div>
+    <div class="cv-rail-backdrop" id="cv-rail-backdrop" hidden></div>
     <div class="cv-scrim" id="cv-scrim"></div><aside class="cv-drawer" id="cv-drawer"></aside></div>`;
 
   const root = view.querySelector(".cv");
@@ -376,6 +428,54 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
   const scrim = root.querySelector("#cv-scrim"), drawer = root.querySelector("#cv-drawer");
   const back = root.querySelector("#cv-back"); if (back) back.onclick = () => onBack();
   const ops = root.querySelector("#cv-ops"); if (ops) ops.onclick = () => onOps();
+
+  const railBox = root.querySelector("#cv-rail");
+  const railMax = root.querySelector("#cv-rail-max");
+  const railBackdrop = root.querySelector("#cv-rail-backdrop");
+  const setRailMax = (on) => {
+    if (!railBox) return;
+    railBox.classList.toggle("cv-rail-maxed", on);
+    if (railBackdrop) railBackdrop.hidden = !on;
+    if (railMax) railMax.textContent = on ? "✕ Minimizar" : "⛶ Maximizar";
+    document.body.classList.toggle("cv-rail-lock", on);
+  };
+  if (railMax) railMax.onclick = () => setRailMax(!railBox.classList.contains("cv-rail-maxed"));
+  if (railBackdrop) railBackdrop.onclick = () => setRailMax(false);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && railBox && railBox.classList.contains("cv-rail-maxed")) setRailMax(false);
+  });
+
+  // 📋 propuestas sin trabajar: expandir/colapsar + aprobar/rechazar (individual y en bloque)
+  const bareBox = root.querySelector("#cv-bare");
+  const bareToggle = root.querySelector("#cv-bare-toggle");
+  const bareList = root.querySelector("#cv-bare-list");
+  if (bareToggle && bareList) bareToggle.onclick = () => {
+    bareList.hidden = !bareList.hidden;
+    if (bareBox) bareBox.classList.toggle("open", !bareList.hidden);
+  };
+  const setHypStatus = async (hid, status, reason) => {
+    await post(`/portal/api/projects/${encodeURIComponent(pid)}/hypothesis/${encodeURIComponent(hid)}/status`,
+      { status, reason });
+  };
+  root.querySelectorAll("[data-bare-approve]").forEach((b) => b.addEventListener("click", async () => {
+    const reason = prompt(`Razón para aprobar ${b.dataset.tag} (los siguientes pasos correrán sobre esta hipótesis):`);
+    if (!reason) return;
+    await setHypStatus(b.dataset.bareApprove, "APPROVED", reason);
+    renderCouncil(view, pid, cb, opts);
+  }));
+  root.querySelectorAll("[data-bare-reject]").forEach((b) => b.addEventListener("click", async () => {
+    if (!confirm("¿Rechazar esta hipótesis?")) return;
+    await setHypStatus(b.dataset.bareReject, "REJECTED", "rechazada por el humano");
+    renderCouncil(view, pid, cb, opts);
+  }));
+  const bareRejectAll = root.querySelector("#cv-bare-reject-all");
+  if (bareRejectAll) bareRejectAll.onclick = async () => {
+    const n = bareFlows.length;
+    if (!confirm(`¿Rechazar las ${n} propuestas sin trabajar? No se puede deshacer en bloque -- habría que reabrirlas una por una.`)) return;
+    for (const f of bareFlows) await setHypStatus(f.hid, "REJECTED", "rechazada en bloque — propuesta nunca trabajada");
+    renderCouncil(view, pid, cb, opts);
+  };
+
   // 📜 la bitácora de Bohr: el informe tipo paper del último ciclo
   const rbtn = root.querySelector("#cv-report-btn");
   const rpanel = root.querySelector("#cv-report");
@@ -416,15 +516,28 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
       <script>window.onload=()=>setTimeout(()=>window.print(),300)</`+`script></body></html>`);
     w.document.close(); w.focus();
   };
+  // ¿ya hay un ciclo de Bohr vivo? Misma regla que el candado del backend
+  // (investigator_bridge.cycle_running: sin done y con latido <6h) -- para que el
+  // botón NO invite a lanzar un segundo ciclo que el servidor va a rechazar solo.
+  function bohrCycleRunning() {
+    const lv = d.live;
+    if (!lv || lv.done) return false;
+    const ts = Number(lv.ts) || 0;
+    return ts > 0 && (Date.now() / 1000 - ts) < 6 * 3600;
+  }
+
   function open(id) {
     const p = byId[id]; if (!p) return; const col = SC[p.status];
     const held = (d.balls || []).filter((b) => b.persona === id).map((b) => b.id);
+    const bohrRunning = id === "bohr" && bohrCycleRunning();
     drawer.innerHTML = `<div class="cv-dh"><div class="cv-df">${face(p, 76)}</div>
       <div><div class="cv-dn">${p.name}</div><div class="cv-dr">${p.role}</div><div class="cv-dm">${p.module}</div></div>
       <button class="cv-close" id="cv-x">✕</button></div>
       <div class="cv-db"><div class="cv-dsum">${p.summary}</div>
         <button id="cv-persona-dash" style="background:#1b2438;border:1px solid #c8863c;color:#e0a96d;border-radius:10px;padding:11px 14px;font-weight:600;font-size:13px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px">📋 Abrir el tablero de ${esc(p.name)} <span style="color:#93a1bd;font-weight:400">— fichas para dar seguimiento →</span></button>
-        ${id === "bohr" ? `<button id="cv-investigate" style="background:#e0a96d;color:#0d121e;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px;cursor:pointer">▶ Investigar esta conjetura (correr el ciclo)</button><div id="cv-inv-msg" style="font-size:12px;color:#93a1bd"></div>` : ""}
+        ${id === "bohr" ? (bohrRunning
+          ? `<button id="cv-investigate" disabled style="background:#233022;color:#7fb88a;border:1px solid #33422f;border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px;cursor:not-allowed">✓ El Consejo YA está trabajando en esto</button><div id="cv-inv-msg" style="font-size:12px;color:#93a1bd">Un ciclo sigue vivo (latido reciente) — lanzar otro duplicaría el gasto. Espera a que termine.</div>`
+          : `<button id="cv-investigate" style="background:#e0a96d;color:#0d121e;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px;cursor:pointer">▶ Investigar esta conjetura (correr el ciclo)</button><div id="cv-inv-msg" style="font-size:12px;color:#93a1bd"></div>`) : ""}
         ${id === "ramanujan" ? `<div style="display:flex;flex-direction:column;gap:8px"><textarea id="cv-spark-txt" rows="3" placeholder="Describe la FRONTERA: ¿qué es lo que 'no se puede' con los métodos actuales y por qué?" style="background:#0d121e;border:1px solid #2a3550;border-radius:10px;color:#e8edf7;padding:10px;font-size:13px;resize:vertical"></textarea><button id="cv-spark" style="background:#e8b23c;color:#0d121e;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px;cursor:pointer">💡 Buscar la chispa (¿y si sí?)</button><div id="cv-spark-msg" style="font-size:12px;color:#93a1bd"></div></div>` : ""}
         ${id === "mendeleev" ? `<div style="display:flex;flex-direction:column;gap:6px"><div class="cv-st">🕸 mapa de patrones — EN VIVO</div><canvas id="cv-patgraph" width="380" height="300" style="width:100%;background:#0d121e;border:1px solid #2a3550;border-radius:12px"></canvas><div id="cv-patgraph-msg" style="font-size:11.5px;color:#93a1bd;line-height:1.4"></div><div style="font-size:11px;color:#5f6d88">Patrón ≠ descubrimiento: cada rombo es un CANDIDATO con causalidad NO establecida y rivales H1-H4. El Consejo intenta destruirlo antes de creerle.</div></div>` : ""}
         <div class="cv-flow"><div><div class="cv-k">recibe de</div><div class="cv-v">${p.awaits}</div></div>
@@ -589,6 +702,8 @@ export async function renderCouncil(view, pid, cb, opts = {}) {
     if (drawer.classList.contains("open")) return;
     const rp2 = root.querySelector("#cv-report");
     if (rp2 && !rp2.hidden) return;              // leyendo el informe → no refrescar
+    const rl2 = root.querySelector("#cv-rail");
+    if (rl2 && rl2.classList.contains("cv-rail-maxed")) return;  // riel maximizado → no refrescar (te lo cerraría)
     try {
       const r2 = await fetch(`/portal/api/projects/${encodeURIComponent(pid)}/council`,
         { headers: { Accept: "application/json" } });
