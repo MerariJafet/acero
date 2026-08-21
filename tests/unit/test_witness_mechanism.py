@@ -15,13 +15,23 @@ confundía en un solo "no abrió":
 
 from __future__ import annotations
 
-import os
 import sys
+from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..",
-                                "research", "reto50"))
+from acero.core.workspace import workspace  # noqa: E402
+
+_LEGACY = Path(__file__).resolve().parents[2] / "research" / "reto50"
+_NUEVA = workspace() / "investigaciones" / "erdos-straus"
+_MODULE_DIR = _NUEVA if (_NUEVA / "witness_mechanism.py").exists() else _LEGACY
+
+pytestmark = pytest.mark.skipif(
+    not (_MODULE_DIR / "witness_mechanism.py").exists(),
+    reason="witness_mechanism.py no está versionado (dato de workspace, no del "
+          "motor) -- ausente en un clon limpio del repo o sin migrar")
+
+sys.path.insert(0, str(_MODULE_DIR))
 
 from witness_mechanism import (  # noqa: E402
     diagnose, evaluate_orders, pieces, reachable_bounded, subgroup_closure,

@@ -36,8 +36,13 @@ from typing import Any, Protocol
 
 import jsonschema
 
-DUO_DIR = (Path(__file__).resolve().parents[3] / "research" / "reto50"
-           / "scientific_duo")
+from ..core.workspace import data_path
+
+DUO_DIR = data_path(
+    "investigaciones/erdos-straus/scientific_duo",
+    legacy=Path(__file__).resolve().parents[3] / "research" / "reto50"
+    / "scientific_duo",
+)
 SCHEMAS_DIR = DUO_DIR / "schemas"
 DIALOGUE_PATH = DUO_DIR / "dialogue.jsonl"
 DECISIONS_PATH = DUO_DIR / "decisions.jsonl"

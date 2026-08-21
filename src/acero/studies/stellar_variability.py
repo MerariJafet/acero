@@ -172,7 +172,11 @@ def run_program(csv_path: str | Path | None = None, *, authorized: bool = True,
                 n_surrogates: int = 200) -> dict[str, Any]:
     """Execute the full program on the real SILSO series. Downloads (gated) if absent."""
     from ..core.config import repo_root
-    path = Path(csv_path) if csv_path else repo_root() / "research" / "datasets" / "sunspots.csv"
+    from ..core.workspace import data_path
+    path = Path(csv_path) if csv_path else data_path(
+        "datos/datasets/sunspots.csv",
+        legacy=repo_root() / "research" / "datasets" / "sunspots.csv",
+    )
     manifest: dict[str, Any] | None = None
     if not path.exists():
         manifest = download_sunspots(path, authorized=authorized)

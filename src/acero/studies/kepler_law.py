@@ -14,10 +14,14 @@ from pathlib import Path
 from typing import Any
 
 from ..core.config import repo_root
+from ..core.workspace import data_path
 
 
 def _dataset() -> Path:
-    return repo_root() / "research" / "datasets" / "exoplanets.csv"
+    return data_path(
+        "datos/datasets/exoplanets.csv",
+        legacy=repo_root() / "research" / "datasets" / "exoplanets.csv",
+    )
 
 
 def load_rows() -> list[tuple[float, float, float]]:

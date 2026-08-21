@@ -64,7 +64,9 @@ def _governing() -> dict[str, float]:
 
 def _stellar() -> dict[str, float]:
     from ..core.config import repo_root as _rr
-    csv = _rr() / "research" / "datasets" / "sunspots.csv"
+    from ..core.workspace import data_path
+    csv = data_path("datos/datasets/sunspots.csv",
+                     legacy=_rr() / "research" / "datasets" / "sunspots.csv")
     if not csv.exists():
         return {"period_years": 0.0}       # dataset offline; runner records INSUFFICIENT
     from ..studies.stellar_variability import run_program

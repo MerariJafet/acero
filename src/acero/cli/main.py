@@ -871,8 +871,10 @@ def inference_benchmark() -> None:
 def inference_sunspots() -> None:
     """Download and analyse the real SILSO sunspot series (authorized public dataset)."""
     from ..benchmarks.real_astronomy_inference import analyze_sunspots, download_sunspots
+    from ..core.workspace import data_path
 
-    path = repo_root() / "research" / "datasets" / "sunspots.csv"
+    path = data_path("datos/datasets/sunspots.csv",
+                      legacy=repo_root() / "research" / "datasets" / "sunspots.csv")
     meta = download_sunspots(path, authorized=True)
     r = analyze_sunspots(path, manifest=meta)
     typer.echo(f"SILSO sunspots: n={r['n']} span={r['time_span_years']} "
