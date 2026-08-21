@@ -56,8 +56,24 @@ _WATCHDOG_MIN_INTERVAL = 30.0        # throttle lazy self-heal on dashboard read
 
 _POOL = ThreadPoolExecutor(max_workers=MAX_MISSIONS, thread_name_prefix="mission")
 _ACTIVE: set[str] = set()
+_ACTIVE_BY_PROJ: dict[str, set[str]] = {}
 _LOCK = threading.Lock()
 _LAST_WATCHDOG = [0.0]
+
+
+def _project_quota() -> int:
+    """Cuántos workers puede ocupar UN proyecto a la vez.
+
+    El pool es FIFO global: quien encola primero y sigue encolando se queda con
+    todo. 2026-08-21: un proyecto tenía 40 misiones encoladas y CERO corriendo
+    durante horas porque el otro acaparaba los 4 workers — inanición pura. Con
+    cuota, ningún proyecto puede tomar más de la mitad (mínimo 1), así que
+    siempre queda sitio para que otro avance."""
+    try:
+        v = int(os.environ.get("ACERO_MISSION_QUOTA", "0"))
+    except ValueError:
+        v = 0
+    return max(1, v or MAX_MISSIONS // 2)
 
 
 def _now_ts() -> float:
@@ -144,10 +160,21 @@ class MissionEngine:
         return {"ok": True, "started": started, "skipped": skipped}
 
     def _submit(self, mission_id: str) -> None:
+        try:
+            pid = str((self.store.get(mission_id) or {}).get("project_id") or "")
+        except Exception:  # noqa: BLE001
+            pid = ""
         with _LOCK:
             if mission_id in _ACTIVE:
                 return
+            # cuota por proyecto: si este ya ocupa su parte del pool, la misión
+            # se queda PENDING y el barrido periódico la recoge cuando haya
+            # sitio. Así ningún proyecto deja a otro sin correr NADA.
+            if pid and len(_ACTIVE_BY_PROJ.get(pid, set())) >= _project_quota():
+                return
             _ACTIVE.add(mission_id)
+            if pid:
+                _ACTIVE_BY_PROJ.setdefault(pid, set()).add(mission_id)
         # Latido AL ENCOLAR: el pool corre MAX_MISSIONS a la vez, así que una
         # misión puede esperar turno un buen rato. Mientras espera no ejecuta
         # _execute() y por tanto nadie late por ella — desde fuera (el Auditor,
@@ -166,6 +193,8 @@ class MissionEngine:
             finally:
                 with _LOCK:
                     _ACTIVE.discard(mission_id)
+                    if pid and pid in _ACTIVE_BY_PROJ:
+                        _ACTIVE_BY_PROJ[pid].discard(mission_id)
         _POOL.submit(_run)
 
     # --- persistence helpers ---------------------------------------------------
@@ -486,11 +515,18 @@ def watchdog_loop_on_startup(interval_sec: float = 120.0) -> Any:
         while True:
             _t.sleep(max(30.0, interval_sec))
             try:
-                r = MissionEngine().watchdog()
-                if r.get("resumed") or r.get("reaped"):
+                eng = MissionEngine()
+                r = eng.watchdog()
+                # …y recoger PENDING que quepan ahora en la cuota de su proyecto.
+                # Sin esto, una misión rechazada por cuota se quedaba PENDING
+                # para siempre: nadie volvía a intentarla hasta el próximo
+                # arranque del portal.
+                p = eng.resume_pending()
+                if r.get("resumed") or r.get("reaped") or p.get("resumed"):
                     print(f"[missions.watchdog:periódico] "
                           f"retomadas={len(r['resumed'])} "
-                          f"dadas-por-muertas={len(r['reaped'])}")
+                          f"dadas-por-muertas={len(r['reaped'])} "
+                          f"encoladas={len(p.get('resumed', []))}")
             except Exception as exc:  # noqa: BLE001 - el barrido nunca muere callado
                 print(f"[missions.watchdog:periódico] ERROR: {exc!r}")
     th = threading.Thread(target=_loop, name="mission-watchdog", daemon=True)

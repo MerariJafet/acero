@@ -235,3 +235,31 @@ def test_submit_marca_el_latido_al_encolar(session_factory, monkeypatch):
     assert edad < 5                            # el latido quedó fresco al encolar
     with _LOCK:
         _ACTIVE.discard(mid)                  # limpieza para otros tests
+
+
+def test_cuota_por_proyecto_evita_que_uno_deje_al_otro_sin_correr(session_factory,
+                                                                  monkeypatch):
+    """El pool es FIFO global: quien encola primero y sigue encolando se queda
+    con todo. 2026-08-21: un proyecto con 40 misiones encoladas y CERO
+    corriendo durante horas mientras el otro ocupaba los 4 workers."""
+    from acero.portal import missions as ms
+    monkeypatch.setenv("ACERO_MISSION_QUOTA", "2")
+    monkeypatch.setattr(ms._POOL, "submit", lambda fn: None)   # no ejecutar
+    p, h, fl = _setup(session_factory)
+    hs = HypothesisService(session_factory).generate(p.id, use_ai=False)["created"]
+    for x in hs[:3]:
+        fl.set_status(p.id, x["id"], "APPROVED", "ok")
+    eng = MissionEngine(session_factory)
+
+    ids = []
+    for x in hs[:3]:
+        r = eng.start(p.id, x["id"], use_ai=False, sync=False)
+        if r.get("ok"):
+            ids.append(r["mission_id"])
+    activas = len(ms._ACTIVE_BY_PROJ.get(p.id, set()))
+    assert activas <= 2, "un proyecto no puede pasarse de su cuota"
+
+    with ms._LOCK:                                   # limpieza para otros tests
+        for i in ids:
+            ms._ACTIVE.discard(i)
+        ms._ACTIVE_BY_PROJ.pop(p.id, None)
