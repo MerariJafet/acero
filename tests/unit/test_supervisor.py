@@ -284,3 +284,19 @@ def test_sin_saturacion_cualquier_zombi_se_reporta():
     sig = _sig(misiones={"RUNNING": 2, "DONE": 5},
                zombies=[{"id": "msn_x", "hb_age_s": 400}])
     assert "MISIONES_ZOMBIS" in _codes(sig)
+
+
+def test_giro_en_vacio_no_se_dispara_con_la_cola_saturada():
+    """Si la cola está llena, que el Centinela no lance es contrapresión —
+    decisión correcta de no sobrecargar — no esterilidad."""
+    sig = _sig(misiones={"PENDING": 40, "RUNNING": 2, "DONE": 10},
+               loop={"status": "running", "paused": False, "ticks": 60,
+                     "dry_streak": 4, "ultimo_tick_h": 0.1})
+    assert "GIRO_EN_VACIO" not in _codes(sig)
+
+
+def test_giro_en_vacio_SI_se_dispara_sin_cola():
+    sig = _sig(misiones={"RUNNING": 1, "DONE": 10},
+               loop={"status": "running", "paused": False, "ticks": 60,
+                     "dry_streak": 4, "ultimo_tick_h": 0.1})
+    assert "GIRO_EN_VACIO" in _codes(sig)

@@ -36,6 +36,10 @@ MAX_NEW_HYP_PER_TICK = int(os.environ.get("ACERO_PI_MAX_NEW_HYP", "4"))
 DEFAULT_INTERVAL_SEC = int(os.environ.get("ACERO_PI_INTERVAL_SEC", "1800"))
 DRY_BACKOFF_CAP_SEC = int(os.environ.get("ACERO_PI_BACKOFF_CAP_SEC", "7200"))
 _ACTIONS = {"generate_and_run", "run_existing", "deepen", "pause"}
+# marca de contrapresión: se busca en los 'blocks' para NO confundir "no cabía
+# más trabajo" con "no había trabajo". Son opuestos, y confundirlos dormía al
+# Centinela justo cuando el sistema estaba más ocupado (2026-08-21).
+_BACKPRESSURE = "contrapresión"
 _TERMINAL = {"DONE", "FAILED"}
 
 PI_DECISION_SCHEMA = {
@@ -546,7 +550,7 @@ class PrincipalInvestigator:
             cap = 12
         cola = self._queue_depth(pid)
         if cola >= cap:
-            return 0, [f"contrapresión: {cola} misiones ya en cola (tope {cap}) — "
+            return 0, [f"{_BACKPRESSURE}: {cola} misiones ya en cola (tope {cap}) — "
                        "encolar más no acelera nada, el pool procesa de a pocas"]
         r = self._engine_().start_all(pid, use_ai=True, sync=False)
         if not isinstance(r, dict):
@@ -610,7 +614,15 @@ class PrincipalInvestigator:
         # dry = nothing actually RAN. Generating hypotheses that the EVA gate then
         # blocks is NOT progress — so the driver backs off instead of hot-spinning
         # on generation+EVA calls that never launch an experiment.
-        dry = applied.get("started", 0) == 0 and not applied.get("paused")
+        # PERO la contrapresión NO es esterilidad: significa que hay MUCHO trabajo
+        # en curso y no cabe más. Contarla como seca disparaba el backoff
+        # exponencial (4 rondas ⇒ 2 h de espera) justo cuando el sistema estaba
+        # saturado de trabajo — exactamente al revés de lo que conviene.
+        frenado = any(_BACKPRESSURE in str(b)
+                      for b in (applied.get("blocks") or []))
+        applied["backpressure"] = frenado
+        dry = (applied.get("started", 0) == 0 and not applied.get("paused")
+               and not frenado)
         st = load_state(pid)
         st["ticks"] = int(st.get("ticks", 0)) + 1
         st["last_tick_at"] = now_iso()

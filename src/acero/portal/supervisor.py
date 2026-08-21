@@ -258,8 +258,11 @@ def findings_for(pid: str, title: str, s: dict[str, Any], *,
             "hipótesis, y revisar si un proyecto está acaparando los workers.",
             {"activas": activas, "corriendo": corriendo, "workers": cap_pool}))
 
-    # 3. giro en vacío: tickea pero nada corre
-    if loop.get("dry_streak", 0) >= DRY_STREAK_ALERT:
+    # 3. giro en vacío: tickea pero nada corre. OJO: si la cola está saturada,
+    #    que el Centinela no lance es CONTRAPRESIÓN (decisión correcta de no
+    #    sobrecargar), no esterilidad — hay muchísimo trabajo en curso. Confundir
+    #    ambas cosas ya disparó un backoff de 2 h justo con el sistema lleno.
+    if loop.get("dry_streak", 0) >= DRY_STREAK_ALERT and not _saturado(s):
         out.append(Finding(
             "GIRO_EN_VACIO", SEV_STALL, pid, title,
             f"{loop['dry_streak']} rondas seguidas sin lanzar NADA ejecutable",

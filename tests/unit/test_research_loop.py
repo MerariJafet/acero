@@ -630,3 +630,34 @@ def test_con_cola_corta_si_encola(monkeypatch):
 
     n, _ = _pi(None, engine=_Corta())._start("pok")
     assert n == 1                              # _Engine.start_all devuelve 1
+
+
+def test_contrapresion_NO_cuenta_como_ronda_seca(monkeypatch):
+    """La contrapresión es lo OPUESTO a la esterilidad: significa que hay tanto
+    trabajo en curso que no cabe más. Contarla como seca disparaba el backoff
+    exponencial (4 rondas ⇒ 2 h de espera) justo con el sistema saturado — el
+    Centinela se dormía cuando más ocupado estaba (2026-08-21, efecto secundario
+    del propio arreglo de contrapresión)."""
+    monkeypatch.setattr(rl, "build_digest", _canned_digest)
+    monkeypatch.setenv("ACERO_PI_MAX_QUEUE", "2")
+
+    class _Lleno(_Engine):
+        def list_missions(self, pid):
+            return [{"status": "RUNNING"} for _ in range(20)]
+
+    pi = _pi(_Prov({"action": "run_existing", "reasoning": "x"}),
+             engine=_Lleno(), hyps=_NoHyps(), flow=_Flow())
+    rec = pi.tick("pbp")
+    assert rec["applied"]["started"] == 0
+    assert rec["applied"]["backpressure"] is True
+    assert rec["dry"] is False                 # NO seca ⇒ sin backoff
+    assert rl.load_state("pbp")["dry_streak"] == 0
+
+
+def test_ronda_de_verdad_esteril_SI_cuenta_como_seca(monkeypatch):
+    """Sin cola que lo explique, no lanzar nada sí es esterilidad legítima."""
+    monkeypatch.setattr(rl, "build_digest", _canned_digest)
+    pi = _pi(_Prov({"action": "run_existing", "reasoning": "x"}),
+             engine=_NoStart(), hyps=_NoHyps(), flow=_Flow())
+    rec = pi.tick("pdry")
+    assert rec["dry"] is True and rl.load_state("pdry")["dry_streak"] == 1
