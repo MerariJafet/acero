@@ -479,3 +479,54 @@ def test_question_seed_turns_eva_blocks_into_fertile_questions():
 def test_question_seed_no_blocks_returns_focus_unchanged():
     pi = _pi(_Down())
     assert pi._question_seed("qseed2", "igual") == "igual"
+
+
+def test_deepen_ahora_profundiza_literatura_de_verdad(monkeypatch):
+    """'deepen' hacía lo MISMO que 'run_existing' (ambas solo lanzaban misiones),
+    así que el PI podía decidir distinto sin que cambiara nada — el
+    BUCLE_DE_DECISION que cazó el Auditor el 2026-08-21. Ahora profundizar
+    significa leer las REFERENCIAS de lo ya leído (y no usa el agente de codegen,
+    así que produce trabajo aunque la fábrica esté caída)."""
+    monkeypatch.setattr(rl, "build_digest", _canned_digest)
+
+    class _FlowDeep:
+        def __init__(self):
+            self.deepened = []
+
+        def set_status(self, pid, hid, status, reason="", **kw):
+            pass
+
+        def approved(self, pid):
+            return [{"id": "h1", "tag": "H1"}, {"id": "h2", "tag": "H2"}]
+
+        def deepen_literature(self, pid, hid, **kw):
+            self.deepened.append(hid)
+            return {"ok": True, "n_refs": 7}
+
+    flow = _FlowDeep()
+    pi = _pi(_Prov({"action": "deepen", "reasoning": "profundizar"}),
+             engine=_Engine(), hyps=_Hyps(), flow=flow)
+    rec = pi.tick("pdeep")
+    assert flow.deepened == ["h1", "h2"]          # leyó referencias de verdad
+    assert rec["applied"]["deepened"] == 2
+
+
+def test_deepen_reporta_el_motivo_cuando_no_puede(monkeypatch):
+    """Sin papers indexados aún, profundizar es imposible — y se dice por qué."""
+    monkeypatch.setattr(rl, "build_digest", _canned_digest)
+
+    class _FlowNoLit:
+        def set_status(self, pid, hid, status, reason="", **kw):
+            pass
+
+        def approved(self, pid):
+            return [{"id": "h1", "tag": "H1"}]
+
+        def deepen_literature(self, pid, hid, **kw):
+            return {"ok": False, "error": "investiga primero: sin papers indexados"}
+
+    pi = _pi(_Prov({"action": "deepen", "reasoning": "x"}),
+             engine=_Engine(), hyps=_Hyps(), flow=_FlowNoLit())
+    rec = pi.tick("pdeep2")
+    assert rec["applied"]["deepened"] == 0
+    assert any("investiga primero" in b for b in rec["applied"]["blocks"])

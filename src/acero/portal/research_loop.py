@@ -460,6 +460,28 @@ class PrincipalInvestigator:
             except Exception:  # noqa: BLE001
                 continue
 
+    def _deepen(self, pid: str, applied: dict[str, Any]) -> int:
+        """Literatura de nivel 2 sobre las hipótesis aprobadas: indexa las
+        REFERENCIAS de los papers ya leídos. Devuelve cuántas profundizó."""
+        flow = self._flow_()
+        n = 0
+        try:
+            approved = flow.approved(pid)
+        except Exception:  # noqa: BLE001
+            return 0
+        for h in approved[:3]:              # techo por ronda: no quemar la API
+            try:
+                r = flow.deepen_literature(pid, h["id"])
+                if isinstance(r, dict) and r.get("ok"):
+                    n += 1
+                elif isinstance(r, dict) and r.get("error"):
+                    applied.setdefault("blocks", []).append(
+                        f"deepen {h.get('tag', '')}: {str(r['error'])[:120]}")
+            except Exception as exc:  # noqa: BLE001 - una hipótesis rota no frena
+                applied.setdefault("blocks", []).append(
+                    f"deepen falló: {str(exc)[:120]}")
+        return n
+
     def _start(self, pid: str) -> tuple[int, list[str]]:
         """Start missions for approved hypotheses. Returns (n_started, block_reasons).
         Hypotheses the EVA gate rejects (HARKing/trivial/vague) come back as skips —
@@ -490,10 +512,23 @@ class PrincipalInvestigator:
             applied["cooldown"] = True
             applied["reason"] = str(d.get("reasoning") or "")[:200]
             return applied
+        if d["action"] == "deepen":
+            # 'deepen' hacía EXACTAMENTE lo mismo que 'run_existing' (ambas solo
+            # llamaban a _start), así que el PI podía "decidir" distinto sin que
+            # cambiara nada — de ahí el BUCLE_DE_DECISION que vio el Auditor el
+            # 2026-08-21. deepen_literature() existía y nadie la llamaba: ahora
+            # profundizar significa leer las REFERENCIAS de lo ya leído. Bonus:
+            # la literatura NO usa el agente de codegen, así que sigue
+            # produciendo trabajo real aunque la fábrica esté caída.
+            applied["deepened"] = self._deepen(pid, applied)
         if d["action"] == "generate_and_run" and d["n_new"] > 0:
             self._generate_and_approve(pid, d["n_new"], d["focus"], applied)
         started, blocks = self._start(pid)
-        applied["started"], applied["blocks"] = started, blocks
+        # += y no =: sobrescribir borraba los motivos que ya había anotado
+        # _deepen ("sin papers indexados"…), y esos motivos son justo lo que
+        # explica por qué una ronda no produjo nada.
+        applied["started"] = started
+        applied["blocks"] = list(applied.get("blocks") or []) + list(blocks)
         # Self-correct: if the chosen action found NOTHING runnable (no approved
         # hypotheses, or every mission already finished), EXPAND THE FRONTIER with
         # new hypotheses instead of spinning dry. Methodology says: nothing to run
