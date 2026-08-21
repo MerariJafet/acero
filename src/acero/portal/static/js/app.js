@@ -354,7 +354,34 @@ async function doLogout() {
   showLogin();
 }
 
+// 🛈 Ayuda contextual: un solo popover compartido para TODA la app. Cualquier vista
+// puede usar helpIcon(texto) de components.js -- no hace falta wiring por vista.
+function wireHelpPopovers() {
+  const pop = document.createElement("div");
+  pop.id = "help-pop"; pop.className = "help-pop"; pop.hidden = true; pop.setAttribute("role", "tooltip");
+  document.body.appendChild(pop);
+  let openBtn = null;
+  const close = () => { pop.hidden = true; openBtn = null; };
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".help-ic");
+    if (btn) {
+      if (btn === openBtn) { close(); return; }
+      pop.textContent = btn.dataset.help || "";
+      pop.hidden = false;
+      openBtn = btn;
+      const r = btn.getBoundingClientRect();
+      const left = Math.min(r.left, window.innerWidth - 300 - 12);
+      pop.style.left = Math.max(8, left) + "px";
+      pop.style.top = (r.bottom + window.scrollY + 6) + "px";
+      return;
+    }
+    if (!pop.hidden && !pop.contains(e.target)) close();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+}
+
 async function boot() {
+  wireHelpPopovers();
   $("#login-form").addEventListener("submit", doLogin);
   $("#logout").addEventListener("click", doLogout);
   $("#home-btn").addEventListener("click", () => cb.openModeSelect());
@@ -413,6 +440,9 @@ async function boot() {
     // legacy hook used by old views ("← Proyectos")
     if (e.detail === "Projects") cb.openHome();
   });
+  // "Sistema ▾ → Projects" (vista de tarjetas) abre el MISMO dashboard unificado
+  // que el selector del topbar -- ya no existe una segunda interfaz de proyecto.
+  window.addEventListener("acero:open-project", (e) => cb.openOperations(e.detail));
   // resume session if the cookie is still valid
   const { ok, body } = await get("/portal/api/session");
   if (ok && body.csrf) { setCsrf(body.csrf); await enterApp(); }

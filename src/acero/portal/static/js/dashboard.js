@@ -1,6 +1,6 @@
 "use strict";
 import { del, get, post } from "./api.js";
-import { esc, kv, pill } from "./components.js";
+import { esc, helpIcon, kv, pill, relTime, table } from "./components.js";
 import { BOHR_FACE, face as councilFace } from "./council.js";
 
 // CIO-style dashboards: home (all investigations), project-by-phases, phase detail,
@@ -314,6 +314,42 @@ async function wirePublicationPanel(view, pid) {
   });
 }
 
+// 🧠 Conocimiento (World Model) y 📜 Historial: viven colapsados por defecto -- se
+// cargan la primera vez que el usuario los abre, no en cada render del dashboard.
+function wireLazyDetails(view, detailsId, loader) {
+  const el = view.querySelector(`#${detailsId}`);
+  if (!el) return;
+  let loaded = false;
+  el.addEventListener("toggle", () => {
+    if (el.open && !loaded) { loaded = true; loader(); }
+  });
+}
+
+function wireWorldPanel(view, pid) {
+  wireLazyDetails(view, "world-panel", async () => {
+    const body = view.querySelector("#world-body");
+    const { ok, body: d } = await get(`/portal/api/world/${encodeURIComponent(pid)}/nodes?limit=50`);
+    if (!ok) { body.innerHTML = "<p class='tag'>no se pudo cargar el conocimiento</p>"; return; }
+    const rows = (d.items || []).map((n) => [n.label, n.type, n.confidence]);
+    body.innerHTML = rows.length
+      ? table(`${d.total} nodos de conocimiento`, ["Claim / concepto", "Tipo", "Confianza"], rows)
+      : "<p class='tag'>Aún no hay nodos -- lanza una misión o un análisis secundario.</p>";
+  });
+}
+
+function wireHistoryPanel(view, pid) {
+  wireLazyDetails(view, "history-panel", async () => {
+    const body = view.querySelector("#history-body");
+    const { ok, body: p } = await get(`/portal/api/projects/${encodeURIComponent(pid)}`);
+    if (!ok) { body.innerHTML = "<p class='tag'>no se pudo cargar el historial</p>"; return; }
+    const rows = (p.history || []).slice().reverse();
+    body.innerHTML = rows.length
+      ? rows.map((h) => `<div class="kv"><span>${esc(relTime(h.at))} · ${esc(h.actor)}</span>
+          <b>${esc(h.action)}${h.summary ? " — " + esc(h.summary) : ""}</b></div>`).join("")
+      : "<p class='tag'>sin eventos todavía</p>";
+  });
+}
+
 // ⚡ Proactivity panel: mass sweep (generate→filter), novelty check (anti-Erdősgate),
 // and symbolic formal verification — the three capabilities wired to real endpoints.
 function wireProactivityPanel(view, pid) {
@@ -390,13 +426,56 @@ function wireProactivityPanel(view, pid) {
 
 export async function renderProjectDash(view, pid, cb) {
   view.innerHTML = "<p class='loading'>Cargando investigación…</p>";
-  const [{ ok, body: ph }, { body: st }] = await Promise.all([
+  const [{ ok, body: ph }, { body: st }, { body: loopSnap }] = await Promise.all([
     get(`/portal/api/projects/${encodeURIComponent(pid)}/phases`),
-    get(`/portal/api/projects/${encodeURIComponent(pid)}/status`)]);
+    get(`/portal/api/projects/${encodeURIComponent(pid)}/status`),
+    get(`/portal/api/projects/${encodeURIComponent(pid)}/loop`)]);
   if (!ok) { view.innerHTML = "<p class='err'>No se pudo cargar la investigación.</p>"; return; }
   const k = ph.kpis || {};
   const today = (ph.created_at || "").slice(0, 10);
   const phases = ph.phases || [];
+
+  // --- "Cómo va" -- resumen SIEMPRE visible, nunca hay que scrollear una lista
+  // de tarjetas para saber cuántas rondas lleva el Centinela y qué encontró.
+  const scorecard = (() => {
+    const lst = loopSnap || {};
+    const lst_state = lst.state || {};
+    const fb = lst.feedback || [];
+    let gen = 0, appr = 0, started = 0, lastReal = null;
+    for (const r of fb) {
+      const a = r.applied || {};
+      gen += a.generated || 0; appr += a.approved || 0; started += a.started || 0;
+      if (!r.modo_loop_synthesis) lastReal = r;
+    }
+    const running = !lst_state.paused && lst_state.status === "running";
+    const dec = (lastReal || {}).decision || {};
+    const lastSynth = fb.find((r) => r.modo_loop_synthesis);
+    const statusPill = running
+      ? pill(lst_state.deadline ? "Modo Loop activo" : "Centinela activo", "ok")
+      : pill("apagado", "");
+    return `<section class="scorecard-live" aria-label="Cómo va el proceso">
+      <div class="sc-head"><b>📈 Cómo va</b>${helpIcon(
+        "Resumen SIEMPRE visible de lo que ha hecho el Centinela (Investigador " +
+        "Principal) en este proyecto: cuántas rondas lleva, cuánto generó/aprobó/" +
+        "lanzó en total, y su última decisión. El detalle completo, tick por tick, " +
+        "vive abajo en 👁 Centinela.")}</div>
+      <div class="sc-row">
+        <div class="sc-stat"><b>${esc(lst_state.ticks || 0)}</b><span>rondas</span></div>
+        <div class="sc-stat"><b>${esc(gen)}</b><span>hipótesis generadas</span></div>
+        <div class="sc-stat"><b>${esc(appr)}</b><span>aprobadas</span></div>
+        <div class="sc-stat"><b>${esc(started)}</b><span>misiones lanzadas</span></div>
+      </div>
+      <div class="sc-last">${statusPill}
+        ${lastReal
+          ? `última decisión: <b>${esc(dec.action || "?")}</b>${
+              dec.focus ? ` — ${esc(String(dec.focus).slice(0, 90))}` : ""} ${esc(relTime(lastReal.ts))}`
+          : "sin rondas todavía"}
+        ${lastSynth ? ` · última síntesis: ${pill(
+            lastSynth.modo_loop_synthesis.decision === "relaunch" ? "relanzado" : "revisión humana",
+            lastSynth.modo_loop_synthesis.decision === "relaunch" ? "ok" : "warn")}` : ""}
+      </div>
+    </section>`;
+  })();
 
   // --- process stepper: WHERE ARE WE + how phases feed each other -----------
   let currentIdx = phases.findIndex((f) => f.state !== "done");
@@ -494,20 +573,18 @@ export async function renderProjectDash(view, pid, cb) {
        </button>
      </div>
 
-     <section class="engines-guide" aria-label="Tres formas de avanzar">
-       <div class="eg-item"><b>🎩 Consejo / Bohr</b>
-         <p>Ataca la conjetura en sí: probar → reformular → lema. Arranca solo con el
-           enunciado. Úsalo cuando quieres que el sistema le entre al problema
-           matemático directamente.</p></div>
-       <div class="eg-item"><b>🚀 Análisis secundario</b>
-         <p>Confronta las hipótesis <b>ya aprobadas</b> con literatura y datos reales —
-           una pasada, una vez. Úsalo cuando ya tienes hipótesis y quieres
-           contrastarlas contra el mundo real.</p></div>
-       <div class="eg-item"><b>👁 Centinela</b>
-         <p>Las deja corriendo solas: genera, aprueba, corre, y decide — sin límite o
-           por horas (Modo Loop), y al terminar sintetiza y relanza. Úsalo cuando
-           quieres soltarlo y no volver a tocar nada.</p></div>
-     </section>
+     ${scorecard}
+
+     <p class="tag" style="margin:-.4rem 0 1rem">🎩 Consejo, 🚀 Análisis secundario y
+       👁 Centinela son tres formas distintas de avanzar — se complementan, no compiten.
+       ${helpIcon(
+         "🎩 Consejo/Bohr: ataca la conjetura en sí (probar → reformular → lema). " +
+         "Arranca solo con el enunciado.\n\n" +
+         "🚀 Análisis secundario: confronta las hipótesis YA APROBADAS con " +
+         "literatura y datos reales — una pasada, una vez.\n\n" +
+         "👁 Centinela: las deja corriendo solas — genera, aprueba, corre y decide, " +
+         "sin límite o por horas (Modo Loop), y al terminar sintetiza y relanza. " +
+         "Úsalo cuando quieres soltarlo y no volver a tocar nada.")}</p>
 
      <section class="launch-bar" aria-label="Qué se investiga">
        <div class="launch-head"><b>🔬 Qué se está investigando</b>
@@ -556,15 +633,20 @@ export async function renderProjectDash(view, pid, cb) {
        <div id="epistemic-out" aria-live="polite"></div>
      </section>
 
-     <section class="launch-bar" id="pi-loop" aria-label="Centinela">
-       <div class="launch-head"><b>👁 Centinela (Investigador Principal)</b>
-         <span class="launch-status" id="pi-loop-status" aria-live="polite"></span></div>
-       <div id="pi-loop-body"><p class="tag">cargando…</p></div>
-     </section>
+     <details class="launch-bar collapsible" id="pi-loop" aria-label="Centinela" open>
+       <summary class="launch-head"><b>👁 Centinela (Investigador Principal)</b>
+         <span class="launch-status" id="pi-loop-status" aria-live="polite"></span></summary>
+       <div class="collapsible-body" id="pi-loop-body"><p class="tag">cargando…</p></div>
+     </details>
 
-     <section class="launch-bar" id="proact-panel" aria-label="Proactividad">
-       <div class="launch-head"><b>⚡ Proactividad — barrido · novedad · formal</b></div>
-       <div class="proact-grid">
+     <details class="launch-bar collapsible" id="proact-panel" aria-label="Proactividad">
+       <summary class="launch-head"><b>⚡ Proactividad — barrido · novedad · formal</b>${helpIcon(
+         "Herramientas sueltas para casos puntuales, sin pasar por una hipótesis: " +
+         "generar y filtrar varias ideas de golpe (barrido), chequear si una " +
+         "afirmación ya está publicada (novedad), verificar una identidad " +
+         "matemática (formal), o explorar un objetivo con varios enfoques a la " +
+         "vez (explorador).")}</summary>
+       <div class="collapsible-body proact-grid">
          <div class="canvas-card">
            <h4>🌊 Barrido masivo</h4>
            <p class="tag">Genera N hipótesis y las filtra en paralelo (novedad + EVA).</p>
@@ -609,7 +691,7 @@ export async function renderProjectDash(view, pid, cb) {
            <div id="ex-out" class="tag" aria-live="polite"></div>
          </div>
        </div>
-     </section>
+     </details>
 
      <div class="kpi-strip">
        <div class="kpi">${ring(ph.progress_pct, "#4aa3ff")}
@@ -634,11 +716,27 @@ export async function renderProjectDash(view, pid, cb) {
 
      ${phaseRows}
 
-     <section class="launch-bar" id="pub-panel" aria-label="Publicación">
-       <div class="launch-head"><b>📤 ¿Qué me falta para publicar? — el paso FINAL</b>
-         <span class="launch-status" id="pub-status" aria-live="polite"></span></div>
-       <div id="pub-body"><p class="tag">cargando…</p></div>
-     </section>
+     <details class="launch-bar collapsible" id="pub-panel" aria-label="Publicación">
+       <summary class="launch-head"><b>📤 ¿Qué me falta para publicar? — el paso FINAL</b>
+         <span class="launch-status" id="pub-status" aria-live="polite"></span></summary>
+       <div class="collapsible-body" id="pub-body"><p class="tag">cargando…</p></div>
+     </details>
+
+     <details class="launch-bar collapsible" id="world-panel" aria-label="Conocimiento">
+       <summary class="launch-head"><b>🧠 Conocimiento (World Model)</b>${helpIcon(
+         "Cada afirmación que sobrevive a un experimento se guarda como un nodo de " +
+         "conocimiento, con su tipo y qué tan segura es. Es la memoria estructurada " +
+         "del proyecto -- distinta del historial de eventos.")}</summary>
+       <div class="collapsible-body" id="world-body"><p class="tag">cargando…</p></div>
+     </details>
+
+     <details class="launch-bar collapsible" id="history-panel" aria-label="Historial">
+       <summary class="launch-head"><b>📜 Historial</b>${helpIcon(
+         "El registro de todo lo que pasó en este proyecto, en orden: quién hizo " +
+         "qué y cuándo -- decisiones, misiones, síntesis. Útil para reconstruir " +
+         "'¿por qué llegamos a esto?'")}</summary>
+       <div class="collapsible-body" id="history-body"><p class="tag">cargando…</p></div>
+     </details>
 
      <p class="tag">${esc(ph.honesty)}</p>`;
 
@@ -677,12 +775,15 @@ export async function renderProjectDash(view, pid, cb) {
   view.querySelectorAll(".launch-btn").forEach((b) =>
     b.addEventListener("click", () => runFlow(b, b.dataset.ep, statusEl)));
 
-  // --- 🔁 Loop autónomo (Investigador Principal) ---------------------------
+  // --- 👁 Centinela (Investigador Principal) --------------------------------
   wireLoopPanel(view, pid);
   // --- 📤 Publicación: bloqueadores + paquete verificable ------------------
   wirePublicationPanel(view, pid);
   // --- ⚡ Proactividad: barrido · novedad · formal -------------------------
   wireProactivityPanel(view, pid);
+  // --- 🧠 Conocimiento + 📜 Historial: se cargan al abrirlos ---------------
+  wireWorldPanel(view, pid);
+  wireHistoryPanel(view, pid);
 
   // 🧭 EVA + Question Engine: hypotheses → fertile questions + discriminating test
   const evaBtn = view.querySelector("#epistemic-run");

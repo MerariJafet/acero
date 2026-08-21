@@ -2,7 +2,6 @@
 import { get, post } from "./api.js";
 import { esc, kv, panel, pill, table, resultCard } from "./components.js";
 import { workspaceView } from "./workspace.js";
-import { renderProjectWorkspace } from "./project.js";
 
 // Each view: { render: async () => htmlString, mount?: (rootEl) => void }.
 // No inline event handlers (CSP forbids them); mount() wires listeners.
@@ -201,7 +200,10 @@ export const VIEWS = {
         `aprendizaje, historial) vive DENTRO del proyecto`, `<div class="proj-grid">${cards}</div>`);
     },
     mount: (root) => {
-      const open = (pid) => renderProjectWorkspace(document.querySelector("#view"), pid);
+      // 2026-08-21: project.js (pestañas viejas) se retira -- un solo dashboard
+      // controla todo. Abrir aquí lleva al mismo lugar que el selector del topbar.
+      const open = (pid) =>
+        window.dispatchEvent(new CustomEvent("acero:open-project", { detail: pid }));
       root.querySelectorAll(".proj-card").forEach((c) => {
         c.addEventListener("click", () => open(c.dataset.pid));
         c.addEventListener("keydown", (e) => {

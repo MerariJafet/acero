@@ -455,7 +455,6 @@ caption { text-align: left; color: var(--muted); padding-bottom: .4rem; }
   .chat-panel { width: 100%; max-height: 45vh; border-right: 0; border-bottom: 1px solid var(--border); }
   .proj-grid, .phase-grid { grid-template-columns: 1fr; }
   .tenant-picker select { max-width: 180px; }
-  .engines-guide { grid-template-columns: 1fr; }
 }
 .pill.vtag { font-weight: 600; letter-spacing: .02em; border: 1px solid transparent; }
 .pill.vtag.warn { border-color: #7a5a12; }
@@ -602,18 +601,6 @@ button.hyp-step:hover { border-color: var(--accent); color: var(--fg); }
 .launch-adv > summary:hover { color: var(--accent); }
 .launch-adv[open] > summary { color: var(--fg); }
 .launch-adv .launch-grid { margin-top: .5rem; }
-
-/* ---- tres formas de avanzar: guía siempre visible ------------------------ */
-.engines-guide {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem;
-  margin-bottom: 1rem;
-}
-.eg-item {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-  padding: .6rem .75rem;
-}
-.eg-item b { display: block; margin-bottom: .3rem; font-size: .86rem; }
-.eg-item p { margin: 0; font-size: .76rem; color: var(--muted); line-height: 1.35; }
 
 /* ---- Centinela: interruptor único + indicador en vivo -------------------- */
 .centinela-live { display: flex; align-items: center; gap: .45rem; margin: .35rem 0; min-height: 1.1rem; }
@@ -788,3 +775,48 @@ button.hyp-step:hover { border-color: var(--accent); color: var(--fg); }
 .proact-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .7rem; }
 .proact-grid .canvas-card h4 { margin-top: 0; }
 @media (max-width: 1000px) { .proact-grid { grid-template-columns: 1fr; } }
+
+/* ---- ayuda contextual: (?) + popover compartido -------------------------- */
+.help-ic {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.15rem; height: 1.15rem; border-radius: 50%; border: 1px solid var(--border);
+  background: transparent; color: var(--muted); font-size: .68rem; font-weight: 700;
+  cursor: pointer; line-height: 1; padding: 0; flex: 0 0 auto; margin-left: .3rem;
+}
+.help-ic:hover, .help-ic:focus-visible { border-color: var(--accent); color: var(--accent); }
+.help-pop {
+  position: absolute; z-index: 60; max-width: 300px; background: #0c1420;
+  border: 1px solid var(--accent); border-radius: 8px; padding: .6rem .75rem;
+  font-size: .8rem; line-height: 1.4; color: var(--fg); box-shadow: 0 10px 28px rgba(0,0,0,.45);
+  white-space: pre-line;
+}
+
+/* ---- panel de progreso en vivo: "cómo va" -------------------------------- */
+.scorecard-live {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: .7rem .85rem; margin-bottom: 1rem;
+}
+.sc-head { display: flex; align-items: center; gap: .4rem; margin-bottom: .5rem; }
+.sc-head b { font-size: .92rem; }
+.sc-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; margin-bottom: .5rem; }
+.sc-stat { background: #10151d; border: 1px solid var(--border); border-radius: 9px;
+  padding: .45rem .5rem; text-align: center; }
+.sc-stat b { display: block; font-size: 1.25rem; line-height: 1.1; color: var(--fg); }
+.sc-stat span { display: block; font-size: .64rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em; margin-top: .15rem; }
+.sc-last { font-size: .82rem; color: var(--muted); display: flex; align-items: center;
+  gap: .4rem; flex-wrap: wrap; }
+.sc-last b { color: var(--fg); }
+@media (max-width: 680px) { .sc-row { grid-template-columns: repeat(2, 1fr); } }
+
+/* ---- secciones plegables genéricas (Historial, Conocimiento, avanzado) --- */
+.collapsible { margin: 0 0 1rem; }
+.collapsible > summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: .5rem;
+  font-weight: 600; font-size: .92rem; padding: .1rem 0; user-select: none;
+}
+.collapsible > summary::-webkit-details-marker { display: none; }
+.collapsible > summary::before { content: "▸"; color: var(--muted); transition: transform .12s; }
+.collapsible[open] > summary::before { transform: rotate(90deg); }
+.collapsible > summary:hover { color: var(--accent); }
+.collapsible-body { margin-top: .6rem; }
