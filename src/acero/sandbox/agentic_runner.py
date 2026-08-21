@@ -46,11 +46,61 @@ def _creds_present() -> bool:
     return (home / ".claude" / ".credentials.json").exists() and (home / ".claude.json").exists()
 
 
+def _creds_fingerprint() -> str:
+    """Huella de las credenciales EN DISCO (mtime+tamaño). Cambia cuando el humano
+    vuelve a loguearse — es la señal de que vale la pena reintentar."""
+    home = _host_home()
+    parts = []
+    for f in (home / ".claude" / ".credentials.json", home / ".claude.json"):
+        try:
+            st = f.stat()
+            parts.append(f"{int(st.st_mtime)}:{st.st_size}")
+        except Exception:  # noqa: BLE001
+            parts.append("-")
+    return "|".join(parts)
+
+
+def _breaker_file() -> Path:
+    env = os.environ.get("ACERO_AGENT_BREAKER", "").strip()
+    if env:
+        return Path(env)
+    return _host_home() / ".acero_agent_breaker.json"
+
+
+def mark_agent_unauthenticated(error: str = "") -> None:
+    """Abre el cortacircuitos: el agente EXISTE pero su sesión ya no sirve.
+
+    Que los archivos de credenciales existan NO significa que el token valga —
+    un OAuth expirado los deja en su sitio. 2026-08-21: por eso ACERO reintentó
+    173 veces seguidas y quemó ~10 h planeando lo que nadie podía ejecutar. Al
+    abrirse se guarda la huella de las credenciales de ESE momento; en cuanto el
+    humano se re-loguea la huella cambia y el cortacircuitos se cierra SOLO."""
+    try:
+        _breaker_file().write_text(json.dumps({
+            "at": time.time(), "fingerprint": _creds_fingerprint(),
+            "error": str(error)[:300]}), encoding="utf-8")
+    except Exception:  # noqa: BLE001 - el breaker jamás rompe una corrida
+        pass
+
+
+def agent_breaker_open() -> bool:
+    """True si el agente quedó marcado como no-autenticado y las credenciales
+    siguen SIN cambiar desde entonces (nadie ha vuelto a loguearse)."""
+    try:
+        d = json.loads(_breaker_file().read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return False
+    return bool(d.get("fingerprint")) and d["fingerprint"] == _creds_fingerprint()
+
+
 def agent_available(image: str = DEFAULT_AGENT_IMAGE) -> bool:
-    """True only if docker, the agent image, and host Claude credentials all exist.
+    """True only if docker, the agent image, and host Claude credentials all exist
+    AND the session is not known-dead (cortacircuitos cerrado).
 
     Callers fall back to the pure-completion codegen path when this is False."""
     if not shutil.which("docker"):
+        return False
+    if agent_breaker_open():
         return False
     try:
         if subprocess.run(["docker", "info"], capture_output=True, timeout=10).returncode != 0:

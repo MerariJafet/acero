@@ -608,9 +608,15 @@ class HypothesisFlow:
             # en vez de dejar que el programa queme horas planeando en vacío.
             from .experiment_factory import is_infra_failure
             err = str(fr.get("error", ""))
+            infra = is_infra_failure(err)
+            if infra:
+                # abre el cortacircuitos: deja de intentar con un agente cuya
+                # sesión ya sabemos muerta. Se cierra SOLO cuando el humano se
+                # re-loguea (cambia la huella de las credenciales).
+                from ..sandbox.agentic_runner import mark_agent_unauthenticated
+                mark_agent_unauthenticated(err)
             self.store.update_payload(e["id"], {"factory_error": {
-                "stage": fr.get("stage", ""), "error": err,
-                "infra": is_infra_failure(err),
+                "stage": fr.get("stage", ""), "error": err, "infra": infra,
                 "attempts": fr.get("attempts", 0), "at": now_iso()}})
             return None
         res = fr["result"]
