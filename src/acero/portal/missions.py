@@ -457,6 +457,36 @@ class MissionEngine:
         raise RuntimeError(f"paso desconocido: {name}")
 
 
+def watchdog_loop_on_startup(interval_sec: float = 120.0) -> Any:
+    """Barrido PERIÓDICO del watchdog, independiente de las lecturas del panel.
+
+    2026-08-21: _maybe_watchdog() solo se dispara desde list_missions(), o sea
+    cuando un HUMANO abre el dashboard. Con el panel cerrado unas horas
+    aparecieron 4 misiones zombis (999 s sin latido) que nadie recuperaba: un
+    auto-sanador que solo cura cuando lo miran no es un auto-sanador. El hilo es
+    daemon a propósito — nunca debe impedir que el proceso termine.
+
+    Devuelve el hilo (o None si está desactivado) para poder verificarlo."""
+    if os.environ.get("ACERO_MISSIONS_DISABLED") == "1":
+        return None
+
+    def _loop() -> None:
+        import time as _t
+        while True:
+            _t.sleep(max(30.0, interval_sec))
+            try:
+                r = MissionEngine().watchdog()
+                if r.get("resumed") or r.get("reaped"):
+                    print(f"[missions.watchdog:periódico] "
+                          f"retomadas={len(r['resumed'])} "
+                          f"dadas-por-muertas={len(r['reaped'])}")
+            except Exception as exc:  # noqa: BLE001 - el barrido nunca muere callado
+                print(f"[missions.watchdog:periódico] ERROR: {exc!r}")
+    th = threading.Thread(target=_loop, name="mission-watchdog", daemon=True)
+    th.start()
+    return th
+
+
 def resume_on_startup(delay_sec: float = 3.0) -> None:
     """Portal boot hook: resume interrupted missions in the background."""
     if os.environ.get("ACERO_MISSIONS_DISABLED") == "1":

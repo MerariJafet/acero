@@ -1663,8 +1663,12 @@ def mount_portal(app: FastAPI) -> None:
         app.mount("/portal/static", StaticFiles(directory=str(_STATIC)), name="portal-static")
 
     # missions interrupted by a restart resume themselves (checkpointed steps)
-    from .missions import resume_on_startup
+    from .missions import resume_on_startup, watchdog_loop_on_startup
     resume_on_startup()
+    # …y el watchdog barre SOLO cada 2 min: antes únicamente se disparaba al
+    # leer el panel, así que con el dashboard cerrado las misiones zombis se
+    # quedaban ahí (visto el 2026-08-21: 4 con 999 s sin latido).
+    watchdog_loop_on_startup()
     # daily literature watchdog (push: new papers find YOU)
     from .watchdog import watchdog_on_startup
     watchdog_on_startup()

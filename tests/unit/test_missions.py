@@ -180,3 +180,32 @@ def test_watchdog_submit_false_diagnostica_sin_ejecutar(session_factory, monkeyp
     out = eng.watchdog(submit=False)
     assert r["mission_id"] in out["resumed"]       # la DETECTA
     assert submitted == []                         # pero NO la ejecuta
+
+
+def test_watchdog_periodico_arranca_como_daemon_y_barre_solo(monkeypatch):
+    """El auto-sanador no puede depender de que un humano abra el dashboard:
+    _maybe_watchdog() solo se dispara desde list_missions(). Con el panel
+    cerrado unas horas aparecieron 4 zombis que nadie recuperaba (2026-08-21)."""
+    import threading as _th
+    from acero.portal import missions as ms
+    barridos = {"n": 0}
+
+    class _Eng:
+        def watchdog(self, **kw):
+            barridos["n"] += 1
+            raise SystemExit                      # corta el bucle tras 1 barrido
+
+    # conftest apaga las misiones en toda la suite; aquí probamos justo el arranque
+    monkeypatch.delenv("ACERO_MISSIONS_DISABLED", raising=False)
+    monkeypatch.setattr(ms, "MissionEngine", lambda *a, **k: _Eng())
+    hilo = ms.watchdog_loop_on_startup(interval_sec=0.01)
+    assert hilo is not None
+    assert hilo.daemon        # NUNCA debe impedir que el proceso termine
+    assert hilo.name == "mission-watchdog"
+
+
+def test_watchdog_periodico_respeta_el_interruptor_de_misiones(monkeypatch):
+    import threading as _th
+    from acero.portal import missions as ms
+    monkeypatch.setenv("ACERO_MISSIONS_DISABLED", "1")
+    assert ms.watchdog_loop_on_startup(interval_sec=0.01) is None
