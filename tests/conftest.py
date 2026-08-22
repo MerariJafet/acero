@@ -33,6 +33,10 @@ def _isolated_side_effects(tmp_path, monkeypatch):
     # humano está caída, la suite empezaba a fallar sola (visto el 2026-08-21).
     # Un test jamás debe depender de si alguien está logueado.
     monkeypatch.setenv("ACERO_AGENT_BREAKER", str(tmp_path / "_agent_breaker.json"))
+    # mismo principio para el token del CLI: la guardia anti-carrera de refresco
+    # lee ~/.claude/.credentials.json; la suite no debe ni mirar ese archivo ni
+    # depender de cuánta vida le quede al token real del humano.
+    monkeypatch.setenv("ACERO_CLAUDE_CREDS", str(tmp_path / "_claude_creds.json"))
     # get_config() is lru_cached — force it to re-read the temp DB_URL each test
     from acero.core.config import get_config
     get_config.cache_clear()

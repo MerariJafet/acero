@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import logging
@@ -10,6 +11,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -333,6 +335,30 @@ def _is_auth_error(msg: str) -> bool:
             or "failed to authenticate" in low or "unauthorized" in low)
 
 
+def _claude_creds_path() -> Path:
+    """Dónde vive el token del CLI. Sobreescribible en tests (y jamás debe
+    apuntar a las credenciales reales desde la suite)."""
+    return Path(os.environ.get("ACERO_CLAUDE_CREDS")
+                or Path.home() / ".claude" / ".credentials.json")
+
+
+def _token_restante_seg() -> float | None:
+    """Segundos de vida que le quedan al token del CLI; None si no se sabe."""
+    try:
+        oauth = (json.loads(_claude_creds_path().read_text(encoding="utf-8"))
+                 .get("claudeAiOauth") or {})
+        exp = oauth.get("expiresAt")
+        if isinstance(exp, (int, float)) and not isinstance(exp, bool) and exp > 0:
+            return exp / 1000.0 - time.time()
+    except Exception:  # noqa: BLE001 - sin lectura no hay guardia, pero tampoco crash
+        pass
+    return None
+
+
+def _refresh_margin_sec() -> float:
+    return float(os.environ.get("ACERO_CLI_REFRESH_MARGIN_SEC", "900"))
+
+
 def _claude_session_dead() -> bool:
     """El cortacircuitos compartido con el agente enjaulado: si la sesión del
     CLI ya se marcó muerta y NADIE se ha vuelto a loguear desde entonces, ni
@@ -407,13 +433,36 @@ class ClaudeCliProvider:
         if not self.available():
             raise ClaudeError(f"claude CLI '{self.command}' not found on PATH.")
         cmd = self._build_cmd(prompt)
-        if self._runner is not None:
-            stdout, stderr, rc = self._runner(cmd, self._child_env())
-        else:
+
+        def _invocar() -> tuple[str, str, int]:
+            if self._runner is not None:
+                return self._runner(cmd, self._child_env())
             proc = subprocess.run(cmd, capture_output=True, text=True,
                                   timeout=self.timeout_sec, stdin=subprocess.DEVNULL,
                                   env=self._child_env())
-            stdout, stderr, rc = proc.stdout, proc.stderr, proc.returncode
+            return proc.stdout, proc.stderr, proc.returncode
+
+        # LA CAUSA RAÍZ de la caída del 2026-08-21: el pool corre hasta 4
+        # `claude -p` a la vez compartiendo UN archivo de credenciales. El
+        # refresh token de OAuth es de UN SOLO USO: al expirar el access token,
+        # varios procesos refrescaron en paralelo, el servidor detectó el reuso
+        # y revocó la familia entera de tokens ("OAuth access token has been
+        # revoked") → 36 h de parada y 578 experimentos muertos. La guardia:
+        # cerca del vencimiento, las llamadas se SERIALIZAN con un flock para
+        # que exactamente un proceso haga el refresco; con el token fresco no
+        # hay candado y la concurrencia es la de siempre.
+        restante = _token_restante_seg()
+        if restante is not None and restante < _refresh_margin_sec():
+            candado = _claude_creds_path().parent / ".acero_refresh.lock"
+            candado.parent.mkdir(parents=True, exist_ok=True)
+            with open(candado, "w", encoding="utf-8") as fh:
+                fcntl.flock(fh, fcntl.LOCK_EX)
+                try:
+                    stdout, stderr, rc = _invocar()
+                finally:
+                    fcntl.flock(fh, fcntl.LOCK_UN)
+        else:
+            stdout, stderr, rc = _invocar()
         text, usage, err = self._parse(stdout or "")
         if err:
             auth = _is_auth_error(err)

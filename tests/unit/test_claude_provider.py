@@ -152,3 +152,69 @@ def test_un_error_normal_NO_abre_el_cortacircuitos(tmp_path, monkeypatch):
     with pytest.raises(ClaudeError):
         p.complete("hola")
     assert ar.agent_breaker_open() is False
+
+
+# --- guardia anti-carrera de refresco (causa raíz de la caída del 21/08) ------
+# El pool corre varios `claude -p` a la vez compartiendo UN archivo de
+# credenciales. El refresh token es de UN SOLO USO: refrescar en paralelo hace
+# que el servidor detecte reuso y revoque la familia entera. La guardia
+# serializa las llamadas SOLO cuando el token está por vencer.
+
+import os
+import threading
+import time as _time
+
+from pathlib import Path
+
+
+def _escribir_creds(expira_en_seg):
+    p = Path(os.environ["ACERO_CLAUDE_CREDS"])
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"claudeAiOauth": {
+        "expiresAt": int((_time.time() + expira_en_seg) * 1000)}}))
+    return p
+
+
+def _runner_lento(marcas, dur=0.15):
+    """Runner que registra ventanas [inicio, fin] para detectar solape."""
+    def run(cmd, env):
+        t0 = _time.monotonic()
+        _time.sleep(dur)
+        marcas.append((t0, _time.monotonic()))
+        return json.dumps({"type": "result", "result": "ok", "usage": {}}), "", 0
+    return run
+
+
+def test_con_token_por_vencer_las_llamadas_se_serializan():
+    _escribir_creds(expira_en_seg=60)          # < margen de 900 s → guardia activa
+    marcas = []
+    p = ClaudeCliProvider(runner=_runner_lento(marcas))
+    hilos = [threading.Thread(target=p.complete, args=("x",)) for _ in range(3)]
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join()
+    marcas.sort()
+    for (_, fin_a), (ini_b, _) in zip(marcas, marcas[1:]):
+        assert ini_b >= fin_a, "dos llamadas al CLI se solaparon con el token por vencer"
+
+
+def test_con_token_fresco_no_se_serializa_nada():
+    _escribir_creds(expira_en_seg=7200)        # 2 h de vida → sin candado
+    marcas = []
+    p = ClaudeCliProvider(runner=_runner_lento(marcas))
+    hilos = [threading.Thread(target=p.complete, args=("x",)) for _ in range(3)]
+    t0 = _time.monotonic()
+    for h in hilos:
+        h.start()
+    for h in hilos:
+        h.join()
+    total = _time.monotonic() - t0
+    # 3 llamadas de 0.15 s en paralelo deben tardar MUCHO menos que 3×0.15 s
+    assert total < 0.40, f"las llamadas se serializaron con el token fresco ({total:.2f}s)"
+
+
+def test_sin_archivo_de_credenciales_no_hay_candado_ni_crash():
+    Path(os.environ["ACERO_CLAUDE_CREDS"]).unlink(missing_ok=True)
+    p = ClaudeCliProvider(runner=_runner_ok("ok"))
+    assert p.complete("x").text == "ok"
