@@ -85,6 +85,102 @@ def _primer_arranque(mission: dict[str, Any]) -> str | None:
     return min(marcas) if marcas else None
 
 
+def diagnostico_credenciales(
+    *,
+    cred_path: Path | None = None,
+    which: Any = None,
+) -> tuple[str, dict[str, Any]]:
+    """QUÉ sesión concreta está rota, no solo "reautentica".
+
+    Una máquina puede tener varios clientes de Claude con credenciales
+    SEPARADAS (la app de escritorio guarda su token en memoria; el CLI suelto
+    lo guarda en ~/.claude/.credentials.json). El humano ve que "Claude le
+    funciona" y no entiende por qué ACERO dice que no hay sesión — porque son
+    sesiones distintas. El 2026-08-22 eso costó 36 h de parada y 530
+    experimentos muertos: el diagnóstico existía, pero no decía CUÁL binario
+    ni QUÉ token. Averiguarlo a mano son cuatro comandos; el programa puede
+    escupirlo solo en cada pasada.
+
+    Devuelve (texto para el humano, datos estructurados). Nunca lanza: un fallo
+    aquí no debe tumbar una pasada del Auditor.
+    """
+    import shutil
+
+    resolver = which or shutil.which
+    datos: dict[str, Any] = {}
+    partes: list[str] = []
+
+    try:
+        binario = resolver("claude")
+        if binario:
+            real = os.path.realpath(binario)
+            datos["binario"] = real
+            partes.append(f"el CLI que usa ACERO es {real}")
+        else:
+            datos["binario"] = None
+            partes.append("no hay binario `claude` en el PATH del portal")
+    except Exception:  # noqa: BLE001
+        pass
+
+    ruta = cred_path or (Path.home() / ".claude" / ".credentials.json")
+    datos["credenciales"] = str(ruta)
+    try:
+        if not ruta.exists():
+            datos["estado"] = "ausente"
+            partes.append(f"no existe {ruta}: ese CLI nunca se logueó")
+        else:
+            oauth = (json.loads(ruta.read_text(encoding="utf-8"))
+                     .get("claudeAiOauth") or {})
+            exp_ms = oauth.get("expiresAt")
+            if isinstance(exp_ms, (int, float)) and not isinstance(exp_ms, bool) \
+                    and exp_ms <= 0:
+                # El CLI pone expiresAt=0 cuando ya se dio por vencido. Renderizar
+                # ese 0 como fecha daba "VENCIÓ el 1970-01-01", que parece un bug
+                # del Auditor y hace dudar del resto del informe.
+                datos["estado"] = "sin_token"
+                datos["vencido"] = True
+                partes.append("no tiene token (el CLI ya lo invalidó)")
+            elif isinstance(exp_ms, (int, float)) and not isinstance(exp_ms, bool):
+                exp = float(exp_ms) / 1000.0
+                vencido = exp < time.time()
+                cuando = datetime.fromtimestamp(
+                    exp, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                datos["expira_en"] = cuando
+                datos["vencido"] = vencido
+                partes.append(
+                    f"su token {'VENCIÓ' if vencido else 'vence'} el {cuando}")
+            else:
+                datos["estado"] = "sin_expiracion"
+    except Exception:  # noqa: BLE001
+        datos["estado"] = "ilegible"
+        partes.append(f"{ruta} existe pero no se pudo leer")
+
+    if not partes:
+        return "", datos
+    return " · ".join(partes), datos
+
+
+def sobreviven_a_la_pausa(findings: list[Finding], *,
+                          en_pausa: bool) -> list[Finding]:
+    """Qué se sigue reportando cuando el proyecto está PAUSADO.
+
+    Una pausa silencia con razón el ESTANCAMIENTO y la DERIVA: un loop parado
+    no tiene por qué tickear ni producir veredictos, y quejarse de eso sería
+    ruido. Pero JAMÁS puede silenciar una AVERÍA.
+
+    El 2026-08-22 pausamos los dos proyectos vivos para dejar de quemar trabajo
+    muerto, y el Auditor pasó a informar "sano · sin señales" teniendo 530
+    experimentos caídos por credenciales: el fallo más ruidoso posible produjo
+    el informe más silencioso posible. La causa era tratar toda pausa como
+    benigna, cuando `paused` significa dos cosas distintas —"aparcado a
+    propósito" y "detenido por una avería"—. Pausar es una decisión OPERATIVA,
+    no una reparación: la avería sigue ahí y hay que seguir viéndola.
+    """
+    if not en_pausa:
+        return list(findings)
+    return [f for f in findings if f.severity == SEV_BUG]
+
+
 def project_signals(store: Any, pid: str, *, loop_state: dict[str, Any],
                     feedback: list[dict[str, Any]]) -> dict[str, Any]:
     """Los HECHOS de un proyecto: puro conteo sobre el ledger, cero opinión."""
@@ -204,6 +300,7 @@ def findings_for(pid: str, title: str, s: dict[str, Any], *,
     #    ni una sola pregunta. Vivido el 2026-08-21: ~10 h en vacío por una
     #    sesión de codegen expirada.
     if s.get("fabrica_infra_caida", 0) >= 3:
+        detalle, cred = diagnostico_credenciales()
         out.append(Finding(
             "INFRA_CAIDA", SEV_BUG, pid, title,
             f"{s['fabrica_infra_caida']} experimento(s) NO se ejecutaron por fallo "
@@ -213,9 +310,14 @@ def findings_for(pid: str, title: str, s: dict[str, Any], *,
             "reautenticar. Requiere a un HUMANO: reloguear el CLI (`claude login`) "
             "— las credenciales no las puede renovar el programa. Mientras tanto "
             "ACERO FRENA en vez de acumular planes muertos, y se reanuda solo en "
-            "cuanto cambien las credenciales.",
+            "cuanto cambien las credenciales."
+            + (f" CUÁL sesión: {detalle}. Ojo: si en esta máquina usas la app de "
+               "escritorio, ESA no comparte credenciales con el CLI — que te "
+               "funcione la app no significa que ACERO tenga sesión."
+               if detalle else ""),
             {"infra": s["fabrica_infra_caida"],
-             "sin_ejecutar": s.get("fabrica_no_ejecutados", 0)}))
+             "sin_ejecutar": s.get("fabrica_no_ejecutados", 0),
+             "credenciales": cred}))
 
     # 1. misiones zombis (el bug del 2026-08-21: 4 quedaron RUNNING 8 horas).
     #    OJO con el doble uso de 'RUNNING': el estado marca tanto "ejecutándose"
@@ -503,14 +605,16 @@ def supervise_once(*, sf: Any = None, provider: Any = None,
         title = str(getattr(p, "title", "") or pid)
         try:
             st = load_state(pid)
-            # solo auditamos lo VIVO: un proyecto en pausa no es un problema
-            if st.get("paused") or st.get("status") not in ("running",):
-                continue
+            en_pausa = bool(st.get("paused")) or st.get("status") not in ("running",)
             fb = recent_feedback(pid, 8)
             sig = project_signals(store, pid, loop_state=st, feedback=fb)
             fnd = findings_for(pid, title, sig, interval_min=interval_min)
+            fnd = sobreviven_a_la_pausa(fnd, en_pausa=en_pausa)
+            if en_pausa and not fnd:
+                continue
             findings.extend(fnd)
             per_project.append({"project_id": pid, "title": title,
+                                "en_pausa": en_pausa,
                                 "signals": sig,
                                 "findings": [f.code for f in fnd]})
         except Exception as exc:  # noqa: BLE001 - un proyecto roto no frena la auditoría

@@ -4,6 +4,10 @@ sin misiones reales — los hechos se inyectan."""
 
 from __future__ import annotations
 
+import json
+import time
+
+from acero.portal import supervisor as sup
 from acero.portal.supervisor import (
     SEV_BUG,
     SEV_DRIFT,
@@ -394,3 +398,86 @@ def test_una_mision_que_lleva_horas_trabajando_al_24_por_ciento_SI_esta_pegada()
 def test_una_mision_que_ni_ha_empezado_esta_encolada_no_pegada():
     s = _signals([_mision(creada_h=9.0, primer_paso_h=None, pct=0)])
     assert s["estancadas"] == []
+
+
+# --- diagnóstico de credenciales (incidente del 2026-08-22) -------------------
+# El Auditor decía "reautentica" durante 36 h sin decir CUÁL sesión. La máquina
+# tenía la app de escritorio logueada y el CLI suelto revocado: dos almacenes de
+# credenciales distintos. Averiguarlo a mano fueron cuatro comandos.
+
+def _cred_file(tmp_path, expira_ms):
+    p = tmp_path / ".credentials.json"
+    p.write_text(json.dumps({"claudeAiOauth": {"expiresAt": expira_ms}}),
+                 encoding="utf-8")
+    return p
+
+
+def test_el_diagnostico_dice_que_binario_usa_acero(tmp_path):
+    texto, datos = sup.diagnostico_credenciales(
+        cred_path=_cred_file(tmp_path, 10_000 * 1000),
+        which=lambda _: "/home/x/.local/bin/claude")
+    assert "/claude" in texto
+    assert datos["binario"].endswith("claude")
+
+
+def test_un_token_vencido_se_reporta_como_VENCIO(tmp_path):
+    hace_un_dia_ms = int((time.time() - 86_400) * 1000)
+    texto, datos = sup.diagnostico_credenciales(
+        cred_path=_cred_file(tmp_path, hace_un_dia_ms), which=lambda _: None)
+    assert datos["vencido"] is True
+    assert "VENCIÓ" in texto
+
+
+def test_un_token_vigente_no_se_reporta_como_vencido(tmp_path):
+    dentro_de_una_hora_ms = int((time.time() + 3_600) * 1000)
+    _, datos = sup.diagnostico_credenciales(
+        cred_path=_cred_file(tmp_path, dentro_de_una_hora_ms),
+        which=lambda _: None)
+    assert datos["vencido"] is False
+
+
+def test_sin_archivo_de_credenciales_dice_que_ese_CLI_nunca_se_logueo(tmp_path):
+    texto, datos = sup.diagnostico_credenciales(
+        cred_path=tmp_path / "no_existe.json", which=lambda _: None)
+    assert datos["estado"] == "ausente"
+    assert "nunca se logue" in texto
+
+
+def test_un_archivo_ilegible_no_tumba_la_pasada(tmp_path):
+    p = tmp_path / ".credentials.json"
+    p.write_text("{esto no es json", encoding="utf-8")
+    texto, datos = sup.diagnostico_credenciales(cred_path=p, which=lambda _: None)
+    assert datos["estado"] == "ilegible"
+    assert isinstance(texto, str)
+
+
+# --- una pausa NO puede tapar una avería (incidente del 2026-08-22) -----------
+
+def _f(code, sev):
+    return Finding(code, sev, "p1", "T", "hecho", "reco", {})
+
+
+def test_la_pausa_silencia_estancamiento_y_deriva():
+    fnd = [_f("TICK_LENTO", SEV_STALL), _f("BACKLOG_INFLADO", SEV_DRIFT)]
+    assert sup.sobreviven_a_la_pausa(fnd, en_pausa=True) == []
+
+
+def test_la_pausa_NO_silencia_una_averia():
+    fnd = [_f("INFRA_CAIDA", SEV_BUG), _f("TICK_LENTO", SEV_STALL)]
+    vivos = sup.sobreviven_a_la_pausa(fnd, en_pausa=True)
+    assert [f.code for f in vivos] == ["INFRA_CAIDA"]
+
+
+def test_sin_pausa_no_se_filtra_nada():
+    fnd = [_f("INFRA_CAIDA", SEV_BUG), _f("TICK_LENTO", SEV_STALL),
+           _f("BACKLOG_INFLADO", SEV_DRIFT)]
+    assert len(sup.sobreviven_a_la_pausa(fnd, en_pausa=False)) == 3
+
+
+def test_expiracion_cero_no_se_renderiza_como_1970(tmp_path):
+    """El CLI pone expiresAt=0 al invalidar el token. Mostrar "VENCIÓ el
+    1970-01-01" parece un bug del Auditor y resta credibilidad al informe."""
+    texto, datos = sup.diagnostico_credenciales(
+        cred_path=_cred_file(tmp_path, 0), which=lambda _: None)
+    assert "1970" not in texto
+    assert datos["estado"] == "sin_token" and datos["vencido"] is True
