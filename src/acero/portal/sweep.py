@@ -118,10 +118,11 @@ class SweepEngine:
             hid = r["hyp"].get("id")
             if hid:
                 try:
-                    flow.set_status(pid, hid, "APPROVED", "sweep")
-                    approved += 1
+                    res = flow.set_status(pid, hid, "APPROVED", "sweep")
                 except Exception:  # noqa: BLE001
                     continue
+                if res.get("ok"):       # el gate de duplicados devuelve ok=False
+                    approved += 1       # sin excepción — contarlo igual inflaba approved
         started = 0
         if approved:
             res = MissionEngine(self._sf).start_all(pid, use_ai=True, sync=False)

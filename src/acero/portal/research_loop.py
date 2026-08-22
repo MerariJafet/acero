@@ -490,14 +490,22 @@ class PrincipalInvestigator:
             d = dictamen_backlog(pool, n, provider=self._dictamen_prov())
             for hid in d["ranked"][:max(0, n)]:
                 try:
-                    flow.set_status(pid, hid, "APPROVED",
-                                    "Bohr: adoptada del backlog (dictamen)",
-                                    actor="bohr")
-                    applied["approved"] += 1
-                    applied["adopted"] = applied.get("adopted", 0) + 1
-                    n -= 1
+                    r = flow.set_status(pid, hid, "APPROVED",
+                                        "Bohr: adoptada del backlog (dictamen)",
+                                        actor="bohr")
                 except Exception:  # noqa: BLE001
                     continue
+                # el gate de duplicados de set_status devuelve ok=False SIN
+                # lanzar excepción — un try/except que no mira el valor de
+                # retorno contaba una duplicada bloqueada como aprobada
+                # (2026-08-22: así llegaron 197 misiones-copia a la cola).
+                if not r.get("ok"):
+                    applied.setdefault("blocks", []).append(
+                        f"adopción bloqueada: {str(r.get('error', ''))[:140]}")
+                    continue
+                applied["approved"] += 1
+                applied["adopted"] = applied.get("adopted", 0) + 1
+                n -= 1
         if n <= 0:
             return
         # Steer generation to pass the EVA gate (anti-HARKing / non-trivial) instead
@@ -508,10 +516,14 @@ class PrincipalInvestigator:
         applied["generated"] += len(created)
         for c in created:                          # autonomy: PI approves; methodology
             try:                                    # still gates evidence downstream
-                flow.set_status(pid, c["id"], "APPROVED", "PI loop")
-                applied["approved"] += 1
+                r = flow.set_status(pid, c["id"], "APPROVED", "PI loop")
             except Exception:  # noqa: BLE001
                 continue
+            if not r.get("ok"):
+                applied.setdefault("blocks", []).append(
+                    f"generación bloqueada: {str(r.get('error', ''))[:140]}")
+                continue
+            applied["approved"] += 1
 
     def _deepen(self, pid: str, applied: dict[str, Any]) -> int:
         """Literatura de nivel 2 sobre las hipótesis aprobadas: indexa las

@@ -83,7 +83,7 @@ class HypothesisFlow:
 
     # --- approve / reject --------------------------------------------------
     def set_status(self, project_id: str, hyp_id: str, status: str, reason: str = "",
-                   *, actor: str = "human") -> dict[str, Any]:
+                   *, actor: str = "human", force: bool = False) -> dict[str, Any]:
         h = self.store.get(hyp_id)
         if not h:
             return {"ok": False, "error": "hypothesis not found"}
@@ -92,6 +92,40 @@ class HypothesisFlow:
             return {"ok": False, "error": "invalid status"}
         if status == "APPROVED" and not reason.strip():
             return {"ok": False, "error": "aprobar requiere una razón"}
+        # GATE DE DUPLICADOS (2026-08-22): antes de esto, dos formulaciones
+        # casi idénticas ("El cover crece por una sola llave local...") se
+        # aprobaban por caminos distintos (Bohr adoptando del backlog, el PI
+        # generando encima) y cada una creaba SU PROPIA misión — nada detectaba
+        # que ya existía una gemela porque el chequeo vivía en discovery/diversity.py
+        # sin que nada lo llamara. Medido en vivo: 197 de 224 misiones en cola de
+        # un proyecto eran duplicados literales. force=True es la salida para un
+        # humano que decide a propósito investigar dos formulaciones parecidas.
+        if status == "APPROVED" and not force:
+            from ..discovery.diversity import DUP_THRESHOLD, _tokens, text_similarity
+            # 'claim' es el campo de los formatos más viejos/ligeros de candidata
+            # (triaje del backlog); 'statement' es el del generador actual.
+            def _texto(c: dict[str, Any]) -> str:
+                return f"{c.get('title', '')} {c.get('statement') or c.get('claim') or ''}"
+            texto = _texto(h)
+            # dos candidatas sin texto comparable NO son evidencia de duplicado:
+            # jaccard(vacío, vacío) = 1.0 por convención matemática, y eso
+            # bloqueaba a ciegas cualquier par sin 'title'/'statement'/'claim'.
+            if _tokens(texto):
+                for otro in self.store.list_objects(project_id, kind="candidate",
+                                                    status="APPROVED"):
+                    if otro.get("id") == hyp_id:
+                        continue
+                    otro_txt = _texto(otro)
+                    if not _tokens(otro_txt):
+                        continue
+                    sim = text_similarity(texto, otro_txt)
+                    if sim >= DUP_THRESHOLD:
+                        return {"ok": False, "blocked_by_diversity": True,
+                                "duplicate_of": otro.get("id"),
+                                "similarity": round(sim, 3),
+                                "error": (f"duplicada de {otro.get('tag') or otro.get('id')} "
+                                         f"(similitud {sim:.2f} ≥ {DUP_THRESHOLD}); "
+                                         "usa force=True si de verdad quieres las dos")}
         self.store.update_payload(hyp_id, {"status": status,
                                            "approval_reason": reason}, status=status)
         self.ledger.record_event(project_id, ProvenanceAction.UPDATE, actor,

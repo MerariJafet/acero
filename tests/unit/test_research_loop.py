@@ -65,8 +65,9 @@ class _Flow:
     def __init__(self):
         self.approved = []
 
-    def set_status(self, pid, hid, status, reason=""):
+    def set_status(self, pid, hid, status, reason="", **kw):
         self.approved.append((hid, status))
+        return {"ok": True}                # el contrato real de HypothesisFlow
 
 
 def _pi(provider, **kw):

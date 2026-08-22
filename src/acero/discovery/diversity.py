@@ -41,6 +41,15 @@ def statement_similarity(x: HypothesisCandidate, y: HypothesisCandidate) -> floa
                    _tokens(y.statement + " " + y.mechanism))
 
 
+def text_similarity(a: str, b: str) -> float:
+    """Igual que statement_similarity, pero sobre texto crudo (título+enunciado)
+    en vez de un HypothesisCandidate completo. Para gatear APROBACIÓN hace falta
+    comparar contra filas del discovery store, cuyo payload NO siempre trae todos
+    los campos del modelo Pydantic (p. ej. falta 'mechanism') — exigirlos ahí
+    habría bloqueado el gate en vez de las duplicadas."""
+    return jaccard(_tokens(a), _tokens(b))
+
+
 def _numbers(c: HypothesisCandidate) -> list[str]:
     return _NUM.findall(c.statement + " " + c.mechanism)
 

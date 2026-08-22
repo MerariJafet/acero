@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 
 from acero.discovery.candidates import HypothesisType
-from acero.discovery.diversity import analyze, classify_pair, statement_similarity
+from acero.discovery.diversity import (
+    DUP_THRESHOLD,
+    analyze,
+    classify_pair,
+    statement_similarity,
+    text_similarity,
+)
 from acero.discovery.falsifiability import is_falsifiable, score_candidate
 from acero.discovery.generation import (
     HYPOTHESIS_JSON_SCHEMA,
@@ -52,6 +58,20 @@ def test_duplicate_and_paraphrase_detection(mock_candidates):
     rep = analyze([a, dup])
     assert rep.duplicates  # identical statement/mechanism -> duplicate
     assert statement_similarity(a, dup) >= 0.82
+
+
+# text_similarity: la misma señal pero sobre título+enunciado crudos, para
+# gatear la APROBACIÓN sin exigir un HypothesisCandidate completo (el payload
+# del discovery store no siempre trae 'mechanism').
+
+def test_text_similarity_texto_identico_es_duplicado():
+    assert text_similarity("El cover crece por una llave local",
+                           "El cover crece por una llave local") >= DUP_THRESHOLD
+
+
+def test_text_similarity_textos_sin_relacion_no_son_duplicados():
+    assert text_similarity("El cover crece por una llave local",
+                           "La firma cardiovascular vive en mieloides") < DUP_THRESHOLD
 
 
 def test_param_only_vs_distinct_relation(mock_candidates):

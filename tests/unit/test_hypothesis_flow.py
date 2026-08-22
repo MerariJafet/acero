@@ -33,6 +33,84 @@ def test_reject_and_unapprove(setup):
     assert len(fl.approved(pid)) == 0
 
 
+# --- gate de duplicados en la aprobación (incidente 2026-08-22) --------------
+# 197 de 224 misiones en cola resultaron ser la MISMA hipótesis con hyp_id
+# distinto, aprobada dos veces por caminos distintos (Bohr adoptando del
+# backlog, el PI generando encima). El gate de diversidad existía en
+# discovery/diversity.py pero nada lo llamaba antes de aprobar.
+
+def _candidate(sf, pid, obj_id, title, statement):
+    from acero.core.ids import new_id
+    from acero.discovery.store import DiscoveryStore
+    from acero.ledger.service import ResearchLedger
+    st = DiscoveryStore(sf, ResearchLedger(sf))
+    tag = obj_id[-6:]
+    st.put(pid, "candidate", obj_id,
+           {"id": obj_id, "tag": tag, "title": title, "statement": statement,
+            "novelty": {"status": "abierta", "score": 7.5}},
+           status="PROPOSED")
+    return obj_id
+
+
+def test_una_hipotesis_casi_identica_a_una_ya_aprobada_se_bloquea(setup):
+    sf, pid, h = setup
+    fl = HypothesisFlow(sf)
+    assert fl.set_status(pid, h["id"], "APPROVED", "primera")["ok"] is True
+
+    gemela = _candidate(
+        sf, pid, "cand_gemela",
+        h["title"], h.get("statement", h["title"]))  # texto idéntico → sim=1.0
+    r = fl.set_status(pid, "cand_gemela", "APPROVED", "segunda")
+    assert r["ok"] is False
+    assert r["blocked_by_diversity"] is True
+    assert r["duplicate_of"] == h["id"]
+    assert len(fl.approved(pid)) == 1          # la gemela NO se coló
+
+
+def test_force_deja_pasar_una_duplicada_a_proposito(setup):
+    sf, pid, h = setup
+    fl = HypothesisFlow(sf)
+    fl.set_status(pid, h["id"], "APPROVED", "primera")
+    _candidate(sf, pid, "cand_gemela", h["title"], h.get("statement", h["title"]))
+    r = fl.set_status(pid, "cand_gemela", "APPROVED", "quiero las dos", force=True)
+    assert r["ok"] is True
+    assert len(fl.approved(pid)) == 2
+
+
+def test_una_hipotesis_genuinamente_distinta_no_se_bloquea(setup):
+    sf, pid, h = setup
+    fl = HypothesisFlow(sf)
+    fl.set_status(pid, h["id"], "APPROVED", "primera")
+    _candidate(sf, pid, "cand_otra",
+              "Título completamente distinto sobre otro mecanismo",
+              "Enunciado sin relación alguna con la hipótesis previa, otro dominio")
+    r = fl.set_status(pid, "cand_otra", "APPROVED", "segunda")
+    assert r["ok"] is True
+    assert len(fl.approved(pid)) == 2
+
+
+def test_candidatas_sin_texto_comparable_no_se_bloquean_entre_si(setup):
+    """Regresión real: el formato viejo del backlog de triaje guarda el
+    enunciado en 'claim', no en 'statement'/'title'. Comparar texto ausente
+    daba jaccard(vacío, vacío) = 1.0 por convención matemática — bloqueaba
+    a ciegas CUALQUIER par de candidatas en ese formato, no solo duplicadas."""
+    from acero.core.ids import new_id
+    from acero.discovery.store import DiscoveryStore
+    from acero.ledger.service import ResearchLedger
+    sf, pid, _ = setup
+    st = DiscoveryStore(sf, ResearchLedger(sf))
+    fl = HypothesisFlow(sf)
+    a, b = new_id("hyp"), new_id("hyp")
+    st.put(pid, "candidate", a, {"id": a, "tag": "A", "claim": "vieja"},
+          status="PROPOSED")
+    st.put(pid, "candidate", b, {"id": b, "tag": "B", "claim": "reciente"},
+          status="PROPOSED")
+    assert fl.set_status(pid, a, "APPROVED", "primera")["ok"] is True
+    r = fl.set_status(pid, b, "APPROVED", "segunda")
+    assert r["ok"] is True, r.get("error")
+    assert len(fl.approved(pid)) == 2
+
+
 def test_propose_and_run_experiment_plan_only(setup):
     sf, pid, h = setup
     fl = HypothesisFlow(sf)
