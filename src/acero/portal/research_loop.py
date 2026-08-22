@@ -20,6 +20,7 @@ Invariants (the methodology rules, not the agent):
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -34,6 +35,14 @@ from ..core.ids import new_id
 
 MAX_NEW_HYP_PER_TICK = int(os.environ.get("ACERO_PI_MAX_NEW_HYP", "4"))
 DEFAULT_INTERVAL_SEC = int(os.environ.get("ACERO_PI_INTERVAL_SEC", "1800"))
+# Ahorro de tokens (2026-08-22): con ticks cada 30 min, el director preguntaba
+# "¿qué hago ahora?" con ~2500 palabras de contexto aunque nada hubiera
+# cambiado desde la ronda anterior — como preguntarle a alguien "¿qué hacemos
+# hoy?" cada media hora aunque la respuesta siga siendo la misma. El digest es
+# puramente derivado del estado (sin timestamps propios), así que su hash es
+# estable cuando NADA relevante cambió: reutilizar la decisión esos 30 min
+# ahorra la llamada sin cambiar UNA sola decisión que el LLM habría tomado.
+DECISION_CACHE_TTL_SEC = int(os.environ.get("ACERO_PI_DECISION_CACHE_SEC", "1800"))
 DRY_BACKOFF_CAP_SEC = int(os.environ.get("ACERO_PI_BACKOFF_CAP_SEC", "7200"))
 _ACTIONS = {"generate_and_run", "run_existing", "deepen", "pause"}
 # marca de contrapresión: se busca en los 'blocks' para NO confundir "no cabía
@@ -649,8 +658,22 @@ class PrincipalInvestigator:
         st0["tick_started_at"] = now_iso()
         save_state(pid, st0)
         digest = build_digest(self._sf, pid)
-        decision = self._validate(self.decide(digest))
+        digest_hash = hashlib.sha256(
+            json.dumps(digest, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest()
+        cache = st0.get("decision_cache") or {}
+        cached_fresh = (cache.get("hash") == digest_hash
+                        and (time.time() - float(cache.get("at_ts") or 0))
+                        < DECISION_CACHE_TTL_SEC)
+        if cached_fresh:
+            decision_raw = cache["decision"]
+            from_cache = True
+        else:
+            decision_raw = self.decide(digest)
+            from_cache = False
+        decision = self._validate(decision_raw)
         applied = self._apply(pid, decision)
+        applied["decision_cached"] = from_cache
         # dry = nothing actually RAN. Generating hypotheses that the EVA gate then
         # blocks is NOT progress — so the driver backs off instead of hot-spinning
         # on generation+EVA calls that never launch an experiment.
@@ -670,6 +693,11 @@ class PrincipalInvestigator:
         st["started_at"] = st.get("started_at") or now_iso()
         st["dry_streak"] = (int(st.get("dry_streak", 0)) + 1) if dry else 0
         st["status"] = "paused" if applied.get("paused") else "running"
+        if not from_cache:
+            # solo se re-escribe cuando se pidió una decisión NUEVA: reusar una
+            # cacheada no debe reiniciar su propio reloj de 30 min.
+            st["decision_cache"] = {"hash": digest_hash, "at_ts": time.time(),
+                                    "decision": decision_raw}
         save_state(pid, st)
         record = {"ts": now_iso(), "tick": st["ticks"], "decision": decision,
                   "applied": applied, "dry": dry,

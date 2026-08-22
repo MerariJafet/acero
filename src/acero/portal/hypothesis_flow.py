@@ -24,6 +24,13 @@ from ..ledger.db import default_session_factory
 from ..ledger.service import ResearchLedger
 from ..provenance.events import ProvenanceAction
 
+# Ahorro de tokens en la confrontación de literatura (2026-08-22): antes se
+# pegaban hasta 10 papers con hasta 1600 chars de fulltext cada uno — ~4-5K
+# tokens por hipótesis. Ninguno de los dos números cambia lo que se EVALÚA,
+# solo cuánto texto hace falta para llegar a la misma evaluación.
+_LIT_PROMPT_TOP_N = int(os.environ.get("ACERO_LIT_PROMPT_TOP_N", "5"))
+_LIT_EXCERPT_CHARS = int(os.environ.get("ACERO_LIT_EXCERPT_CHARS", "400"))
+
 CONFRONT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -240,11 +247,20 @@ class HypothesisFlow:
             prov = CodexCliProvider(timeout_sec=200)
             if not prov.available():
                 raise RuntimeError("codex unavailable")
+            # Ahorro de tokens (2026-08-22): se pegaba el abstract/fulltext de
+            # los hasta ACERO_LIT_ROWS=10 papers encontrados, muchos poco
+            # relevantes — hasta ~4-5K tokens por confrontación. Mandar solo
+            # los más relevantes recorta el prompt sin perder cobertura real:
+            # el objetivo es leer lo que importa, no todo lo que apareció.
+            # Reasignación LOCAL: no toca la lista completa que el llamador
+            # guarda como procedencia de lo que se encontró.
+            papers = sorted(papers, key=lambda p: p.get("relevance") or 0,
+                            reverse=True)[:_LIT_PROMPT_TOP_N]
             def _content(p: dict[str, Any]) -> str:
                 if p.get("fulltext_excerpt"):
                     return ("TEXTO COMPLETO (leído del PDF): "
-                            + p["fulltext_excerpt"][:1600])
-                return "ABSTRACT: " + (p.get("abstract") or "sin abstract")[:700]
+                            + p["fulltext_excerpt"][:_LIT_EXCERPT_CHARS])
+                return "ABSTRACT: " + (p.get("abstract") or "sin abstract")[:_LIT_EXCERPT_CHARS]
             plist = "\n\n".join(
                 f"[{i}] {p['title']} ({p.get('source','')}, {p['doi']}) "
                 f"{'[RETRACTADO]' if p['integrity']=='retracted' else ''}\n"

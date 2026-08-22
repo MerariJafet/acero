@@ -190,3 +190,70 @@ def test_kepler_mission_experiment_not_hijacked_by_third_law_runner(setup):
     assert fl._real_runner("Kepler vs TESS radius valley depth") is None
     # a genuine third-law experiment still routes to the study
     assert fl._real_runner("verificar la tercera ley de kepler") is not None
+
+
+# --- recorte de contexto en la confrontación de literatura (2026-08-22) -------
+# Se pegaban hasta 10 papers con hasta 1600 chars de fulltext cada uno —
+# ~4-5K tokens por hipótesis, muchos de papers poco relevantes. El recorte
+# NO debe cambiar la corrección del mapeo citation_idx → paper citado.
+
+def _paper(i, *, relevance, abstract_len=50):
+    return {"id": f"lit_{i}", "title": f"Paper {i}", "doi": f"10.doi/{i}",
+           "source": "test", "integrity": "ok", "relevance": relevance,
+           "abstract": "X" * abstract_len, "url": "", "authors": []}
+
+
+class _FakeConfrontProvider:
+    def __init__(self, out):
+        self.out = out
+        self.last_prompt = None
+
+    def available(self):
+        return True
+
+    def complete_json(self, prompt, schema, *, temperature=0.0):
+        self.last_prompt = prompt
+        return self.out
+
+
+def test_confront_manda_solo_los_papers_mas_relevantes(setup, monkeypatch):
+    sf, pid, h = setup
+    fl = HypothesisFlow(sf)
+    papers = [_paper(i, relevance=1.0 - i * 0.1) for i in range(10)]  # 0 es el más relevante
+    fake = _FakeConfrontProvider({"stance": "mixed", "argument_for": "", "argument_against": "",
+                                  "improved_hypothesis": "", "citation_idx": [0],
+                                  "experiment_ideas": []})
+    monkeypatch.setattr("acero.llm.providers.CodexCliProvider", lambda **kw: fake)
+    fl._confront(h, papers, use_ai=True)
+    assert fake.last_prompt is not None
+    # los 5 más relevantes (0..4) SÍ están; los menos relevantes (8, 9) NO
+    assert "Paper 0" in fake.last_prompt and "Paper 4" in fake.last_prompt
+    assert "Paper 8" not in fake.last_prompt and "Paper 9" not in fake.last_prompt
+
+
+def test_confront_recorta_el_abstract_largo(setup, monkeypatch):
+    sf, pid, h = setup
+    fl = HypothesisFlow(sf)
+    papers = [_paper(0, relevance=1.0, abstract_len=2000)]
+    fake = _FakeConfrontProvider({"stance": "mixed", "argument_for": "", "argument_against": "",
+                                  "improved_hypothesis": "", "citation_idx": [],
+                                  "experiment_ideas": []})
+    monkeypatch.setattr("acero.llm.providers.CodexCliProvider", lambda **kw: fake)
+    fl._confront(h, papers, use_ai=True)
+    # el abstract de 2000 'X' no debe aparecer completo — se recortó a ~400
+    assert "X" * 2000 not in fake.last_prompt
+    assert "X" * 400 in fake.last_prompt
+
+
+def test_confront_citation_idx_sigue_apuntando_al_paper_correcto(setup, monkeypatch):
+    """El índice que el LLM devuelve en citation_idx es sobre la lista YA
+    recortada — trimear después de responder rompería la correspondencia."""
+    sf, pid, h = setup
+    fl = HypothesisFlow(sf)
+    papers = [_paper(i, relevance=1.0 - i * 0.1) for i in range(10)]
+    fake = _FakeConfrontProvider({"stance": "supports", "argument_for": "x",
+                                  "argument_against": "", "improved_hypothesis": "",
+                                  "citation_idx": [2], "experiment_ideas": []})
+    monkeypatch.setattr("acero.llm.providers.CodexCliProvider", lambda **kw: fake)
+    out = fl._confront(h, papers, use_ai=True)
+    assert out["citations"][0]["title"] == "Paper 2"     # el 3ro más relevante, no el 3ro original

@@ -31,11 +31,13 @@ def _loop_root(tmp_path, monkeypatch):
 class _Prov:
     def __init__(self, decision):
         self.decision = decision
+        self.calls = 0
 
     def available(self):
         return True
 
     def complete_json(self, prompt, schema, *, temperature=0.0):
+        self.calls += 1
         return self.decision
 
 
@@ -124,6 +126,51 @@ def test_tick_generates_approves_and_starts(monkeypatch):
     assert len(flow.approved) == 3 and eng.started == ["p1"]
     assert rec["applied"]["started"] == 1 and rec["dry"] is False
     assert rl.load_state("p1")["ticks"] == 1
+
+
+# --- caché de decisión de 30 min (ahorro de tokens, 2026-08-22) ---------------
+# El director preguntaba "¿qué hago ahora?" con ~2500 palabras de contexto en
+# CADA tick, aunque nada hubiera cambiado desde la ronda anterior. El digest es
+# puramente derivado del estado (sin timestamp propio), así que su hash es
+# estable cuando nada relevante cambió — reutilizar la decisión ahorra la
+# llamada sin cambiar una sola decisión que el LLM habría tomado.
+
+def test_tick_reusa_la_decision_si_el_digest_no_cambio(monkeypatch):
+    monkeypatch.setattr(rl, "build_digest", _canned_digest)
+    prov = _Prov({"action": "run_existing", "reasoning": "x"})
+    pi = _pi(prov, engine=_Engine(), hyps=_Hyps(), flow=_Flow())
+    pi.tick("pcache")
+    assert prov.calls == 1
+    rec2 = pi.tick("pcache")                       # mismo digest enlatado
+    assert prov.calls == 1                          # NO volvió a llamar al LLM
+    assert rec2["applied"]["decision_cached"] is True
+    assert rec2["decision"]["action"] == "run_existing"
+
+
+def test_tick_pide_decision_nueva_si_el_digest_cambia(monkeypatch):
+    estado = {"n": 0}
+
+    def _digest_variable(*a, **k):
+        estado["n"] += 1
+        return {"hypotheses_by_status": {"APPROVED": estado["n"]},
+                "recent_verdicts": [], "open_anomalies": [], "rigor": {}}
+
+    monkeypatch.setattr(rl, "build_digest", _digest_variable)
+    prov = _Prov({"action": "run_existing", "reasoning": "x"})
+    pi = _pi(prov, engine=_Engine(), hyps=_Hyps(), flow=_Flow())
+    pi.tick("pchange")
+    pi.tick("pchange")                              # digest distinto cada vez
+    assert prov.calls == 2                           # SÍ volvió a llamar
+
+
+def test_tick_pide_decision_nueva_cuando_el_cache_vencio(monkeypatch):
+    monkeypatch.setattr(rl, "build_digest", _canned_digest)
+    monkeypatch.setattr(rl, "DECISION_CACHE_TTL_SEC", 0)   # vence al instante
+    prov = _Prov({"action": "run_existing", "reasoning": "x"})
+    pi = _pi(prov, engine=_Engine(), hyps=_Hyps(), flow=_Flow())
+    pi.tick("pttl")
+    pi.tick("pttl")
+    assert prov.calls == 2                            # el caché ya había vencido
 
 
 def test_tick_marca_el_arranque_antes_de_trabajar(monkeypatch):
